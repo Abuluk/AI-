@@ -6,6 +6,7 @@ from schemas.item import ItemCreate, ItemInDB
 from core.security import get_current_user
 from db.models import User
 import os
+from db.models import Item
 
 router = APIRouter()
 
@@ -15,7 +16,11 @@ def create_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return crud_item.create_item(db, item, owner_id=current_user.id)
+    db_item = Item(**item.dict(), owner_id=current_user.id)
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
 
 @router.get("/{item_id}", response_model=ItemInDB)
 def read_item(item_id: int, db: Session = Depends(get_db)):

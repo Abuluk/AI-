@@ -1,6 +1,5 @@
 from datetime import timedelta, datetime
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from db.session import get_db
 from core.security import (
@@ -11,13 +10,11 @@ from core.security import (
 )
 from core.pwd_util import get_password_hash
 from db.models import User
-from crud.crud_user import create_user, get_user_by_username, get_user_by_email
-from schemas.user import UserCreate, UserInDB
-from schemas.token import Token  # 修改为从token.py导入
+from crud.crud_user import create_user, get_user_by_username, get_user_by_email, get_user_by_phone  # 导入get_user_by_phone
+from schemas.user import UserCreate, UserInDB, UserLogin  # 导入UserLogin
+from schemas.token import Token
 
 router = APIRouter()
-
-# ... 其余代码保持不变 ...
 
 @router.post("/register", response_model=UserInDB)
 def register(
@@ -40,25 +37,49 @@ def register(
             detail="邮箱已注册"
         )
     
+    # 检查手机号是否已存在
+    if user_in.phone:
+        db_user = get_user_by_phone(db, phone=user_in.phone)
+        if db_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="手机号已注册"
+            )
+    
     # 创建用户
     hashed_password = get_password_hash(user_in.password)
-    user_create = UserCreate(
+    # 注意：UserCreate模型已经包含phone，所以我们直接传递
+    db_user = User(
         username=user_in.username,
         email=user_in.email,
-        password=hashed_password
+        phone=user_in.phone,
+        hashed_password=hashed_password,
+        avatar=user_in.avatar or "default_avatar.png",
+        is_active=True  # 新注册用户默认激活
     )
-    return create_user(db, user=user_create)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
 
 @router.post("/login", response_model=Token)
 def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    login_data: UserLogin,  # 使用自定义的登录模型
     db: Session = Depends(get_db)
 ):
-    user = authenticate_user(db, form_data.username, form_data.password)
+    user = authenticate_user(db, login_data.identifier, login_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # 检查用户是否激活
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户未激活",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -70,12 +91,13 @@ def login(
     # 更新最后登录时间
     user.last_login = datetime.utcnow()
     db.commit()
+    db.refresh(user)
     
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/logout")
 def logout(
-    current_user: UserInDB = Depends(get_current_active_user),  # 这里使用
+    current_user: User = Depends(get_current_active_user),  # 这里直接使用User模型，因为get_current_active_user返回的是User对象
     db: Session = Depends(get_db)
 ):
     # 在实际应用中，您可能想将令牌加入黑名单

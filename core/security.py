@@ -7,34 +7,39 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from db.models import User
 from core.pwd_util import verify_password
-from schemas.token import TokenData  # 修改为从token.py导入
-
-# ... 其余代码保持不变 ...
-
-# 删除以下内容
-# from crud.crud_user import get_user_by_username
-# from passlib.context import CryptContext
-# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from schemas.token import TokenData
+from crud.crud_user import get_user_by_username, get_user_by_email, get_user_by_phone  # 导入CRUD方法
 
 # JWT配置
-from sqlalchemy.orm import Session
-from db.models import User
-from core.pwd_util import verify_password
-
-def authenticate_user(db: Session, username: str, password: str):
-    """验证用户凭据"""
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
-        return False
-    if not verify_password(password, user.hashed_password):
-        return False
-    return user
-
-SECRET_KEY = "your-secret-key-please-change-in-production"
+SECRET_KEY = "196ca263383b2fd21dfae2eda445f30b25d14806a861ababf10a408beb5e2117"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30 * 24 * 60  # 30天
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
+
+def authenticate_user(db: Session, identifier: str, password: str):
+    """验证用户凭据，支持用户名/邮箱/手机号"""
+    user = None
+    
+    # 尝试通过用户名查找
+    if not user:
+        user = get_user_by_username(db, identifier)
+    
+    # 尝试通过邮箱查找
+    if not user:
+        user = get_user_by_email(db, identifier)
+    
+    # 尝试通过手机号查找
+    if not user:
+        user = get_user_by_phone(db, identifier)
+    
+    if not user:
+        return False
+    if not user.is_active:  # 检查用户是否激活
+        return None  # 返回None表示用户存在但未激活
+    if not verify_password(password, user.hashed_password):
+        return False
+    return user
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -64,7 +69,7 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
     
-    user = db.query(User).filter(User.username == token_data.username).first()
+    user = get_user_by_username(db, token_data.username)
     if user is None:
         raise credentials_exception
     return user
@@ -72,6 +77,6 @@ async def get_current_user(
 async def get_current_active_user(
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.disabled:
+    if not current_user.is_active:  # 使用is_active字段检查用户状态
         raise HTTPException(status_code=400, detail="用户已停用")
     return current_user

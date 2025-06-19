@@ -1,5 +1,18 @@
 <template>
   <div class="container">
+    <!-- 顶部导航栏 -->
+    <div class="header-nav">
+      <div class="logo">好物精选</div>
+      <div class="user-area">
+        <div v-if="authStore.user" class="user-info">
+          <img :src="authStore.user.avatar" alt="用户头像" class="user-avatar">
+          <span class="user-name">{{ authStore.user.username }}</span>
+          <button @click="handleLogout" class="logout-btn">退出</button>
+        </div>
+        <button v-else @click="goToLogin" class="login-btn">登录/注册</button>
+      </div>
+    </div>
+    
     <h1 class="page-title">发现好物</h1>
     
     <div class="section-header">
@@ -26,10 +39,22 @@
 
 <script>
 import ProductCard from '@/components/ProductCard.vue'
+import { useAuthStore } from '@/store/auth'
+import { useRouter } from 'vue-router'
 
 export default {
+  name: 'HomeView',
   components: {
     ProductCard
+  },
+  setup() {
+    const authStore = useAuthStore()
+    const router = useRouter()
+    
+    return {
+      authStore,
+      router
+    }
   },
   data() {
     return {
@@ -108,11 +133,101 @@ export default {
           return products
       }
     }
+  },
+  methods: {
+    // 跳转到登录页面
+    goToLogin() {
+      this.router.push('/login')
+    },
+    
+    // 退出登录
+    handleLogout() {
+      this.authStore.logout()
+      // 可以添加登出后的操作，如跳转页面等
+    }
   }
 }
 </script>
 
 <style scoped>
+/* 顶部导航栏样式 */
+.header-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 20px;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #42b983; /* Vue主题色 */
+}
+
+.user-area {
+  display: flex;
+  align-items: center;
+}
+
+.login-btn {
+  padding: 8px 16px;
+  background-color: #42b983;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.login-btn:hover {
+  background-color: #3aa776;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #eee;
+}
+
+.user-name {
+  font-size: 0.9rem;
+}
+
+.logout-btn {
+  padding: 5px 10px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.logout-btn:hover {
+  background: #eee;
+}
+
+/* 原有样式保持不变 */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.page-title {
+  font-size: 2rem;
+  margin-bottom: 30px;
+}
+
 .section-header {
   display: flex;
   justify-content: space-between;
@@ -128,7 +243,7 @@ export default {
 .sort-options select {
   padding: 8px 12px;
   border-radius: 5px;
-  border: 1px solid var(--border);
+  border: 1px solid #ddd;
   background-color: white;
   cursor: pointer;
 }

@@ -8,11 +8,11 @@ def create_tables():
     Base.metadata.create_all(bind=engine)
 
 def include_router(app):
-    app.include_router(api_router)
+    app.include_router(api_router, prefix="/api/v1")
 
 def start_application():
     app = FastAPI(title="Goofish API", version="1.0.0")
-    create_tables()
+    # create_tables()  # Only run this manually during development or use Alembic for migrations
     include_router(app)
     return app
 
@@ -29,4 +29,7 @@ app.add_middleware(
 
 @app.get("/")
 def home():
+    """
+    Root endpoint that confirms the Goofish API is running.
+    """
     return {"message": "Goofish API is running"}

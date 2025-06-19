@@ -21,6 +21,7 @@ class ItemInDB(ItemBase):
     owner_id: int
     images: Optional[str] = None
     created_at: datetime
+    sold: bool = False
     
     class Config:
         from_attributes = True
