@@ -231,7 +231,7 @@ const submitForm = async () => {
   if (isLoginMode.value) {
     try {
       await authStore.login({
-        username: form.username || form.phone,
+        identifier: form.username || form.phone,
         password: form.password
       })
       router.push('/')
