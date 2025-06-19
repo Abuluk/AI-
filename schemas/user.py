@@ -2,32 +2,36 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
 
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+
 class UserBase(BaseModel):
-    username: str = Field(..., min_length=3, max_length=50)
-    email: EmailStr
-    phone: Optional[str] = Field(None, min_length=8, max_length=20)  # 添加手机号字段
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
 
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=6)
-    avatar: Optional[str] = None
+    password: str
 
-class UserUpdate(BaseModel):
-    username: Optional[str] = Field(None, min_length=3, max_length=50)
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = Field(None, min_length=8, max_length=20)  # 添加手机号
-    password: Optional[str] = Field(None, min_length=6)
+class UserUpdate(UserBase):
     avatar: Optional[str] = None
+    bio: Optional[str] = None
+    contact: Optional[str] = None
     location: Optional[str] = None
+    password: Optional[str] = None  # 可选密码更新
 
 class UserInDB(UserBase):
     id: int
     avatar: str
+    bio: Optional[str]
+    contact: Optional[str]
     location: Optional[str]
+    is_active: bool
     created_at: datetime
-    last_login: Optional[datetime]
-    is_active: bool = True  # 将disabled改为is_active，并默认True
-    # 注意：我们不再使用disabled，而是使用is_active
-
+    updated_at: datetime
+    followers: int
+    following: int
+    items_count: int
     class Config:
         from_attributes = True
 

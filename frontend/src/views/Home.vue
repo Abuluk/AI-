@@ -5,8 +5,13 @@
       <div class="logo">好物精选</div>
       <div class="user-area">
         <div v-if="authStore.user" class="user-info">
-          <img :src="authStore.user.avatar" alt="用户头像" class="user-avatar">
-          <span class="user-name">{{ authStore.user.username }}</span>
+          
+          <!-- 个人主页入口 -->
+          <div class="profile-link" @click="goToProfile">
+            <img :src="authStore.user.avatar" alt="用户头像" class="user-avatar">
+            <span class="user-name">{{ authStore.user.username }}</span>
+          </div>
+          
           <button @click="handleLogout" class="logout-btn">退出</button>
         </div>
         <button v-else @click="goToLogin" class="login-btn">登录/注册</button>
@@ -41,6 +46,7 @@
 import ProductCard from '@/components/ProductCard.vue'
 import { useAuthStore } from '@/store/auth'
 import { useRouter } from 'vue-router'
+import { ref } from 'vue';
 
 export default {
   name: 'HomeView',
@@ -144,7 +150,12 @@ export default {
     handleLogout() {
       this.authStore.logout()
       // 可以添加登出后的操作，如跳转页面等
+    },
+
+    goToProfile() {
+      this.router.push('/profile');
     }
+    
   }
 }
 </script>
@@ -164,6 +175,20 @@ export default {
   font-size: 1.5rem;
   font-weight: bold;
   color: #42b983; /* Vue主题色 */
+}
+
+.profile-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: 20px;
+  transition: background-color 0.2s;
+}
+
+.profile-link:hover {
+  background-color: #f5f5f5;
 }
 
 .user-area {

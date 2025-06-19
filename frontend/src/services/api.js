@@ -9,7 +9,7 @@ const api = axios.create({
   }
 })
 
-// 请求拦截器 - 添加认证令牌
+// 请求拦截器添加认证token
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('access_token')
   if (token) {
@@ -60,6 +60,24 @@ export default {
     return api.put(`/users/${userId}`, userData)
   },
   
+  updateProfile(userData) {
+    return api.put('/profile/', userData)
+  },
+  
+    // 更新用户资料
+  updateProfile(userData) {
+    return api.put('/profile/', userData)
+  },
+  
+  // 上传头像
+  async uploadAvatar(formData) {
+    return api.put('/profile/avatar', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+  },
+
   // 商品操作
   async getItems(params = {}) {
     return api.get('/items', { params })
@@ -95,16 +113,6 @@ export default {
   },
   
   // 文件上传
-  async uploadAvatar(file) {
-    const formData = new FormData()
-    formData.append('avatar', file)
-    return api.post('/profile/avatar', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
-  },
-  
   async uploadItemImages(itemId, files) {
     const formData = new FormData()
     files.forEach(file => {

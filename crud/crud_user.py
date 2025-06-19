@@ -37,13 +37,19 @@ def update_user(db: Session, user_id: int, user_update: UserUpdate):
         return None
     
     update_data = user_update.dict(exclude_unset=True)
+    
+    # 特殊处理密码更新
     if "password" in update_data:
         hashed_password = get_password_hash(update_data["password"])
         del update_data["password"]
         update_data["hashed_password"] = hashed_password
     
+    # 更新所有字段
     for field, value in update_data.items():
         setattr(db_user, field, value)
+    
+    # 设置更新时间
+    db_user.updated_at = datetime.utcnow()
     
     db.commit()
     db.refresh(db_user)
