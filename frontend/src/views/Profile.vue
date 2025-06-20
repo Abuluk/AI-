@@ -1,5 +1,4 @@
 <template>
- <img :src="avatarUrl" class="user-avatar" @error="handleImageError">
   <div class="container">
     <!-- 用户头部信息 -->
     <div class="profile-header card">
@@ -55,13 +54,18 @@
         </div>
       </div>
       
-      <div class="profile-actions">
+      <div>
         <button class="btn btn-outline" @click="showEditModal = true">
           <i class="fas fa-edit"></i> 编辑资料
         </button>
       </div>
     </div>
-    
+      <!-- 修改后的按钮区域 - 添加布局类 -->
+      <div class="profile-actions actions-right">
+        <button class="btn btn-primary" @click="navigateToPublish">
+          <i class="fas fa-plus"></i> 上传商品
+        </button>
+      </div>    
     <!-- 商品标签页 -->
     <div class="profile-tabs card">
       <div class="tabs">
@@ -77,19 +81,20 @@
       </div>
       
       <div class="tab-content">
-        <!-- 在售商品 -->
+      <!-- 在售商品标签页 -->
         <div v-if="activeTab === 'selling'">
           <div class="section-header">
-            <h3>在售商品</h3>
+           <h3>在售商品</h3>
             <div class="sort-controls">
-              <select v-model="sorting.selling" @change="fetchSellingItems">
-                <option value="newest">最新发布</option>
-                <option value="popular">最受欢迎</option>
-                <option value="price_asc">价格从低到高</option>
-                <option value="price_desc">价格从高到低</option>
+              <!-- 修复排序功能：移除@change事件，改为使用计算属性 -->
+              <select v-model="sorting.selling">
+              <option value="newest">最新发布</option>
+               <option value="popular">最受欢迎</option>
+               <option value="price_asc">价格从低到高</option>
+               <option value="price_desc">价格从高到低</option>
               </select>
             </div>
-          </div>
+           </div>
           
           <div v-if="loading.selling" class="loading-state">
             <div class="skeleton-card" v-for="n in 4" :key="n"></div>
@@ -106,7 +111,7 @@
             <div v-else class="empty-state">
               <i class="fas fa-store-slash"></i>
               <p>暂无在售商品</p>
-              <button class="btn btn-primary" @click="navigateToAddProduct">
+              <button class="btn btn-primary" @click="navigateToPublish">
                 去发布商品
               </button>
             </div>
@@ -128,6 +133,12 @@
         <div v-if="activeTab === 'sold'">
           <div class="section-header">
             <h3>已售商品</h3>
+            <div class="sort-controls">
+                <select v-model="sorting.sold" @change="fetchSoldItems(true)">
+                <option value="newest">最新售出</option>
+                <option value="oldest">最早售出</option>
+                </select>
+            </div>
           </div>
           
           <div v-if="loading.sold" class="loading-state">
@@ -183,7 +194,7 @@
               <i class="fas fa-heart"></i>
               <p>暂无收藏商品</p>
               <button class="btn btn-primary" @click="navigateToDiscover">
-                去发现好物
+                     去首页浏览
               </button>
             </div>
             
@@ -228,8 +239,11 @@
           <div class="form-group">
             <label>头像</label>
             <div class="avatar-edit-preview">
-              <img :src="editForm.avatarPreview" class="preview-image">
-              <img :src="user.avatar + '?t=' + avatarTimestamp" class="user-avatar">
+                  <img 
+                    :src="editForm.avatarPreview" 
+                    class="preview-image"
+                    @error="handlePreviewError"
+                  >
               <label for="edit-avatar-upload" class="avatar-edit-btn">
                 <i class="fas fa-camera"></i> 更换头像
                 <input 
@@ -267,11 +281,18 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '@/store/auth'
 import ProductCard from '@/components/ProductCard.vue'
 import { useRouter } from 'vue-router'
+import api from '@/services/api' // 添加这行导入API服务
+import { ref, reactive, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 
+onBeforeUnmount(() => {
+  // 清理临时头像 URL
+  if (editForm.avatarPreview && editForm.avatarPreview.startsWith('blob:')) {
+    URL.revokeObjectURL(editForm.avatarPreview);
+  }
+});
 const router = useRouter()
 const activeTab = ref('selling')
 const showEditModal = ref(false)
@@ -338,7 +359,13 @@ const initEditForm = () => {
   editForm.contact = user.contact || ''
   editForm.location = user.location || ''
 
-  // 重置新头像文件
+   // 使用带时间戳的头像URL
+  editForm.avatarPreview = user.avatar 
+    ? `${user.avatar}?t=${Date.now()}` 
+    : 'default_avatar.png'
+    
+  editForm.contact = user.contact || ''
+  editForm.location = user.location || ''
   newAvatarFile.value = null
 }
 
@@ -368,7 +395,15 @@ const saveProfile = async () => {
     // 更新本地用户信息
     authStore.user = { ...authStore.user, ...updatedUser }
     
-    closeEditModal()
+   // 关闭编辑模态框
+const closeEditModal = () => {
+  // 如果当前预览是blob URL，则释放
+  if (editForm.avatarPreview.startsWith('blob:')) {
+    URL.revokeObjectURL(editForm.avatarPreview)
+  }
+  showEditModal.value = false
+  newAvatarFile.value = null
+}
   } catch (error) {
     console.error('保存资料失败:', error)
     
@@ -484,6 +519,49 @@ const handleAvatarUpload = async (e, isProfileHeader = false) => {
 };
 
 
+// 添加获取真实数据的方法
+// Profile.vue
+// 修改监听器
+watch(
+  () => authStore.user?.items_count, // 使用可选链避免访问 null
+  (newCount, oldCount) => {
+    // 确保值存在且有效
+    if (newCount !== undefined && oldCount !== undefined && newCount > oldCount) {
+      fetchRealSellingItems();
+    }
+  }
+);
+const fetchRealSellingItems = async () => {
+  try {
+    // 确保用户信息存在
+    if (!authStore.user || !authStore.user.id) {
+      console.error('用户信息未加载');
+      return;
+    }
+    
+    loading.selling = true;
+    
+    // 使用正确的 API 方法
+    const response = await api.getUserSellingItems(
+      authStore.user.id,
+      {
+        skip: (pagination.selling.page - 1) * pagination.selling.perPage,
+        limit: pagination.selling.perPage
+      }
+    );
+    
+    sellingItems.value = response.data;
+    
+    // 更新统计数据
+    tabs.value[0].count = sellingItems.value.length;
+  } catch (error) {
+    console.error('获取商品失败:', error);
+    alert('获取商品失败，请刷新页面重试');
+  } finally {
+    loading.selling = false;
+  }
+};
+
 // 标签页数据
 const tabs = computed(() => [
   { id: 'selling', label: '在售', count: sellingItems.value.length },
@@ -492,17 +570,20 @@ const tabs = computed(() => [
 ])
 
 // 用户信息
-const user = computed(() => authStore.user || {
-  id: 1,
-  username: '加载中...',
-  avatar: 'default_avatar.png',
-  bio: '',
-  followers: 0,
-  following: 0,
-  items: 0,
-  contact: '',
-  location: ''
-})
+const user = computed(() => {
+  return authStore.user || {
+    id: 0,
+    username: '加载中...',
+    avatar: 'default_avatar.png',
+    bio: '',
+    followers: 0,
+    following: 0,
+    items: 0,
+    contact: '',
+    location: '',
+    items_count: 0 // 添加默认值
+  }
+});
 
 // 分页相关状态
 const pagination = reactive({
@@ -558,6 +639,25 @@ const sortedSellingItems = computed(() => {
   }
 })
 
+// 添加排序计算属性
+const sortedSoldItems = computed(() => {
+  if (soldItems.value.length === 0) return [];
+  
+  const items = [...soldItems.value];
+  
+  switch (sorting.sold) {
+    case 'oldest':
+      return items.sort((a, b) => 
+        new Date(a.soldAt).getTime() - new Date(b.soldAt).getTime()
+      );
+    case 'newest':
+    default:
+      return items.sort((a, b) => 
+        new Date(b.soldAt).getTime() - new Date(a.soldAt).getTime()
+      );
+  }
+})
+
 // 监听标签切换
 watch(activeTab, (newTab) => {
   if (newTab === 'selling' && sellingItems.value.length === 0) {
@@ -569,12 +669,21 @@ watch(activeTab, (newTab) => {
   }
 })
 
+// 修改onMounted钩子
 onMounted(async () => {
-  if (!authStore.user) {
-    await authStore.fetchCurrentUser()
+  try {
+    // 确保用户信息已加载
+    if (!authStore.user) {
+      await authStore.fetchCurrentUser();
+    }
+    
+    // 使用真实 API 获取数据
+    await fetchRealSellingItems();
+  } catch (error) {
+    console.error('初始化失败:', error);
+    alert('加载用户信息失败，请刷新页面');
   }
-  fetchSellingItems()
-})
+});
 
 // 切换标签
 const changeTab = (tabId) => {
@@ -595,33 +704,6 @@ const fetchTabData = (tabId) => {
     fetchSoldItems()
   } else if (tabId === 'favorites') {
     fetchFavoriteItems()
-  }
-}
-
-// 获取在售商品
-const fetchSellingItems = async () => {
-  loading.selling = true
-  try {
-    // 模拟API请求
-    await new Promise(resolve => setTimeout(resolve, 800))
-    
-    // 获取模拟数据
-    const mockData = generateMockSellingItems(pagination.selling.perPage)
-    
-    if (pagination.selling.page === 1) {
-      sellingItems.value = mockData
-    } else {
-      sellingItems.value = [...sellingItems.value, ...mockData]
-    }
-    
-    // 模拟总数据量
-    pagination.selling.total = 32
-    hasMore.selling = sellingItems.value.length < pagination.selling.total
-  } catch (error) {
-    console.error('获取在售商品失败:', error)
-  } finally {
-    loading.selling = false
-    loading.more = false
   }
 }
 
@@ -686,12 +768,12 @@ const loadMore = (type) => {
 }
 
 // 导航函数
-const navigateToAddProduct = () => {
-  router.push({ name: 'AddProduct' })
+const navigateToPublish = () => {
+  router.push({ name: 'Publish' }); // 确保与路由配置中的名称匹配
 }
 
 const navigateToDiscover = () => {
-  router.push({ name: 'Discover' })
+  router.push({ path: '/' })
 }
 
 // 模拟数据生成函数
@@ -735,9 +817,31 @@ const generateMockFavoriteItems = (count) => {
 /* 原有样式保持不变 */
 
 /* 头像上传加载状态 */
-.avatar-wrapper {
+/* 固定圆形头像容器（建议根据需求调整尺寸） */
+.avatar-container {
   position: relative;
-  display: inline-block;
+  width: 100px; /* 固定宽度 */
+  height: 100px; /* 固定高度 */
+  margin: 0 auto; /* 水平居中 */
+  margin-left: -20px; /* 向左移动20px，负值为左移，正值为右移 */
+  border-radius: 50%; /* 圆形边框 */
+  overflow: hidden; /* 超出部分隐藏 */
+  background-color: #f5f5f5; /* 背景色（加载时显示） */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); /* 阴影效果 */
+}
+
+.avatar-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.user-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* 图片等比填充 */
 }
 
 .avatar-overlay {
@@ -906,6 +1010,7 @@ const generateMockFavoriteItems = (count) => {
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid #eee;
+  background-color: #f5f5f5;
 }
 
 .avatar-edit-btn {
@@ -1067,5 +1172,21 @@ const generateMockFavoriteItems = (count) => {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+/* 添加上传按钮样式 */
+.profile-actions {
+  display: flex;
+  gap: 10px; /* 按钮间距 */
+}
+
+.btn-primary {
+  background-color: #3498db;
+  color: white;
+}
+
+/* 空状态按钮优化 */
+.empty-state .btn {
+  margin-top: 15px;
 }
 </style>

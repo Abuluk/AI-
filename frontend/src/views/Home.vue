@@ -46,12 +46,14 @@
 import ProductCard from '@/components/ProductCard.vue'
 import { useAuthStore } from '@/store/auth'
 import { useRouter } from 'vue-router'
+import SearchBar from '@/components/SearchBar.vue'
 import { ref } from 'vue';
 
 export default {
   name: 'HomeView',
   components: {
-    ProductCard
+    ProductCard,
+    SearchBar 
   },
   setup() {
     const authStore = useAuthStore()

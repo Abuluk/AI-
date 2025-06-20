@@ -1,17 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from db.session import get_db
-from db.models import Favorite, User
+from db.models import Favorite, User, Item
 from schemas.favorite import FavoriteCreate, FavoriteInDB
 from core.security import get_current_user
+
+router = APIRouter()
 
 def get_favorite(db: Session, favorite_id: int):
     return db.query(Favorite).filter(Favorite.id == favorite_id).first()
 
 def get_favorites_by_user(db: Session, user_id: int):
     return db.query(Favorite).filter(Favorite.user_id == user_id).all()
-
-router = APIRouter()
 
 @router.post("/", response_model=FavoriteInDB)
 def create_favorite(
@@ -50,3 +51,81 @@ def delete_favorite(
     
     delete_favorite(db, favorite_id=favorite_id)
     return {"message": "收藏已删除"}
+
+@router.post("/")
+def add_favorite(
+    user_id: int,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # 检查是否已收藏
+    existing = db.query(Favorite).filter(
+        Favorite.user_id == user_id,
+        Favorite.item_id == item_id
+    ).first()
+    
+    if existing:
+        return {"message": "Already favorited"}
+    
+    # 创建收藏
+    new_fav = Favorite(user_id=user_id, item_id=item_id)
+    db.add(new_fav)
+    db.commit()
+    
+    # 更新商品收藏计数
+    item = db.query(Item).get(item_id)
+    if item:
+        item.favorited_count = db.query(func.count(Favorite.id)).filter(
+            Favorite.item_id == item_id
+        ).scalar()
+        db.commit()
+    
+    return {"message": "Added to favorites"}
+
+@router.delete("/")
+def remove_favorite(
+    user_id: int,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    fav = db.query(Favorite).filter(
+        Favorite.user_id == user_id,
+        Favorite.item_id == item_id
+    ).first()
+    
+    if not fav:
+        raise HTTPException(status_code=404, detail="Favorite not found")
+    
+    db.delete(fav)
+    db.commit()
+    
+    # 更新商品收藏计数
+    item = db.query(Item).get(item_id)
+    if item:
+        item.favorited_count = db.query(func.count(Favorite.id)).filter(
+            Favorite.item_id == item_id
+        ).scalar()
+        db.commit()
+    
+    return {"message": "Removed from favorites"}
+
+@router.get("/check")
+def check_favorite(
+    user_id: int,
+    item_id: int,
+    db: Session = Depends(get_db)
+):
+    fav = db.query(Favorite).filter(
+        Favorite.user_id == user_id,
+        Favorite.item_id == item_id
+    ).first()
+    
+    return {"isFavorited": fav is not None}

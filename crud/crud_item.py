@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from db.models import Item
 from schemas.item import ItemCreate
 
@@ -10,6 +11,15 @@ def get_items(db: Session, skip: int = 0, limit: int = 100):
 
 def get_items_by_owner(db: Session, owner_id: int):
     return db.query(Item).filter(Item.owner_id == owner_id).all()
+
+# 搜索函数
+def get_items_by_search(db: Session, query: str, skip: int = 0, limit: int = 100):
+    return db.query(Item).filter(
+        or_(
+            Item.title.ilike(f"%{query}%"),
+            Item.description.ilike(f"%{query}%")
+        )
+    ).offset(skip).limit(limit).all()
 
 def create_item(db: Session, item: ItemCreate, owner_id: int):
     db_item = Item(**item.dict(), owner_id=owner_id)

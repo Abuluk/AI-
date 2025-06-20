@@ -84,6 +84,9 @@
 </template>
 
 <script>
+import api from '@/services/api'
+import { useAuthStore } from '@/store/auth' // 导入 Pinia store
+
 export default {
   data() {
     return {
@@ -110,9 +113,71 @@ export default {
     }
   },
   methods: {
+    // 获取商品数据方法（编辑时使用）
+    async fetchItemData() {
+      try {
+        const response = await api.getItem(this.itemId)
+        const item = response.data
+        this.form = {
+          title: item.title,
+          description: item.description,
+          price: item.price,
+          category: item.category,
+          location: item.location,
+          condition: item.condition,
+          images: item.images ? item.images.split(',').map(url => ({ url })) : []
+        }
+      } catch (error) {
+        console.error('获取商品数据失败:', error)
+        alert('无法加载商品数据')
+      }
+    },
+    
+    // 表单提交方法
+    async submitForm() {
+  try {
+    const formData = new FormData();
+    formData.append('title', this.form.title);
+    formData.append('description', this.form.description);
+    formData.append('price', this.form.price);
+    formData.append('category', this.form.category);
+    formData.append('location', this.form.location);
+    formData.append('condition', this.form.condition);
+    
+    // 添加图片文件
+    this.form.images.forEach((img, index) => {
+      if (img.file) {
+        formData.append('images', img.file, `image_${index}.jpg`);
+      }
+    });
+
+    // 调用API创建商品
+    const response = await api.createItem(formData);
+    const newItem = response.data;
+    
+    // 更新用户状态
+    const authStore = useAuthStore();
+    if (authStore.user) {
+      authStore.user.items_count += 1;
+    }
+    await this.$authStore.fetchCurrentUser();
+    this.$router.push({ path: '/profile' });
+  } catch (error) {
+    console.error('发布失败:', error);
+    let errorMessage = '发布失败，请重试';
+    if (error.response?.data?.detail) {
+      errorMessage = error.response.data.detail;
+    }
+    alert(errorMessage);
+  }
+},
+    
+    // 触发文件选择
     triggerFileInput() {
       this.$refs.fileInput.click()
     },
+    
+    // 处理文件上传
     handleFileUpload(e) {
       const files = e.target.files
       if (this.form.images.length + files.length > 6) {
@@ -139,19 +204,16 @@ export default {
       // 重置input以允许选择相同文件
       this.$refs.fileInput.value = null
     },
+    
+    // 移除图片
     removeImage(index) {
       this.form.images.splice(index, 1)
     },
-    submitForm() {
-      console.log('提交表单:', this.form)
-      // 这里应该发送API请求
-      alert(this.editing ? '商品已更新' : '商品已发布')
-      this.$router.push('/')
-    },
+    
+    // 取消按钮功能
     cancel() {
-      if (confirm('确定要取消吗？所有更改将不会被保存。')) {
-        this.$router.push('/')
-      }
+      // 返回上一页或首页
+      this.$router.go(-1)
     }
   }
 }

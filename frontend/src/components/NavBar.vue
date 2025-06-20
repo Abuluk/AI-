@@ -3,10 +3,11 @@
     <div class="navbar">
       <router-link to="/" class="logo">
         <i class="fas fa-fish"></i>
-        <span>Goofish</span>
+        <span>我不是刘川豪</span>
       </router-link>
       
-      <SearchBar />
+      <!-- 搜索框组件 - 添加了查询参数绑定 -->
+      <SearchBar :initialQuery="route.query.q" />
       
       <div class="nav-icons">
         <router-link to="/messages" class="nav-icon">
@@ -26,10 +27,18 @@
 
 <script>
 import SearchBar from './SearchBar.vue'
+import { useRoute } from 'vue-router'
+import { ref } from 'vue'
 
 export default {
   components: {
     SearchBar
+  },
+  setup() {
+    const route = useRoute()
+    return {
+      route
+    }
   },
   data() {
     return {
@@ -52,7 +61,9 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 15px 0;
+  padding: 15px 20px;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .logo {
@@ -62,6 +73,7 @@ header {
   font-weight: bold;
   color: var(--primary);
   text-decoration: none;
+  min-width: 120px;
 }
 
 .logo i {
@@ -71,6 +83,8 @@ header {
 .nav-icons {
   display: flex;
   gap: 20px;
+  min-width: 120px;
+  justify-content: flex-end;
 }
 
 .nav-icon {
@@ -106,7 +120,27 @@ header {
 
 @media (max-width: 768px) {
   .navbar {
-    padding: 10px 0;
+    padding: 10px 15px;
+    flex-wrap: wrap;
+  }
+  
+  .logo {
+    order: 1;
+  }
+  
+  .nav-icons {
+    order: 2;
+  }
+  
+  .search-bar-container {
+    order: 3;
+    width: 100%;
+    margin-top: 10px;
+    max-width: 100%;
+  }
+  
+  .search-bar {
+    max-width: 100%;
   }
 }
 </style>

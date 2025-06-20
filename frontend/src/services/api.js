@@ -87,8 +87,20 @@ export default {
     return api.get(`/items/${itemId}`)
   },
   
-  async createItem(itemData) {
-    return api.post('/items', itemData)
+  // 添加创建商品方法（支持FormData）
+  async createItem(formData) {
+    return api.post('/items/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+  },
+
+  // 添加获取用户商品方法
+  async getUserSellingItems(userId, params = {}) {
+    return api.get(`/users/${userId}/items`, { 
+      params: { ...params, status: 'selling' } 
+    })
   },
   
   async updateItem(itemId, itemData) {
@@ -98,6 +110,7 @@ export default {
   async deleteItem(itemId) {
     return api.delete(`/items/${itemId}`)
   },
+  
   
   // 消息操作
   async getConversations() {
@@ -111,7 +124,29 @@ export default {
   async sendMessage(messageData) {
     return api.post('/messages', messageData)
   },
-  
+
+  // 添加新方法
+  async searchItems(query, params = {}) {
+    return api.get('/items/search', { 
+      params: { ...params, q: query } 
+   })
+  },
+
+  async checkFavorite(userId, itemId) {
+   return api.get(`/favorites/check?user_id=${userId}&item_id=${itemId}`)
+  },
+
+  async addFavorite(userId, itemId) {
+    return api.post('/favorites', { user_id: userId, item_id: itemId })
+  },
+
+  async removeFavorite(userId, itemId) {
+    return api.delete(`/favorites?user_id=${userId}&item_id=${itemId}`)
+  },
+
+  async getUser(userId) {
+    return api.get(`/users/${userId}`)
+  },
   // 文件上传
   async uploadItemImages(itemId, files) {
     const formData = new FormData()
@@ -123,5 +158,12 @@ export default {
         'Content-Type': 'multipart/form-data'
       }
     })
-  }
+  },
+
+  // 在api.js中添加搜索方法
+async searchItems(query, params = {}) {
+  return api.get('/items/search', { 
+    params: { ...params, q: query } 
+  })
+}
 }

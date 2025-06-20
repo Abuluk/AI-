@@ -7,6 +7,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import os
+from api.api_v1 import api_router
+from api.endpoints import items, users
 
 def create_tables():
     Base.metadata.create_all(bind=engine)
@@ -25,8 +27,7 @@ app = start_application()
 # 添加CORS中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=["http://localhost:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -44,7 +45,7 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")# 获取当前文件所在目录的
 print(f"项目根目录: {BASE_DIR}")
 print(f"静态文件目录: {STATIC_DIR}")
 # 配置静态文件服务
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 # 添加测试路由
 @app.get("/test-static")
 async def test_static():

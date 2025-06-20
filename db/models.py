@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Text, Boolean, DateTime, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Float, Text, Boolean, DateTime, ForeignKey, func, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from db.base import Base
@@ -36,6 +36,7 @@ class Item(Base):
     price = Column(Float, nullable=False)
     category = Column(String(50))
     condition = Column(String(20), default="unknown")
+    status = Column(String(20), default="online", nullable=False)  # online, offline, sold
     location = Column(String(100))
     images = Column(String(500))  # 存储图片路径，多个用逗号分隔
     owner_id = Column(Integer, ForeignKey("users.id"))
@@ -60,13 +61,18 @@ class Message(Base):
     user = relationship("User", back_populates="messages")
     item = relationship("Item", back_populates="messages")
 
+# 在Favorite模型中添加唯一约束
 class Favorite(Base):
     __tablename__ = "favorites"
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     item_id = Column(Integer, ForeignKey("items.id"))
-    created_at = Column(DateTime, server_default=func.now())  # 使用数据库函数
+    created_at = Column(DateTime, server_default=func.now())
+    
+    __table_args__ = (
+        UniqueConstraint('user_id', 'item_id', name='_user_item_uc'),
+    )
     
     user = relationship("User", back_populates="favorites")
     item = relationship("Item", back_populates="favorited_by")

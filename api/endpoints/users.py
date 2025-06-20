@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from db.session import get_db
 from core.security import get_current_active_user
@@ -6,6 +6,8 @@ from db.models import User
 from db.models import Item
 from schemas.user import UserInDB, UserUpdate
 from db.models import Favorite
+from schemas.item import ItemInDB
+from typing import List, Optional
 from crud.crud_user import (
     get_user,
     update_user,
@@ -62,3 +64,41 @@ def get_user_stats(
         "sold": sold_count,
         "favorites": favorites_count
     }
+
+# 添加用户商品查询路由
+# users.py
+@router.get("/{user_id}/items", response_model=List[ItemInDB])
+def get_user_items(
+    user_id: int,
+    status: Optional[str] = Query("selling", description="商品状态: selling(在售), sold(已售), offline(下架)"),
+    skip: int = Query(0, description="跳过记录数"),
+    limit: int = Query(10, description="每页记录数"),
+    db: Session = Depends(get_db)
+):
+    """
+    获取指定用户的商品列表，可按状态筛选
+    """
+    # 验证用户存在
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # 根据状态筛选商品
+    query = db.query(Item).filter(Item.owner_id == user_id)
+    
+    if status == "selling":
+        # 在售商品：未售出且状态为 online
+        query = query.filter(Item.sold == False, Item.status == "online")
+    elif status == "sold":
+        # 已售商品：已售出
+        query = query.filter(Item.sold == True)
+    elif status == "offline":
+        # 下架商品：状态为 offline
+        query = query.filter(Item.status == "offline")
+    else:
+        # 如果是不支持的状态，返回空列表
+        return []
+    
+    # 添加分页
+    items = query.offset(skip).limit(limit).all()
+    return items

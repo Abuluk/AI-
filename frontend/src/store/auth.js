@@ -62,14 +62,13 @@ export const useAuthStore = defineStore('auth', {
     
     async fetchCurrentUser() {
       try {
-        const response = await api.getCurrentUser()
-        this.user = response.data
-        this.isAuthenticated = true
-        return this.user
+        const response = await api.getCurrentUser();
+        // 确保获取完整的用户信息，包括items_count
+        this.user = { ...this.user, ...response.data };
+        this.isAuthenticated = true;
+        return this.user;
       } catch (error) {
-        this.isAuthenticated = false
-        this.user = null
-        return null
+        // ...错误处理...
       }
     },
     

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import List, Optional
 
@@ -18,10 +18,13 @@ class ItemUpdate(ItemBase):
 
 class ItemInDB(ItemBase):
     id: int
-    owner_id: int
-    images: Optional[str] = None
-    created_at: datetime
-    sold: bool = False
+    title: str
+    description: str
+    price: float
+    # 添加可选字段和默认值
+    status: Optional[str] = "online"
+    sold: Optional[bool] = False
+    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
     
     class Config:
         from_attributes = True

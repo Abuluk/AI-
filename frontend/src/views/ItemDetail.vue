@@ -61,7 +61,42 @@
         </div>
       </div>
     </div>
-    
+    <!-- 操作按钮区域 -->
+    <div class="action-buttons">
+      <!-- 收藏按钮 -->
+      <button class="btn btn-outline" @click="toggleFavorite">
+        <i :class="['fas', isFavorited ? 'fa-heart text-danger' : 'fa-heart']"></i> 
+            {{ isFavorited ? '已收藏' : '收藏' }}
+      </button>
+            
+      <!-- 购买按钮（仅显示给非所有者） -->
+      <button 
+        class="btn btn-primary" 
+          v-if="!isOwner && !product.sold && product.status !== 'offline'"
+            @click="purchaseItem"
+          >
+            <i class="fas fa-shopping-cart"></i> 立即购买
+      </button>
+            
+      <!-- 下架按钮（仅显示给所有者） -->
+      <button 
+        v-if="isOwner && !product.sold && product.status !== 'offline'"
+          class="btn btn-danger"
+          @click="offlineItem"
+            >
+          <i class="fas fa-ban"></i> 下架商品
+      </button>
+            
+      <!-- 重新上架按钮（仅显示给所有者） -->
+      <button 
+        v-if="isOwner && product.status === 'offline'"
+        class="btn btn-success"
+        @click="onlineItem"
+      >
+        <i class="fas fa-check"></i> 重新上架
+      </button>
+    </div>
+
     <div class="related-products card">
       <h2>推荐商品</h2>
       <div class="products-grid">
@@ -77,6 +112,9 @@
 
 <script>
 import ProductCard from '@/components/ProductCard.vue'
+import api from '@/services/api'
+import { mapState } from 'pinia'
+import { useAuthStore } from '@/store/auth'
 
 export default {
   components: {
@@ -143,6 +181,108 @@ export default {
     this.mainImage = this.product.images[0]
   },
   methods: {
+    startChat() {
+      this.$router.push({ name: 'Chat', params: { id: this.seller.id } })
+    }
+  },
+
+  computed: {
+  user() {
+    return useAuthStore().user
+  },
+  isOwner() {
+    return this.user && this.user.id === this.product.owner_id
+  }
+},
+  async created() {
+    await this.fetchItemData()
+    this.checkFavoriteStatus()
+  },
+  methods: {
+    async fetchItemData() {
+      try {
+        // 实际项目中替换为API调用
+        // const response = await api.getItem(this.id)
+        // this.product = response.data
+        
+        // 模拟API调用
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        // 更新浏览量
+        // await api.updateItem(this.id, { views: this.product.views + 1 })
+        this.product.views += 1
+        
+        // 获取卖家信息
+        // const sellerResponse = await api.getUser(this.product.owner_id)
+        // this.seller = sellerResponse.data
+      } catch (error) {
+        console.error('获取商品数据失败:', error)
+      }
+    },
+    async checkFavoriteStatus() {
+      if (!this.user) return
+      try {
+        // 实际项目中替换为API调用
+        // const response = await api.checkFavorite(this.user.id, this.id)
+        // this.isFavorited = response.data.isFavorited
+        
+        // 模拟检查收藏状态
+        this.isFavorited = Math.random() > 0.5
+      } catch (error) {
+        console.error('检查收藏状态失败:', error)
+      }
+    },
+    async toggleFavorite() {
+      if (!this.user) {
+        this.$router.push('/login')
+        return
+      }
+      
+      try {
+        if (this.isFavorited) {
+          // await api.removeFavorite(this.user.id, this.id)
+          console.log(`移除收藏: 用户 ${this.user.id}, 商品 ${this.id}`)
+        } else {
+          // await api.addFavorite(this.user.id, this.id)
+          console.log(`添加收藏: 用户 ${this.user.id}, 商品 ${this.id}`)
+        }
+        this.isFavorited = !this.isFavorited
+      } catch (error) {
+        console.error('收藏操作失败:', error)
+      }
+    },
+    async offlineItem() {
+      if (confirm('确定要下架该商品吗？下架后其他用户将无法看到此商品。')) {
+        try {
+          // 实际项目中调用API
+          // await api.updateItemStatus(this.product.id, 'offline')
+          
+          // 更新本地状态
+          this.product.status = 'offline'
+          alert('商品已成功下架')
+        } catch (error) {
+          console.error('下架商品失败:', error)
+          alert('操作失败，请重试')
+        }
+      }
+    },
+    async onlineItem() {
+      try {
+        // 实际项目中调用API
+        // await api.updateItemStatus(this.product.id, 'online')
+        
+        // 更新本地状态
+        this.product.status = 'online'
+        alert('商品已重新上架')
+      } catch (error) {
+        console.error('上架商品失败:', error)
+        alert('操作失败，请重试')
+      }
+    },
+    purchaseItem() {
+      // 购买商品逻辑
+      alert('购买流程开始...')
+    },
     startChat() {
       this.$router.push({ name: 'Chat', params: { id: this.seller.id } })
     }
@@ -305,5 +445,29 @@ export default {
   .action-buttons {
     flex-direction: column;
   }
+}
+/* 状态标签样式 */
+.status-tag {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  margin-left: 10px;
+  font-weight: bold;
+}
+
+.status-online {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-offline {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.status-sold {
+  background-color: #fff3cd;
+  color: #856404;
 }
 </style>
