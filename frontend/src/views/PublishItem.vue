@@ -160,8 +160,16 @@ export default {
     if (authStore.user) {
       authStore.user.items_count += 1;
     }
-    await this.$authStore.fetchCurrentUser();
+    // 单独处理用户信息刷新，不影响主流程
+    try {
+      await authStore.fetchCurrentUser();
+    } catch (fetchError) {
+      console.error('刷新用户信息失败:', fetchError);
+    }
+    // 无论用户信息刷新是否成功，都跳转到个人主页
     this.$router.push({ path: '/profile' });
+    // 显示成功提示
+    alert('发布成功！');
   } catch (error) {
     console.error('发布失败:', error);
     let errorMessage = '发布失败，请重试';
