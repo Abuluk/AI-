@@ -9,5 +9,14 @@ export default defineConfig({
       // 配置 '@' 指向项目的 src 目录
       '@': path.resolve(__dirname, 'src')  
     }
+  },
+  server: {
+    proxy: {
+      '/static': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        secure: false
+      }
+    }
   }
 })

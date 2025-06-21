@@ -43,8 +43,14 @@ export default {
         let normalized = path.replace(/\\/g, '/');
         
         // 确保路径以 /static/ 开头
-        if (!normalized.startsWith('/static/') && !normalized.startsWith('static/')) {
-          normalized = `/static/${normalized}`;
+        // 确保路径以绝对路径 /static/ 开头
+        if (!normalized.startsWith('/static/')) {
+          // 如果路径以 static/ 开头，添加前导斜杠
+          if (normalized.startsWith('static/')) {
+            normalized = `/${normalized}`;
+          } else {
+            normalized = `/static/${normalized}`;
+          }
         }
         
         return normalized;
@@ -53,14 +59,35 @@ export default {
       // 尝试获取第一张图片
       let firstImage = '';
       
+      // 调试日志：检查商品对象是否包含图片相关字段
+      if (!product.images && !product.image) {
+        console.warn(`商品ID: ${product.id} 缺少图片字段(images/image)`);
+      }
+      
       if (product.images) {
         // 分割图片字符串并获取第一张
         const images = product.images.split(',');
         if (images.length > 0) {
           firstImage = images[0].trim();
+        } else {
+          console.warn(`商品ID: ${product.id} images字段为空`);
         }
       } else if (product.image) {
         firstImage = product.image;
+      } else {
+        // 尝试从其他可能的字段获取图片路径（根据后端实际情况调整）
+        // 如果后端有其他图片字段名，请在此处添加
+        // 尝试从其他可能的字段获取图片路径（根据后端实际情况调整）
+        firstImage = product.img_url || product.picture || '';
+        if (firstImage) {
+          console.log(`商品ID: ${product.id} 使用备用图片字段: ${firstImage}`);
+        } else {
+          // 作为最后的备选方案：使用商品ID构造默认图片路径
+          // 假设图片命名格式为：{id}_*.jpg
+          // 构造具体的默认图片路径格式（移除通配符）
+          firstImage = `${product.id}_default.jpg`;
+          console.error(`商品ID: ${product.id} 严重警告: 后端未返回图片路径，使用默认路径: ${firstImage}。请检查后端API是否正确返回images/image字段`);
+        }
       }
       
       // 返回处理后的路径或默认图片URL

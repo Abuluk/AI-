@@ -44,11 +44,17 @@ async def create_item(
     if images:
         UPLOAD_DIR = "static/images"
         os.makedirs(UPLOAD_DIR, exist_ok=True)
+        ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
         
         for image in images:
+            # 验证文件格式
+            ext = os.path.splitext(image.filename)[1].lower()
+            if ext not in ALLOWED_EXTENSIONS:
+                raise HTTPException(status_code=400, detail=f"不支持的图片格式: {ext}。允许的格式: {', '.join(ALLOWED_EXTENSIONS)}")
             # 确保文件名安全
             safe_filename = f"{db_item.id}_{uuid.uuid4().hex}{os.path.splitext(image.filename)[1]}"
-            file_path = os.path.join(UPLOAD_DIR, safe_filename)
+            # 使用正斜杠统一路径格式
+            file_path = os.path.join(UPLOAD_DIR, safe_filename).replace(os.sep, '/')
             
             with open(file_path, "wb") as f:
                 content = await image.read()

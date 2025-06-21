@@ -25,6 +25,7 @@ class ItemInDB(ItemBase):
     status: Optional[str] = "online"
     sold: Optional[bool] = False
     created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    images: Optional[str] = None  # 添加图片字段，多个路径用逗号分隔
     
     class Config:
         from_attributes = True
