@@ -5,7 +5,7 @@
       <div class="navbar">
         <router-link to="/" class="logo">
           <i class="fas fa-fish"></i>
-          <span>我不是刘川豪</span>
+          <span>上电校园二手站</span>
         </router-link>
         
         <SearchBar :initialQuery="route.query.q" />
