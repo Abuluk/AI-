@@ -220,3 +220,22 @@ def update_item_views(
     db.refresh(item)
     
     return {"message": "浏览量已更新", "views": item.views}
+
+@router.patch("/{item_id}/sold")
+def mark_item_sold(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """将商品标记为已售"""
+    item = crud_item.get_item(db, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="商品不存在")
+    if item.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权操作此商品")
+    if item.sold:
+        return {"message": "商品已售出"}
+    item.sold = True
+    db.commit()
+    db.refresh(item)
+    return {"message": "商品已标记为已售", "item": item}

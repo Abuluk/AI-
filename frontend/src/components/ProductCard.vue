@@ -40,6 +40,13 @@
       >
         <i class="fas fa-check"></i> 上架
       </button>
+      <button 
+        v-if="product.status === 'online'"
+        class="btn btn-warning btn-sm"
+        @click.stop="markSold"
+      >
+        <i class="fas fa-check-double"></i> 已售出
+      </button>
     </div>
   </div>
 </template>
@@ -56,7 +63,7 @@ export default {
       default: false
     }
   },
-  emits: ['offline', 'online'],
+  emits: ['offline', 'online', 'sold'],
   methods: {
     // 获取并处理第一张图片
     getFirstImage(product) {
@@ -134,6 +141,9 @@ export default {
     onlineItem() {
       // 触发上架事件
       this.$emit('online', this.product.id);
+    },
+    markSold() {
+      this.$emit('sold', this.product.id);
     }
   },
   data() {
@@ -260,6 +270,15 @@ export default {
 
 .btn-success:hover {
   background-color: #229954;
+}
+
+.btn-warning {
+  background-color: #f39c12;
+  color: white;
+}
+
+.btn-warning:hover {
+  background-color: #d68910;
 }
 
 @media (max-width: 768px) {

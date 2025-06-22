@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from db.session import get_db
 from db.models import Favorite, User, Item
-from schemas.favorite import FavoriteCreate, FavoriteInDB
+from schemas.favorite import FavoriteCreate, FavoriteInDB, FavoriteWithItem
 from core.security import get_current_user
 from datetime import datetime
 
@@ -15,7 +15,7 @@ def get_favorite(db: Session, favorite_id: int):
 def get_favorites_by_user(db: Session, user_id: int):
     return db.query(Favorite).filter(Favorite.user_id == user_id).all()
 
-@router.get("/user/{user_id}", response_model=list[FavoriteInDB])
+@router.get("/user/{user_id}", response_model=list[FavoriteWithItem])
 def read_user_favorites(
     user_id: int,
     db: Session = Depends(get_db),
@@ -24,7 +24,11 @@ def read_user_favorites(
     if user_id != current_user.id:
         raise HTTPException(status_code=403, detail="无权查看其他用户的收藏")
     
-    favorites = get_favorites_by_user(db, user_id=user_id)
+    # 获取收藏记录，并关联商品信息
+    favorites = db.query(Favorite).join(Item).filter(
+        Favorite.user_id == user_id,
+        Item.id.isnot(None)  # 确保商品存在
+    ).all()
     
     # 处理created_at为None的情况
     for favorite in favorites:
@@ -33,7 +37,7 @@ def read_user_favorites(
     
     return favorites
 
-@router.delete("/{favorite_id}")
+@router.delete("/by-id/{favorite_id}")
 def delete_favorite(
     favorite_id: int,
     db: Session = Depends(get_db),

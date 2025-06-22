@@ -106,6 +106,13 @@ export default {
       params: { ...params, status: 'offline' } 
     })
   },
+
+  // 添加获取用户已售商品方法
+  async getUserSoldItems(userId, params = {}) {
+    return api.get(`/users/${userId}/items`, { 
+      params: { ...params, status: 'sold' } 
+    })
+  },
   
   async updateItem(itemId, itemData) {
     return api.put(`/items/${itemId}`, itemData)
@@ -179,5 +186,10 @@ export default {
         'Content-Type': 'multipart/form-data'
       }
     })
+  },
+
+  // 标记商品为已售
+  async markItemSold(itemId) {
+    return api.patch(`/items/${itemId}/sold`)
   }
 }

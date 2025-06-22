@@ -112,6 +112,7 @@
                 :showActions="true"
                 @offline="handleOfflineItem"
                 @online="handleOnlineItem"
+                @sold="handleSoldItem"
               />
             </div>
             <div v-else class="empty-state">
@@ -183,7 +184,7 @@
               <button 
                 class="btn btn-outline" 
                 @click="loadMore('sold')"
-                :disabled="!hasMore.sold || loading.more"
+                :disabled="soldItems.length < pagination.sold.perPage || loading.more"
               >
                 <span v-if="loading.more">加载中...</span>
                 <span v-else>下一页</span>
@@ -787,19 +788,38 @@ const fetchTabData = (tabId) => {
 const fetchSoldItems = async () => {
   loading.sold = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 800))
-    const mockData = generateMockSoldItems(pagination.sold.perPage)
-    
-    if (pagination.sold.page === 1) {
-      soldItems.value = mockData
-    } else {
-      soldItems.value = [...soldItems.value, ...mockData]
+    if (!authStore.user || !authStore.user.id) {
+      console.error('用户信息未加载')
+      return
     }
     
-    pagination.sold.total = 12
-    hasMore.sold = soldItems.value.length < pagination.sold.total
+    const response = await api.getUserSoldItems(
+      authStore.user.id,
+      {
+        skip: (pagination.sold.page - 1) * pagination.sold.perPage,
+        limit: pagination.sold.perPage
+      }
+    )
+    
+    // 自动回退
+    if (response.data.length === 0 && pagination.sold.page > 1) {
+      pagination.sold.page -= 1
+      alert('已经是最后一页')
+      await fetchSoldItems()
+      return
+    }
+    
+    if (pagination.sold.page === 1) {
+      soldItems.value = response.data
+    } else {
+      soldItems.value = [...soldItems.value, ...response.data]
+    }
+    
+    // 更新统计数据
+    tabs.value[1].count = soldItems.value.length
   } catch (error) {
     console.error('获取已售商品失败:', error)
+    alert('获取已售商品失败，请重试')
   } finally {
     loading.sold = false
     loading.more = false
@@ -823,8 +843,11 @@ const fetchFavoriteItems = async () => {
       }
     )
     
+    // 提取商品信息（新的API返回的是包含商品信息的收藏记录）
+    const items = response.data.map(favorite => favorite.item)
+    
     // 自动回退
-    if (response.data.length === 0 && pagination.favorites.page > 1) {
+    if (items.length === 0 && pagination.favorites.page > 1) {
       pagination.favorites.page -= 1
       alert('已经是最后一页')
       await fetchFavoriteItems()
@@ -832,9 +855,9 @@ const fetchFavoriteItems = async () => {
     }
     
     if (pagination.favorites.page === 1) {
-      favoriteItems.value = response.data
+      favoriteItems.value = items
     } else {
-      favoriteItems.value = [...favoriteItems.value, ...response.data]
+      favoriteItems.value = [...favoriteItems.value, ...items]
     }
     
     // 更新统计数据
@@ -1009,6 +1032,28 @@ const getFirstImage = (item) => {
   if (!item.images) return 'default_product.png'
   const images = item.images.split(',')
   return images[0] || 'default_product.png'
+}
+
+// 处理商品已售出
+const handleSoldItem = async (itemId) => {
+  if (confirm('确定要将该商品标记为已售吗？')) {
+    try {
+      await api.markItemSold(itemId)
+      
+      // 从在售商品列表中移除
+      sellingItems.value = sellingItems.value.filter(item => item.id !== itemId)
+      
+      // 如果已售商品标签页是当前激活的，刷新已售商品列表
+      if (activeTab.value === 'sold') {
+        await fetchSoldItems()
+      }
+      
+      alert('商品已标记为已售')
+    } catch (error) {
+      console.error('标记为已售失败:', error)
+      alert('操作失败，请重试')
+    }
+  }
 }
 
 </script>
