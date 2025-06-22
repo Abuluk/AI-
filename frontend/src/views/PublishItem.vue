@@ -17,7 +17,7 @@
         <div class="form-row">
           <div class="form-group">
             <label>价格 (¥)</label>
-            <input type="number" v-model="form.price" placeholder="0.00" required>
+            <input type="number" v-model="form.price" placeholder="0.00" required step="0.01" min="0" @input="onPriceInput">
           </div>
           
           <div class="form-group">
@@ -279,6 +279,17 @@ export default {
     cancel() {
       // 返回上一页或首页
       this.$router.go(-1)
+    },
+    onPriceInput(e) {
+      // 限制最多两位小数
+      let value = e.target.value;
+      if (value && value.includes('.')) {
+        const [intPart, decPart] = value.split('.');
+        if (decPart.length > 2) {
+          value = intPart + '.' + decPart.slice(0, 2);
+          this.form.price = value;
+        }
+      }
     }
   }
 }

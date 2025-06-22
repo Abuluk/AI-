@@ -333,9 +333,6 @@ const apiService = {
     return retryRequest(() => api.post('/admin/messages', messageData))
   },
 
-  getFavorites: () => api.get('/favorites/'),
-  addFavorite: (itemId) => api.post(`/favorites/${itemId}`),
-  removeFavorite: (itemId) => api.delete(`/favorites/${itemId}`),
   getUsersByIds: (userIds) => api.post('/users/by_ids', { user_ids: userIds }),
 
   async deleteConversation(itemId, otherUserId) {

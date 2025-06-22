@@ -125,24 +125,8 @@
                 去发布商品
               </button>
             </div>
-            
-            <div class="pagination" v-if="sellingItems.length > 0">
-              <button 
-                class="btn btn-outline" 
-                @click="loadPrevious('selling')"
-                :disabled="pagination.selling.page === 1 || loading.more"
-              >
-                上一页
-              </button>
-              <button 
-                class="btn btn-outline" 
-                @click="loadMore('selling')"
-                :disabled="sellingItems.length < pagination.selling.perPage || loading.more"
-              >
-                <span v-if="loading.more">加载中...</span>
-                <span v-else>下一页</span>
-              </button>
-            </div>
+            <!-- 自动加载更多触发器，仅在还有更多数据时显示 -->
+            <div v-if="sellingItems.length > 0 && hasMoreSelling" ref="infiniteScrollTrigger" style="height: 1px;"></div>
           </div>
         </div>
         
@@ -179,24 +163,8 @@
               <i class="fas fa-box-open"></i>
               <p>暂无已售商品</p>
             </div>
-            
-            <div class="pagination" v-if="soldItems.length > 0">
-              <button 
-                class="btn btn-outline" 
-                @click="loadPrevious('sold')"
-                :disabled="pagination.sold.page === 1 || loading.more"
-              >
-                上一页
-              </button>
-              <button 
-                class="btn btn-outline" 
-                @click="loadMore('sold')"
-                :disabled="soldItems.length < pagination.sold.perPage || loading.more"
-              >
-                <span v-if="loading.more">加载中...</span>
-                <span v-else>下一页</span>
-              </button>
-            </div>
+            <!-- 自动加载更多触发器，仅在还有更多数据时显示 -->
+            <div v-if="soldItems.length > 0 && hasMoreSold" ref="infiniteScrollSoldTrigger" style="height: 1px;"></div>
           </div>
         </div>
         
@@ -230,24 +198,8 @@
                      去首页浏览
               </button>
             </div>
-            
-            <div class="pagination" v-if="favoriteItems.length > 0">
-              <button 
-                class="btn btn-outline" 
-                @click="loadPrevious('favorites')"
-                :disabled="pagination.favorites.page === 1 || loading.more"
-              >
-                上一页
-              </button>
-              <button 
-                class="btn btn-outline" 
-                @click="loadMore('favorites')"
-                :disabled="favoriteItems.length < pagination.favorites.perPage || loading.more"
-              >
-                <span v-if="loading.more">加载中...</span>
-                <span v-else>下一页</span>
-              </button>
-            </div>
+            <!-- 自动加载更多触发器，仅在还有更多数据时显示 -->
+            <div v-if="favoriteItems.length > 0 && hasMoreFavorite" ref="infiniteScrollFavTrigger" style="height: 1px;"></div>
           </div>
         </div>
       </div>
@@ -604,44 +556,21 @@ const fetchRealSellingItems = async () => {
       return;
     }
     loading.selling = true;
-    
+    hasMoreSelling.value = true;
     // 构建请求参数，包括排序参数
     const params = {
-      skip: (pagination.selling.page - 1) * pagination.selling.perPage,
-      limit: pagination.selling.perPage
+      skip: 0,
+      limit: pagination.selling.perPage,
+      order_by: sorting.selling
     };
-    
-    // 根据排序选项添加排序参数
-    switch(sorting.selling) {
-      case 'newest':
-        params.order_by = 'created_at_desc';
-        break;
-      case 'popular':
-        params.order_by = 'views_desc';
-        break;
-      case 'price_asc':
-        params.order_by = 'price_asc';
-        break;
-      case 'price_desc':
-        params.order_by = 'price_desc';
-        break;
-      default:
-        params.order_by = 'created_at_desc'; // 默认按最新发布排序
-    }
-    
     const response = await api.getUserSellingItems(
       authStore.user.id,
       params
     );
-    // 自动回退
-    if (response.data.length === 0 && pagination.selling.page > 1) {
-      pagination.selling.page -= 1;
-      alert('已经是最后一页');
-      await fetchRealSellingItems();
-      return;
-    }
     sellingItems.value = response.data;
-    // 更新统计数据
+    if (response.data.length < pagination.selling.perPage) {
+      hasMoreSelling.value = false;
+    }
     tabs.value[0].count = sellingItems.value.length;
   } catch (error) {
     console.error('获取商品失败:', error);
@@ -788,9 +717,12 @@ onMounted(async () => {
     if (!authStore.user) {
       await authStore.fetchCurrentUser();
     }
-    
-    // 使用真实 API 获取数据
-    await fetchRealSellingItems();
+    // 进入页面时同时拉取三类商品的第一页，刷新tab数字
+    await Promise.all([
+      fetchRealSellingItems(),
+      fetchSoldItems(true),
+      fetchFavoriteItems(true)
+    ]);
   } catch (error) {
     console.error('初始化失败:', error);
     alert('加载用户信息失败，请刷新页面');
@@ -1163,6 +1095,120 @@ const formatDateTime = (datetime) => {
   return `${y}-${m}-${d} ${h}:${min}`;
 };
 
+const hasMoreSelling = ref(true)
+const loadMoreSelling = async () => {
+  loading.more = true;
+  pagination.selling.page += 1;
+  try {
+    const response = await api.getUserSellingItems(authStore.user.id, {
+      skip: (pagination.selling.page - 1) * pagination.selling.perPage,
+      limit: pagination.selling.perPage,
+      order_by: sorting.selling
+    });
+    if (response.data.length < pagination.selling.perPage) {
+      hasMoreSelling.value = false;
+    }
+    // 只追加新数据
+    sellingItems.value = [...sellingItems.value, ...response.data];
+  } catch (error) {
+    console.error('加载更多商品失败:', error);
+    alert('加载更多失败，请重试');
+  } finally {
+    loading.more = false;
+  }
+}
+
+const infiniteScrollTrigger = ref(null)
+let observer = null
+
+onMounted(() => {
+  // 只监听在售商品tab
+  observer = new window.IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && hasMoreSelling.value && !loading.more && activeTab.value === 'selling') {
+      loadMoreSelling()
+    }
+  }, { threshold: 0.1 })
+  if (infiniteScrollTrigger.value) {
+    observer.observe(infiniteScrollTrigger.value)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (observer && infiniteScrollTrigger.value) {
+    observer.unobserve(infiniteScrollTrigger.value)
+  }
+})
+
+const hasMoreSold = ref(true)
+const hasMoreFavorite = ref(true)
+const infiniteScrollSoldTrigger = ref(null)
+const infiniteScrollFavTrigger = ref(null)
+let observerSold = null
+let observerFav = null
+
+const loadMoreSold = async () => {
+  loading.more = true;
+  pagination.sold.page += 1;
+  try {
+    const response = await api.getUserSoldItems(authStore.user.id, {
+      skip: (pagination.sold.page - 1) * pagination.sold.perPage,
+      limit: pagination.sold.perPage
+    });
+    if (response.data.length < pagination.sold.perPage) {
+      hasMoreSold.value = false;
+    }
+    soldItems.value = [...soldItems.value, ...response.data];
+  } catch (error) {
+    console.error('加载更多已售商品失败:', error);
+    alert('加载更多失败，请重试');
+  } finally {
+    loading.more = false;
+  }
+}
+const loadMoreFavorite = async () => {
+  loading.more = true;
+  pagination.favorites.page += 1;
+  try {
+    const response = await api.getUserFavorites(authStore.user.id, {
+      skip: (pagination.favorites.page - 1) * pagination.favorites.perPage,
+      limit: pagination.favorites.perPage
+    });
+    const items = response.data.map(favorite => favorite.item);
+    if (items.length < pagination.favorites.perPage) {
+      hasMoreFavorite.value = false;
+    }
+    favoriteItems.value = [...favoriteItems.value, ...items];
+  } catch (error) {
+    console.error('加载更多收藏商品失败:', error);
+    alert('加载更多失败，请重试');
+  } finally {
+    loading.more = false;
+  }
+}
+
+// IntersectionObserver 绑定修复，确保ref变化时自动observe
+watch(
+  () => infiniteScrollTrigger.value,
+  (el, oldEl) => {
+    if (observer && oldEl) observer.unobserve(oldEl)
+    if (observer && el) observer.observe(el)
+  }
+)
+watch(
+  () => infiniteScrollSoldTrigger.value,
+  (el, oldEl) => {
+    if (observerSold && oldEl) observerSold.unobserve(oldEl)
+    if (observerSold && el) observerSold.observe(el)
+  }
+)
+watch(
+  () => infiniteScrollFavTrigger.value,
+  (el, oldEl) => {
+    if (observerFav && oldEl) observerFav.unobserve(oldEl)
+    if (observerFav && el) observerFav.observe(el)
+  }
+)
+
 </script>
 
 <style scoped>
@@ -1462,11 +1508,14 @@ const formatDateTime = (datetime) => {
 .badge {
   display: inline-block;
   margin-left: 6px;
-  padding: 2px 6px;
-  background: #f0f0f0;
+  padding: 2px 8px;
+  background: #fff;
   border-radius: 10px;
-  font-size: 12px;
-  font-weight: normal;
+  font-size: 15px;
+  font-weight: bold;
+  color: #3498db;
+  box-shadow: none;
+  border: none;
 }
 
 .section-header {
@@ -1488,7 +1537,7 @@ const formatDateTime = (datetime) => {
 /* 商品网格 */
 .products-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 20px;
   padding: 0 16px;
 }
