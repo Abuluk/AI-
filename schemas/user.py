@@ -6,14 +6,16 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 
 class UserBase(BaseModel):
-    username: Optional[str] = None
-    email: Optional[EmailStr] = None
+    username: str
+    email: EmailStr
     phone: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
 
 class UserUpdate(UserBase):
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
     avatar: Optional[str] = None
     bio: Optional[str] = None
     contact: Optional[str] = None

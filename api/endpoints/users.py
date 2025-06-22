@@ -164,6 +164,7 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
         "updated_at": user.updated_at,
         "last_login": user.last_login,
         "is_active": user.is_active,
+        "is_admin": user.is_admin,
         "followers": user.followers,
         "following": user.following,
         "items_count": items_count

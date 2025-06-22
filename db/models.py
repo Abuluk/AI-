@@ -58,6 +58,10 @@ class Message(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
     created_at = Column(DateTime, server_default=func.now())  # 使用数据库函数
+    is_read = Column(Boolean, default=False)  # 添加已读状态
+    is_system = Column(Boolean, default=False)  # 添加系统消息标识
+    title = Column(String(200), nullable=True)  # 系统消息标题
+    target_users = Column(String(500), nullable=True)  # 目标用户（系统消息）
     
     user = relationship("User", back_populates="messages")
     item = relationship("Item", back_populates="messages")

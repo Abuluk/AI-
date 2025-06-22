@@ -23,7 +23,7 @@ def create_user(db: Session, user: UserCreate):
         email=user.email,
         phone=user.phone,  # 添加手机号
         hashed_password=hashed_password,
-        avatar=user.avatar or "default_avatar.png",
+        avatar=getattr(user, "avatar", None) or "default_avatar.png",
         is_active=True  # 默认激活用户
     )
     db.add(db_user)

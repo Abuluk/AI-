@@ -1,9 +1,10 @@
 import axios from 'axios'
+import { ref } from 'vue'
 
 // 创建axios实例
 const api = axios.create({
   baseURL: 'http://localhost:8000/api/v1',
-  timeout: 10000,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -15,6 +16,10 @@ api.interceptors.request.use(config => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  // 添加时间戳防止缓存
+  if (config.method === 'get') {
+    config.params = { ...config.params, _t: Date.now() }
+  }
   return config
 }, error => {
   return Promise.reject(error)
@@ -24,13 +29,44 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(response => {
   return response
 }, error => {
+  console.error('API Error:', error)
+  
   if (error.response && error.response.status === 401) {
     // 未授权错误处理
     localStorage.removeItem('access_token')
     window.location.href = '/login'
   }
+  
+  // 网络错误处理
+  if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+    console.error('请求超时，请检查网络连接')
+  }
+  
+  if (error.code === 'ERR_NETWORK') {
+    console.error('网络错误，请检查后端服务是否正常运行')
+  }
+  
   return Promise.reject(error)
 })
+
+const systemMessagesPage = ref(1)
+const systemMessagesLimit = ref(10)
+
+// 添加重试函数
+const retryRequest = async (requestFn, maxRetries = 3) => {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await requestFn()
+    } catch (error) {
+      console.error(`请求失败 (尝试 ${i + 1}/${maxRetries}):`, error)
+      if (i === maxRetries - 1) {
+        throw error
+      }
+      // 等待一段时间后重试
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)))
+    }
+  }
+}
 
 export default {
   // 用户认证
@@ -39,11 +75,22 @@ export default {
   },
   
   async login(credentials) {
-    const response = await api.post('/auth/login', credentials)
-    if (response.data.access_token) {
-      localStorage.setItem('access_token', response.data.access_token)
-    }
-    return response
+    return retryRequest(async () => {
+      // 用 URLSearchParams 构造表单数据
+      const formData = new URLSearchParams();
+      formData.append('identifier', credentials.identifier);
+      formData.append('password', credentials.password);
+
+      const response = await api.post('/auth/login', formData, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+      if (response.data.access_token) {
+        localStorage.setItem('access_token', response.data.access_token)
+      }
+      return response
+    })
   },
   
   async logout() {
@@ -53,7 +100,7 @@ export default {
   
   // 用户信息
   async getCurrentUser() {
-    return api.get('/users/me')
+    return retryRequest(() => api.get('/users/me'))
   },
   
   async updateUser(userId, userData) {
@@ -76,7 +123,7 @@ export default {
 
   // 商品操作
   async getItems(params = {}) {
-    return api.get('/items', { params })
+    return retryRequest(() => api.get('/items', { params }))
   },
   
   // 添加获取单个商品方法
@@ -145,11 +192,26 @@ export default {
     return api.post('/messages', messageData)
   },
 
+  // 添加获取未读消息数量方法
+  async getUnreadCount() {
+    return api.get('/messages/unread-count')
+  },
+
+  // 添加获取对话列表方法
+  async getConversationsList() {
+    return api.get('/messages/conversations')
+  },
+
+  // 添加获取特定商品对话方法
+  async getConversationMessages(itemId) {
+    return api.get(`/messages/conversation/${itemId}`)
+  },
+
   // 搜索商品方法
   async searchItems(query, params = {}) {
-    return api.get('/items/search', { 
+    return retryRequest(() => api.get('/items/search', { 
       params: { ...params, q: query } 
-   })
+   }))
   },
 
   // 添加获取用户信息方法
@@ -195,42 +257,52 @@ export default {
 
   // 管理员API
   async getAdminStats() {
-    return api.get('/admin/stats')
+    return retryRequest(() => api.get('/admin/stats'))
   },
 
   async getAdminUsers(params = {}) {
-    return api.get('/admin/users', { params })
+    return retryRequest(() => api.get('/admin/users', { params }))
   },
 
   async getAdminUser(userId) {
-    return api.get(`/admin/users/${userId}`)
+    return retryRequest(() => api.get(`/admin/users/${userId}`))
   },
 
   async updateUserStatus(userId, isActive) {
-    return api.patch(`/admin/users/${userId}/status?is_active=${isActive}`)
+    return retryRequest(() => api.patch(`/admin/users/${userId}/status?is_active=${isActive}`))
   },
 
   async updateUserAdminStatus(userId, isAdmin) {
-    return api.patch(`/admin/users/${userId}/admin?is_admin=${isAdmin}`)
+    return retryRequest(() => api.patch(`/admin/users/${userId}/admin?is_admin=${isAdmin}`))
   },
 
   async deleteAdminUser(userId) {
-    return api.delete(`/admin/users/${userId}`)
+    return retryRequest(() => api.delete(`/admin/users/${userId}`))
   },
 
   async getAdminItems(params = {}) {
-    return api.get('/admin/items', { params })
+    return retryRequest(() => api.get('/admin/items', { params }))
   },
 
   async getAdminItem(itemId) {
-    return api.get(`/admin/items/${itemId}`)
+    return retryRequest(() => api.get(`/admin/items/${itemId}`))
   },
 
   async updateAdminItemStatus(itemId, status) {
-    return api.patch(`/admin/items/${itemId}/status?status=${status}`)
+    return retryRequest(() => api.patch(`/admin/items/${itemId}/status?status=${status}`))
   },
 
   async deleteAdminItem(itemId) {
-    return api.delete(`/admin/items/${itemId}`)
+    return retryRequest(() => api.delete(`/admin/items/${itemId}`))
+  },
+
+  // 添加获取系统消息的方法
+  async getSystemMessages(params = {}) {
+    return retryRequest(() => api.get('/admin/messages', { params }))
+  },
+
+  // 添加发布系统消息的方法
+  async publishSystemMessage(messageData) {
+    return retryRequest(() => api.post('/admin/messages', messageData))
   }
 }

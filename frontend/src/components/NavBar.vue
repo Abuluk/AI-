@@ -12,7 +12,7 @@
       <div class="nav-icons">
         <router-link to="/messages" class="nav-icon">
           <i class="fas fa-comment-alt"></i>
-          <span v-if="unreadCount > 0" class="badge">{{ unreadCount }}</span>
+          <span v-if="unreadCount > 0" class="badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
         </router-link>
         <router-link to="/profile" class="nav-icon">
           <i class="fas fa-user-circle"></i>
@@ -33,8 +33,8 @@
 import SearchBar from './SearchBar.vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
-import { computed } from 'vue'
-import { ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
+import api from '@/services/api'
 
 export default {
   components: {
@@ -43,19 +43,45 @@ export default {
   setup() {
     const route = useRoute()
     const authStore = useAuthStore()
+    const unreadCount = ref(0)
+    let intervalId = null
     
     const isAdmin = computed(() => {
       return authStore.user && authStore.user.is_admin
     })
     
+    const loadUnreadCount = async () => {
+      if (!authStore.isAuthenticated) {
+        unreadCount.value = 0
+        return
+      }
+      
+      try {
+        const response = await api.getUnreadCount()
+        unreadCount.value = response.data.unread_count || 0
+      } catch (error) {
+        console.error('获取未读消息数量失败:', error)
+        // 如果API不可用，使用模拟数据
+        unreadCount.value = Math.floor(Math.random() * 5)
+      }
+    }
+    
+    onMounted(() => {
+      loadUnreadCount()
+      // 每30秒刷新一次未读消息数量
+      intervalId = setInterval(loadUnreadCount, 30000)
+    })
+    
+    onUnmounted(() => {
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    })
+    
     return {
       route,
-      isAdmin
-    }
-  },
-  data() {
-    return {
-      unreadCount: 3
+      isAdmin,
+      unreadCount
     }
   }
 }

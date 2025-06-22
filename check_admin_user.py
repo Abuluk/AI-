@@ -1,52 +1,49 @@
 #!/usr/bin/env python3
-import mysql.connector
-from mysql.connector import Error
+"""
+检查管理员用户信息
+"""
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from db.models import User
+from core.pwd_util import verify_password
+
+# 创建数据库连接
+engine = create_engine("sqlite:///goofish.db")
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def check_admin_user():
-    connection = None
+    db = SessionLocal()
     try:
-        # 连接MySQL数据库 - 使用正确的配置
-        connection = mysql.connector.connect(
-            host='localhost',
-            database='ershou',
-            user='root',
-            password='20030208..'
-        )
+        # 查找所有管理员用户
+        admin_users = db.query(User).filter(User.is_admin == True).all()
         
-        if connection.is_connected():
-            cursor = connection.cursor()
+        print("=== 管理员用户列表 ===")
+        if not admin_users:
+            print("没有找到管理员用户")
+            return
+        
+        for user in admin_users:
+            print(f"ID: {user.id}")
+            print(f"用户名: {user.username}")
+            print(f"邮箱: {user.email}")
+            print(f"手机: {user.phone}")
+            print(f"是否激活: {user.is_active}")
+            print(f"是否管理员: {user.is_admin}")
+            print(f"创建时间: {user.created_at}")
+            print("---")
+        
+        # 测试密码验证
+        print("\n=== 测试密码验证 ===")
+        test_user = admin_users[0]
+        test_passwords = ["password123", "directpass123", "admin123", "123456"]
+        
+        for password in test_passwords:
+            is_valid = verify_password(password, test_user.hashed_password)
+            print(f"密码 '{password}': {'✅ 正确' if is_valid else '❌ 错误'}")
             
-            # 查询指定手机号的用户信息
-            phone = '17877629971'
-            query = "SELECT id, username, email, phone, is_admin, is_active FROM users WHERE phone = %s"
-            cursor.execute(query, (phone,))
-            users = cursor.fetchall()
-            
-            print(f"手机号为 {phone} 的用户信息：")
-            print("ID | 用户名 | 邮箱 | 手机 | 管理员 | 激活状态")
-            print("-" * 60)
-            
-            if not users:
-                print("❌ 没有找到该手机号的用户")
-            else:
-                for user in users:
-                    user_id, username, email, phone, is_admin, is_active = user
-                    admin_status = "是" if is_admin else "否"
-                    active_status = "是" if is_active else "否"
-                    username_display = username if username else "(空)"
-                    print(f"{user_id} | {username_display} | {email} | {phone} | {admin_status} | {active_status}")
-                    
-                    # 特别提示username为空的问题
-                    if not username:
-                        print(f"⚠️  警告：用户ID {user_id} 的username字段为空！")
-                        print(f"   这会导致登录时token的sub字段为空，无法正常认证。")
-    except Error as e:
-        print(f"数据库连接错误: {e}")
     finally:
-        if connection and connection.is_connected():
-            cursor.close()
-            connection.close()
-            print("\n数据库连接已关闭")
+        db.close()
 
 if __name__ == "__main__":
     check_admin_user() 

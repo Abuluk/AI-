@@ -8,7 +8,6 @@ from db.session import get_db
 from db.models import User
 from core.pwd_util import verify_password
 from schemas.token import TokenData
-from crud.crud_user import get_user_by_username, get_user_by_email, get_user_by_phone  # 导入CRUD方法
 
 # JWT配置
 SECRET_KEY = "196ca263383b2fd21dfae2eda445f30b25d14806a861ababf10a408beb5e2117"
@@ -19,6 +18,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 
 def authenticate_user(db: Session, identifier: str, password: str):
     """验证用户凭据，支持用户名/邮箱/手机号"""
+    # 避免循环导入，在函数内部导入
+    from crud.crud_user import get_user_by_username, get_user_by_email, get_user_by_phone
+    
     user = None
     
     # 尝试通过用户名查找
@@ -55,6 +57,9 @@ async def get_current_user(
     db: Session = Depends(get_db),
     token: str = Depends(oauth2_scheme)
 ):
+    # 避免循环导入，在函数内部导入
+    from crud.crud_user import get_user_by_username, get_user_by_email, get_user_by_phone
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="无法验证凭据",

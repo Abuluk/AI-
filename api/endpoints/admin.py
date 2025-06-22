@@ -8,6 +8,8 @@ from schemas.user import UserInDB
 from schemas.item import ItemInDB
 from typing import List, Optional
 from datetime import datetime
+from crud import crud_message
+import schemas.message
 
 router = APIRouter()
 
@@ -269,4 +271,24 @@ def delete_item(
     db.delete(item)
     db.commit()
     
-    return {"message": "商品已删除"} 
+    return {"message": "商品已删除"}
+
+# 消息管理 (管理员)
+@router.post("/messages", response_model=schemas.message.MessageResponse)
+def post_system_message(
+    message_in: schemas.message.SystemMessageCreate,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """发布系统消息"""
+    return crud_message.create_system_message(db=db, message_in=message_in, admin_id=current_admin.id)
+
+@router.get("/messages", response_model=List[schemas.message.MessageResponse])
+def get_system_messages(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """获取所有系统消息"""
+    return crud_message.get_system_messages(db=db, skip=skip, limit=limit) 

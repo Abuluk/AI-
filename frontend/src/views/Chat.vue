@@ -4,172 +4,239 @@
       <router-link to="/messages" class="back-btn">
         <i class="fas fa-arrow-left"></i>
       </router-link>
-      <img :src="currentUser.avatar" class="avatar">
-      <div class="user-info">
-        <div class="username">{{ currentUser.username }}</div>
-        <div class="status">在线</div>
+      <div class="product-info-header">
+        <img :src="getItemImage(item?.images)" class="product-avatar">
+        <div class="product-info">
+          <div class="product-title">{{ item?.title || '加载中...' }}</div>
+          <div class="product-price">¥{{ item?.price || 0 }}</div>
+        </div>
       </div>
       <div class="header-actions">
-        <button class="action-btn">
-          <i class="fas fa-phone-alt"></i>
-        </button>
-        <button class="action-btn">
-          <i class="fas fa-ellipsis-v"></i>
-        </button>
+        <router-link :to="`/item/${itemId}`" class="action-btn" title="查看商品">
+          <i class="fas fa-external-link-alt"></i>
+        </router-link>
       </div>
     </div>
     
     <div class="chat-container card">
-      <div class="chat-messages">
+      <div v-if="loading" class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>加载消息中...</p>
+      </div>
+      
+      <div v-else class="chat-messages" ref="messagesContainer">
         <div 
-          v-for="(message, index) in messages" 
-          :key="index"
+          v-for="message in messages" 
+          :key="message.id"
           class="message"
           :class="{
-            'sent': message.sender === 'me',
-            'received': message.sender === 'other'
+            'sent': message.user_id === currentUserId,
+            'received': message.user_id !== currentUserId,
+            'system': message.is_system
           }"
         >
-          <img v-if="message.sender === 'other'" :src="currentUser.avatar" class="avatar">
-          <div class="message-content">
-            <div class="message-text">{{ message.content }}</div>
-            <div class="message-time">{{ message.time }}</div>
+          <div v-if="!message.is_system" class="message-avatar">
+            <img :src="getUserAvatar(message.user_id)" class="avatar">
           </div>
+          <div class="message-content">
+            <div v-if="message.is_system" class="system-message">
+              <i class="fas fa-bullhorn"></i>
+              <span>{{ message.title || '系统消息' }}</span>
+            </div>
+            <div class="message-text">{{ message.content }}</div>
+            <div class="message-time">{{ formatTime(message.created_at) }}</div>
+          </div>
+        </div>
+        
+        <!-- 空状态 -->
+        <div v-if="messages.length === 0" class="empty-state">
+          <i class="fas fa-comments"></i>
+          <p>暂无消息，开始对话吧！</p>
         </div>
       </div>
       
       <div class="chat-input">
-        <button class="input-btn">
-          <i class="fas fa-plus"></i>
+        <button class="input-btn" @click="showEmojiPicker = !showEmojiPicker">
+          <i class="fas fa-smile"></i>
         </button>
         <input 
           type="text" 
           v-model="newMessage" 
           placeholder="输入消息..." 
           @keyup.enter="sendMessage"
+          :disabled="!canSendMessage"
         >
         <button 
           class="input-btn send-btn"
-          :disabled="!newMessage.trim()"
+          :disabled="!canSendMessage || !newMessage.trim()"
           @click="sendMessage"
         >
           <i class="fas fa-paper-plane"></i>
         </button>
       </div>
     </div>
-    
-    <div class="product-info card">
-      <div class="product-header">
-        <h3>相关商品</h3>
-        <router-link :to="`/item/${product.id}`">查看商品</router-link>
-      </div>
-      <div class="product-details">
-        <img :src="product.image" class="product-image">
-        <div class="product-text">
-          <div class="product-title">{{ product.title }}</div>
-          <div class="product-price">¥{{ product.price }}</div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script>
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/store/auth'
+import api from '@/services/api'
+
 export default {
-  props: {
-    id: {
-      type: [String, Number],
-      required: true
+  setup() {
+    const route = useRoute()
+    const router = useRouter()
+    const authStore = useAuthStore()
+    
+    const itemId = computed(() => route.params.id)
+    const currentUserId = computed(() => authStore.user?.id)
+    
+    const messages = ref([])
+    const item = ref(null)
+    const newMessage = ref('')
+    const loading = ref(false)
+    const sending = ref(false)
+    const messagesContainer = ref(null)
+    const showEmojiPicker = ref(false)
+    
+    const canSendMessage = computed(() => {
+      return authStore.isAuthenticated && item.value && !sending.value
+    })
+    
+    const loadItem = async () => {
+      try {
+        const response = await api.getItem(itemId.value)
+        item.value = response.data
+      } catch (error) {
+        console.error('加载商品信息失败:', error)
+        alert('商品不存在或已被删除')
+        router.push('/messages')
+      }
     }
-  },
-  data() {
-    return {
-      newMessage: '',
-      currentUser: {
-        id: 2,
-        username: '李四',
-        avatar: 'https://randomuser.me/api/portraits/women/44.jpg'
-      },
-      product: {
-        id: 1,
-        title: 'Apple iPhone 13 128GB 蓝色',
-        price: 4299,
-        image: 'https://picsum.photos/300/300?random=1'
-      },
-      messages: [
-        {
-          content: '你好，请问手机还在吗？',
-          time: '10:28',
-          sender: 'other'
-        },
-        {
-          content: '还在的，您感兴趣吗？',
-          time: '10:29',
-          sender: 'me'
-        },
-        {
-          content: '是的，最低多少钱能出？',
-          time: '10:30',
-          sender: 'other'
-        },
-        {
-          content: '最低4200，几乎全新，还有半年保修',
-          time: '10:32',
-          sender: 'me'
-        },
-        {
-          content: '能再便宜点吗？4000可以吗？',
-          time: '10:33',
-          sender: 'other'
-        },
-        {
-          content: '不好意思，这个价格已经是最低了',
-          time: '10:35',
-          sender: 'me'
-        }
-      ]
+    
+    const loadMessages = async () => {
+      if (!authStore.isAuthenticated) {
+        router.push('/login')
+        return
+      }
+      
+      loading.value = true
+      try {
+        const response = await api.getConversationMessages(itemId.value)
+        messages.value = response.data
+        scrollToBottom()
+      } catch (error) {
+        console.error('加载消息失败:', error)
+        // 使用模拟数据
+        messages.value = [
+          {
+            id: 1,
+            content: '你好，请问这个商品还在吗？',
+            user_id: 2,
+            created_at: new Date(Date.now() - 1000 * 60 * 30),
+            is_system: false
+          },
+          {
+            id: 2,
+            content: '还在的，您感兴趣吗？',
+            user_id: currentUserId.value,
+            created_at: new Date(Date.now() - 1000 * 60 * 20),
+            is_system: false
+          }
+        ]
+      } finally {
+        loading.value = false
+      }
     }
-  },
-  methods: {
-    sendMessage() {
-      if (!this.newMessage.trim()) return
+    
+    const sendMessage = async () => {
+      if (!newMessage.value.trim() || !canSendMessage.value) return
       
-      this.messages.push({
-        content: this.newMessage,
-        time: '刚刚',
-        sender: 'me'
-      })
+      const messageContent = newMessage.value.trim()
+      newMessage.value = ''
+      sending.value = true
       
-      this.newMessage = ''
-      
-      // 模拟回复
-      setTimeout(() => {
-        this.messages.push({
-          content: '那好吧，4200我要了',
-          time: '刚刚',
-          sender: 'other'
+      try {
+        const response = await api.post('/messages/', {
+          content: messageContent,
+          item_id: parseInt(itemId.value)
         })
         
-        // 滚动到底部
-        this.$nextTick(() => {
-          const container = this.$el.querySelector('.chat-messages')
-          container.scrollTop = container.scrollHeight
-        })
-      }, 1000)
-      
-      // 滚动到底部
-      this.$nextTick(() => {
-        const container = this.$el.querySelector('.chat-messages')
-        container.scrollTop = container.scrollHeight
+        messages.value.push(response.data)
+        scrollToBottom()
+      } catch (error) {
+        console.error('发送消息失败:', error)
+        alert('发送失败，请重试')
+        newMessage.value = messageContent // 恢复消息内容
+      } finally {
+        sending.value = false
+      }
+    }
+    
+    const scrollToBottom = () => {
+      nextTick(() => {
+        if (messagesContainer.value) {
+          messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+        }
       })
     }
-  },
-  mounted() {
-    // 滚动到底部
-    this.$nextTick(() => {
-      const container = this.$el.querySelector('.chat-messages')
-      container.scrollTop = container.scrollHeight
+    
+    const formatTime = (timestamp) => {
+      const date = new Date(timestamp)
+      const now = new Date()
+      const diff = now - date
+      const minutes = Math.floor(diff / 60000)
+      const hours = Math.floor(minutes / 60)
+      const days = Math.floor(hours / 24)
+      
+      if (minutes < 1) return '刚刚'
+      if (minutes < 60) return `${minutes}分钟前`
+      if (hours < 24) return `${hours}小时前`
+      if (days === 1) return '昨天'
+      if (days < 7) return `${days}天前`
+      
+      return date.toLocaleDateString()
+    }
+    
+    const getItemImage = (images) => {
+      if (!images) return '/static/images/default.jpg'
+      const imageList = images.split(',')
+      return imageList[0] || '/static/images/default.jpg'
+    }
+    
+    const getUserAvatar = (userId) => {
+      // 这里可以根据用户ID获取头像，暂时使用默认头像
+      return '/static/images/default.jpg'
+    }
+    
+    onMounted(() => {
+      loadItem()
+      loadMessages()
     })
+    
+    // 监听消息变化，自动滚动到底部
+    watch(messages, () => {
+      scrollToBottom()
+    }, { deep: true })
+    
+    return {
+      itemId,
+      currentUserId,
+      messages,
+      item,
+      newMessage,
+      loading,
+      sending,
+      messagesContainer,
+      showEmojiPicker,
+      canSendMessage,
+      sendMessage,
+      formatTime,
+      getItemImage,
+      getUserAvatar
+    }
   }
 }
 </script>
@@ -367,5 +434,137 @@ export default {
 .product-price {
   color: var(--danger);
   font-weight: bold;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.loading-spinner {
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-top: 4px solid var(--primary);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 10px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.empty-state i {
+  font-size: 2rem;
+  color: var(--text-light);
+  margin-bottom: 10px;
+}
+
+.empty-state p {
+  color: var(--text-light);
+  font-size: 1rem;
+}
+
+.product-info-header {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.product-avatar {
+  width: 45px;
+  height: 45px;
+  border-radius: 8px;
+  object-fit: cover;
+  margin-right: 15px;
+}
+
+.product-info {
+  flex: 1;
+}
+
+.product-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.product-price {
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.message-avatar {
+  margin-right: 10px;
+}
+
+.message-avatar .avatar {
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.system-message {
+  background: rgba(52, 152, 219, 0.1);
+  color: #3498db;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.system-message i {
+  font-size: 0.8rem;
+}
+
+.message.sent {
+  flex-direction: row-reverse;
+}
+
+.message.sent .message-avatar {
+  margin-right: 0;
+  margin-left: 10px;
+}
+
+.message.sent .message-content {
+  align-items: flex-end;
+}
+
+.message.sent .message-text {
+  background: var(--primary);
+  color: white;
+}
+
+.message.sent .message-time {
+  text-align: right;
+}
+
+.message.system {
+  justify-content: center;
+  margin: 20px 0;
+}
+
+.message.system .message-content {
+  max-width: 80%;
+  text-align: center;
 }
 </style>

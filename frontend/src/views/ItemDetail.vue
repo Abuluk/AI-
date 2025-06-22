@@ -112,7 +112,7 @@
           class="btn btn-danger"
           @click="offlineItem"
             >
-          <i class="fas fa-ban"></i> 已下架商品
+          <i class="fas fa-ban"></i> 下架商品
       </button>
             
       <!-- 重新上架按钮（仅显示给所有者） -->

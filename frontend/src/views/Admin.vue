@@ -263,6 +263,117 @@
         </table>
       </div>
     </div>
+
+    <!-- 消息管理 -->
+    <div v-if="activeTab === 'messages'" class="tab-content">
+      <div class="section-header">
+        <h2>消息管理</h2>
+        <button @click="showSystemMessageModal = true" class="btn btn-primary">
+          <i class="fas fa-bullhorn"></i> 发布系统消息
+        </button>
+      </div>
+
+      <!-- 系统消息发布模态框 -->
+      <div v-if="showSystemMessageModal" class="modal-overlay" @click="showSystemMessageModal = false">
+        <div class="modal-content" @click.stop>
+          <div class="modal-header">
+            <h3>发布系统消息</h3>
+            <button @click="showSystemMessageModal = false" class="close-btn">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>消息标题</label>
+              <input v-model="systemMessage.title" type="text" placeholder="请输入消息标题" class="form-input">
+            </div>
+            <div class="form-group">
+              <label>消息内容</label>
+              <textarea v-model="systemMessage.content" placeholder="请输入消息内容" class="form-textarea" rows="4"></textarea>
+            </div>
+            <div class="form-group">
+              <label>目标用户</label>
+              <select v-model="systemMessage.target_users" class="form-select">
+                <option value="all">所有用户</option>
+                <option value="buyers">买家</option>
+                <option value="sellers">卖家</option>
+                <option value="specific">指定用户</option>
+              </select>
+            </div>
+            <div v-if="systemMessage.target_users === 'specific'" class="form-group">
+              <label>用户ID列表（用逗号分隔）</label>
+              <input v-model="systemMessage.specific_users" type="text" placeholder="1,2,3" class="form-input">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button @click="showSystemMessageModal = false" class="btn btn-outline">取消</button>
+            <button @click="publishSystemMessage" class="btn btn-primary" :disabled="publishing">
+              {{ publishing ? '发布中...' : '发布消息' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 消息列表 -->
+      <div class="messages-section">
+        <h3>系统消息列表</h3>
+        <div class="filters">
+          <input 
+            v-model="messageFilters.search" 
+            placeholder="搜索消息内容"
+            class="search-input"
+          >
+          <select v-model="messageFilters.target_users" class="filter-select">
+            <option value="">全部目标</option>
+            <option value="all">所有用户</option>
+            <option value="buyers">买家</option>
+            <option value="sellers">卖家</option>
+          </select>
+        </div>
+
+        <div v-if="loading.messages" class="loading-state">
+          <div class="skeleton-row" v-for="n in 3" :key="n"></div>
+        </div>
+
+        <div v-else class="messages-table">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>标题</th>
+                <th>内容</th>
+                <th>目标用户</th>
+                <th>发布时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="message in systemMessages" :key="message.id">
+                <td>{{ message.id }}</td>
+                <td>{{ message.title || '无标题' }}</td>
+                <td class="message-content">{{ message.content }}</td>
+                <td>
+                  <span class="target-badge">
+                    {{ getTargetUsersText(message.target_users) }}
+                  </span>
+                </td>
+                <td>{{ formatTime(message.created_at) }}</td>
+                <td>
+                  <div class="action-buttons">
+                    <button 
+                      @click="deleteMessage(message)"
+                      class="btn btn-sm btn-danger"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -279,12 +390,18 @@ const authStore = useAuthStore()
 const activeTab = ref('users')
 const loading = reactive({
   users: false,
-  items: false
+  items: false,
+  messages: false
 })
 
 const stats = ref({})
 const users = ref([])
 const items = ref([])
+const systemMessages = ref([])
+
+// 添加缺失的分页变量
+const systemMessagesPage = ref(1)
+const systemMessagesLimit = ref(10)
 
 const userFilters = reactive({
   search: '',
@@ -297,13 +414,29 @@ const itemFilters = reactive({
   displayStatus: '', // 'online', 'sold', 'offline'
 })
 
+const messageFilters = reactive({
+  search: '',
+  target_users: ''
+})
+
+// 系统消息相关
+const showSystemMessageModal = ref(false)
+const publishing = ref(false)
+const systemMessage = reactive({
+  title: '',
+  content: '',
+  target_users: 'all',
+  specific_users: ''
+})
+
 // 计算属性
 const user = computed(() => authStore.user || {})
 const currentUserId = computed(() => user.value.id)
 
 const tabs = [
   { id: 'users', label: '用户管理', icon: 'fas fa-users' },
-  { id: 'items', label: '商品管理', icon: 'fas fa-box' }
+  { id: 'items', label: '商品管理', icon: 'fas fa-box' },
+  { id: 'messages', label: '消息管理', icon: 'fas fa-bullhorn' }
 ]
 
 // 方法
@@ -443,6 +576,8 @@ const changeTab = (tabId) => {
     loadUsers()
   } else if (tabId === 'items' && items.value.length === 0) {
     loadItems()
+  } else if (tabId === 'messages') {
+    loadSystemMessages()
   }
 }
 
@@ -487,6 +622,87 @@ const getItemDisplayStatus = (item) => {
   }
   return { text: '已下架', class: 'offline' }
 };
+
+// 获取系统消息
+const loadSystemMessages = async () => {
+  loading.messages = true
+  try {
+    // 使用正确的 API 函数
+    const response = await api.getSystemMessages({
+      skip: (systemMessagesPage.value - 1) * systemMessagesLimit.value,
+      limit: systemMessagesLimit.value
+    })
+    systemMessages.value = response.data
+    // 这里需要后端返回总数
+    // systemMessagesTotal.value = response.data.total
+  } catch (error) {
+    console.error('获取系统消息失败:', error)
+    alert('获取系统消息失败')
+  } finally {
+    loading.messages = false
+  }
+}
+
+// 发布系统消息
+const publishSystemMessage = async () => {
+  if (!systemMessage.content.trim()) {
+    alert('请输入消息内容')
+    return
+  }
+  
+  publishing.value = true
+  try {
+    // 使用正确的 API 函数
+    await api.publishSystemMessage({
+      title: systemMessage.title,
+      content: systemMessage.content,
+      target_users: systemMessage.target_users === 'specific' 
+        ? systemMessage.specific_users 
+        : systemMessage.target_users
+    })
+    
+    alert('系统消息发布成功')
+    showSystemMessageModal.value = false
+    
+    // 重置表单
+    systemMessage.title = ''
+    systemMessage.content = ''
+    systemMessage.target_users = 'all'
+    systemMessage.specific_users = ''
+    
+    // 重新加载消息列表
+    loadSystemMessages()
+  } catch (error) {
+    console.error('发布系统消息失败:', error)
+    alert('发布失败')
+  } finally {
+    publishing.value = false
+  }
+}
+
+const deleteMessage = async (message) => {
+  if (!confirm('确定要删除这条系统消息吗？')) {
+    return
+  }
+  
+  try {
+    await api.delete(`/messages/${message.id}`)
+    alert('删除成功')
+    loadSystemMessages()
+  } catch (error) {
+    console.error('删除消息失败:', error)
+    alert('删除失败')
+  }
+}
+
+const getTargetUsersText = (targetUsers) => {
+  switch (targetUsers) {
+    case 'all': return '所有用户'
+    case 'buyers': return '买家'
+    case 'sellers': return '卖家'
+    default: return '指定用户'
+  }
+}
 
 // 生命周期
 onMounted(() => {
@@ -791,6 +1007,151 @@ th {
   
   .action-buttons {
     flex-direction: column;
+  }
+}
+
+/* 消息管理样式 */
+.messages-section {
+  margin-top: 30px;
+}
+
+.messages-section h3 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.message-content {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+/* 模态框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #333;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #999;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-btn:hover {
+  color: #333;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 20px;
+  border-top: 1px solid #eee;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #333;
+}
+
+.form-input,
+.form-textarea,
+.form-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: border-color 0.3s;
+}
+
+.form-input:focus,
+.form-textarea:focus,
+.form-select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+@media (max-width: 768px) {
+  .modal-content {
+    width: 95%;
+    margin: 20px;
+  }
+  
+  .modal-header,
+  .modal-body,
+  .modal-footer {
+    padding: 15px;
+  }
+  
+  .form-group {
+    margin-bottom: 15px;
   }
 }
 </style> 

@@ -38,54 +38,54 @@
         </button>
       </div>
       
+      <!-- 加载状态 -->
+      <div v-if="loading" class="loading-state">
+        <div class="skeleton-row" v-for="n in 3" :key="n"></div>
+      </div>
+      
       <!-- 消息列表优化 -->
-      <div class="conversations-list">
+      <div v-else class="conversations-list">
         <div 
           v-for="conversation in filteredConversations" 
-          :key="conversation.id"
+          :key="conversation.item_id"
           class="conversation-item"
           :class="{ 
-            unread: conversation.unread,
-            active: activeConversationId === conversation.id
+            unread: conversation.unread_count > 0,
+            active: activeConversationId === conversation.item_id
           }"
           @click="selectConversation(conversation)"
         >
-          <!-- 用户头像和状态 -->
-          <div class="avatar-container">
-            <img :src="conversation.user.avatar" class="avatar">
-            <span v-if="conversation.user.online" class="online-status"></span>
+          <!-- 商品图片 -->
+          <div class="item-image-container">
+            <img 
+              :src="getItemImage(conversation.item_images)" 
+              :alt="conversation.item_title"
+              class="item-image"
+            >
+            <span v-if="conversation.unread_count > 0" class="unread-badge">
+              {{ conversation.unread_count }}
+            </span>
           </div>
           
-          <!-- 消息详情 -->
+          <!-- 对话详情 -->
           <div class="conversation-details">
             <div class="conversation-header">
-              <span class="username">{{ conversation.user.username }}</span>
-              <span class="time">{{ formatTime(conversation.lastMessage.timestamp) }}</span>
+              <span class="item-title">{{ conversation.item_title }}</span>
+              <span class="time">{{ formatTime(conversation.last_message_time) }}</span>
             </div>
             
-            <!-- 关联商品 -->
-            <div class="product-info" v-if="conversation.product">
-              <span class="product-label">相关商品：</span>
-              <span class="product-title">{{ conversation.product.title }}</span>
+            <div class="conversation-info">
+              <span class="price">¥{{ conversation.item_price }}</span>
+              <span class="message-count">{{ conversation.message_count }}条消息</span>
             </div>
             
             <div class="conversation-preview">
-              <!-- 最后一条消息预览 -->
               <p class="message-preview">
-                <span v-if="conversation.lastMessage.sender === 'me'" class="sent-indicator">
-                  我：
+                <span v-if="conversation.is_seller" class="seller-indicator">
+                  [卖家]
                 </span>
-                {{ conversation.lastMessage.content }}
+                {{ getLastMessagePreview(conversation) }}
               </p>
-              
-              <!-- 未读标记 -->
-              <div class="message-status">
-                <span v-if="conversation.unread" class="unread-badge">
-                  {{ conversation.unreadCount }}
-                </span>
-                <i v-if="conversation.lastMessage.sender === 'me' && !conversation.unread" 
-                   class="fas fa-check read-indicator"></i>
-              </div>
             </div>
           </div>
         </div>
@@ -104,117 +104,98 @@
 </template>
 
 <script>
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/store/auth'
+import api from '@/services/api'
+
 export default {
-  data() {
-    return {
-      searchQuery: '',
-      isSearchFocused: false,
-      activeTab: 'all',
-      activeConversationId: null,
-      tabs: [
-        { id: 'all', label: '全部' },
-        { id: 'unread', label: '未读' },
-        { id: 'products', label: '商品咨询' }
-      ],
-      conversations: [
-        {
-          id: 1,
-          user: {
-            id: 2,
-            username: '李四',
-            avatar: 'https://randomuser.me/api/portraits/women/44.jpg',
-            online: true
-          },
-          product: {
-            id: 1,
-            title: 'Apple iPhone 13 128GB 蓝色',
-            price: 4299,
-            thumbnail: 'https://picsum.photos/100/100?random=1'
-          },
-          lastMessage: {
-            content: '你好，请问手机还在吗？最低多少钱能出？',
-            timestamp: new Date(Date.now() - 1000 * 60 * 5), // 5分钟前
-            sender: 'other'
-          },
-          unread: true,
-          unreadCount: 3
-        },
-        {
-          id: 2,
-          user: {
-            id: 3,
-            username: '王五',
-            avatar: 'https://randomuser.me/api/portraits/men/22.jpg',
-            online: false
-          },
-          product: {
-            id: 3,
-            title: 'Sony PlayStation 5',
-            price: 4499,
-            thumbnail: 'https://picsum.photos/100/100?random=3'
-          },
-          lastMessage: {
-            content: '好的，我明天下午过来取',
-            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1天前
-            sender: 'me'
-          },
-          unread: false,
-          unreadCount: 0
-        },
-        {
-          id: 3,
-          user: {
-            id: 4,
-            username: '赵六',
-            avatar: 'https://randomuser.me/api/portraits/women/68.jpg',
-            online: true
-          },
-          product: {
-            id: 5,
-            title: 'Bose QuietComfort 45 耳机',
-            price: 1599,
-            thumbnail: 'https://picsum.photos/100/100?random=5'
-          },
-          lastMessage: {
-            content: '耳机音质怎么样？有发票吗？',
-            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3天前
-            sender: 'other'
-          },
-          unread: false,
-          unreadCount: 0
-        }
-      ]
-    }
-  },
-  computed: {
-    filteredConversations() {
-      let conversations = this.conversations;
+  setup() {
+    const router = useRouter()
+    const authStore = useAuthStore()
+    
+    const conversations = ref([])
+    const loading = ref(false)
+    const searchQuery = ref('')
+    const isSearchFocused = ref(false)
+    const activeTab = ref('all')
+    const activeConversationId = ref(null)
+    
+    const tabs = [
+      { id: 'all', label: '全部' },
+      { id: 'unread', label: '未读' },
+      { id: 'buying', label: '购买' },
+      { id: 'selling', label: '出售' }
+    ]
+    
+    const filteredConversations = computed(() => {
+      let filtered = conversations.value;
       
       // 按标签筛选
-      if (this.activeTab === 'unread') {
-        conversations = conversations.filter(conv => conv.unread);
-      } else if (this.activeTab === 'products') {
-        conversations = conversations.filter(conv => conv.product);
+      if (activeTab.value === 'unread') {
+        filtered = filtered.filter(conv => conv.unread_count > 0);
+      } else if (activeTab.value === 'buying') {
+        filtered = filtered.filter(conv => !conv.is_seller);
+      } else if (activeTab.value === 'selling') {
+        filtered = filtered.filter(conv => conv.is_seller);
       }
       
       // 搜索筛选
-      if (this.searchQuery) {
-        const query = this.searchQuery.toLowerCase();
-        conversations = conversations.filter(conv => 
-          conv.user.username.toLowerCase().includes(query) || 
-          (conv.product && conv.product.title.toLowerCase().includes(query)) ||
-          conv.lastMessage.content.toLowerCase().includes(query)
+      if (searchQuery.value) {
+        const query = searchQuery.value.toLowerCase();
+        filtered = filtered.filter(conv => 
+          conv.item_title.toLowerCase().includes(query)
         );
       }
       
-      // 按时间排序（最近消息在前）
-      return conversations.sort((a, b) => 
-        new Date(b.lastMessage.timestamp) - new Date(a.lastMessage.timestamp)
-      );
+      return filtered;
+    })
+    
+    const loadConversations = async () => {
+      if (!authStore.isAuthenticated) {
+        router.push('/login')
+        return
+      }
+      
+      loading.value = true
+      try {
+        const response = await api.getConversations()
+        conversations.value = response.data
+      } catch (error) {
+        console.error('加载对话失败:', error)
+        // 如果API不可用，使用模拟数据
+        conversations.value = getMockConversations()
+      } finally {
+        loading.value = false
+      }
     }
-  },
-  methods: {
-    formatTime(timestamp) {
+    
+    const getMockConversations = () => {
+      return [
+        {
+          item_id: 1,
+          item_title: 'Apple iPhone 13 128GB 蓝色',
+          item_price: 4299,
+          item_images: 'https://picsum.photos/100/100?random=1',
+          message_count: 5,
+          last_message_time: new Date(Date.now() - 1000 * 60 * 5),
+          unread_count: 3,
+          is_seller: false
+        },
+        {
+          item_id: 2,
+          item_title: 'Sony PlayStation 5',
+          item_price: 4499,
+          item_images: 'https://picsum.photos/100/100?random=2',
+          message_count: 8,
+          last_message_time: new Date(Date.now() - 1000 * 60 * 60 * 24),
+          unread_count: 0,
+          is_seller: true
+        }
+      ]
+    }
+    
+    const formatTime = (timestamp) => {
       const now = new Date();
       const date = new Date(timestamp);
       const diff = now - date;
@@ -229,14 +210,47 @@ export default {
       if (days < 7) return `${days}天前`;
       
       return date.toLocaleDateString();
-    },
-    selectConversation(conversation) {
-      this.activeConversationId = conversation.id;
-      this.$router.push({ name: 'Chat', params: { id: conversation.id } });
-    },
-    clearSearch() {
-      this.searchQuery = '';
-      this.isSearchFocused = false;
+    }
+    
+    const getItemImage = (images) => {
+      if (!images) return '/static/images/default.jpg'
+      const imageList = images.split(',')
+      return imageList[0] || '/static/images/default.jpg'
+    }
+    
+    const getLastMessagePreview = (conversation) => {
+      // 这里可以根据实际需求显示最后一条消息的预览
+      return `关于"${conversation.item_title}"的对话`
+    }
+    
+    const selectConversation = (conversation) => {
+      activeConversationId.value = conversation.item_id;
+      router.push({ name: 'Chat', params: { id: conversation.item_id } });
+    }
+    
+    const clearSearch = () => {
+      searchQuery.value = '';
+      isSearchFocused.value = false;
+    }
+    
+    onMounted(() => {
+      loadConversations()
+    })
+    
+    return {
+      conversations,
+      loading,
+      searchQuery,
+      isSearchFocused,
+      activeTab,
+      activeConversationId,
+      tabs,
+      filteredConversations,
+      formatTime,
+      getItemImage,
+      getLastMessagePreview,
+      selectConversation,
+      clearSearch
     }
   }
 }
@@ -379,34 +393,39 @@ export default {
   background-color: #e8f5e9;
 }
 
-.avatar-container {
+.item-image-container {
   position: relative;
   margin-right: 15px;
 }
 
-.avatar {
+.item-image {
   width: 56px;
   height: 56px;
-  border-radius: 50%;
+  border-radius: 8px;
   object-fit: cover;
   border: 2px solid #fff;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.online-status {
+.unread-badge {
   position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background-color: #4caf50;
-  border: 2px solid white;
+  top: -5px;
+  right: -8px;
+  background-color: #ff4d4f;
+  color: white;
+  font-size: 0.75rem;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
 }
 
 .conversation-details {
   flex: 1;
-  min-width: 0; /* 防止内容溢出 */
+  min-width: 0;
 }
 
 .conversation-header {
@@ -415,7 +434,7 @@ export default {
   margin-bottom: 6px;
 }
 
-.username {
+.item-title {
   font-weight: 600;
   font-size: 1.05rem;
   overflow: hidden;
@@ -430,21 +449,20 @@ export default {
   flex-shrink: 0;
 }
 
-.product-info {
+.conversation-info {
+  display: flex;
+  justify-content: space-between;
   font-size: 0.85rem;
   margin-bottom: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.product-label {
-  color: #666;
+.price {
+  color: #ff6b35;
+  font-weight: 600;
 }
 
-.product-title {
-  color: #42b983;
-  font-weight: 500;
+.message-count {
+  color: #888;
 }
 
 .conversation-preview {
@@ -458,36 +476,13 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 80%;
+  max-width: 100%;
   margin: 0;
 }
 
-.sent-indicator {
+.seller-indicator {
   color: #42b983;
   font-weight: 500;
-}
-
-.message-status {
-  display: flex;
-  align-items: center;
-}
-
-.unread-badge {
-  background-color: #ff4d4f;
-  color: white;
-  font-size: 0.75rem;
-  min-width: 22px;
-  height: 22px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 6px;
-}
-
-.read-indicator {
-  color: #aaa;
-  font-size: 0.85rem;
 }
 
 .empty-state {
@@ -518,5 +513,23 @@ export default {
 
 .clear-btn:hover {
   background-color: #eee;
+}
+
+.loading-state {
+  padding: 20px;
+}
+
+.skeleton-row {
+  height: 80px;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 </style>
