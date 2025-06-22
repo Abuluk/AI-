@@ -36,6 +36,7 @@
           <div class="upload-area" @click="triggerFileInput">
             <i class="fas fa-cloud-upload-alt"></i>
             <p>点击上传图片 (最多6张)</p>
+            <p class="upload-tip">支持拖拽调整图片顺序</p>
             <input 
               type="file" 
               ref="fileInput" 
@@ -47,11 +48,27 @@
           </div>
           
           <div class="image-preview">
-            <div v-for="(image, index) in form.images" :key="index" class="preview-item">
+            <div 
+              v-for="(image, index) in form.images" 
+              :key="index" 
+              class="preview-item"
+              draggable="true"
+              @dragstart="dragStart(index, $event)"
+              @dragover.prevent
+              @drop="drop(index, $event)"
+              @dragenter.prevent
+            >
               <img :src="image.url" alt="Preview">
-              <button type="button" class="remove-btn" @click="removeImage(index)">
+              <button type="button" class="remove-btn" @click="removeImage(index)" title="删除图片">
                 <i class="fas fa-times"></i>
               </button>
+              <div class="image-overlay">
+                <span class="image-index">{{ index + 1 }}</span>
+              </div>
+            </div>
+            <div v-if="form.images.length === 0" class="no-images">
+              <i class="fas fa-image"></i>
+              <p>暂无图片</p>
             </div>
           </div>
         </div>
@@ -188,6 +205,8 @@ export default {
     // 处理文件上传
     handleFileUpload(e) {
       const files = e.target.files
+      if (!files || files.length === 0) return
+      
       if (this.form.images.length + files.length > 6) {
         alert('最多只能上传6张图片')
         return
@@ -195,7 +214,16 @@ export default {
       
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
+        
+        // 验证文件类型
         if (!file.type.match('image.*')) {
+          alert(`文件 "${file.name}" 不是有效的图片格式`)
+          continue
+        }
+        
+        // 验证文件大小（限制为5MB）
+        if (file.size > 5 * 1024 * 1024) {
+          alert(`文件 "${file.name}" 太大，请选择小于5MB的图片`)
           continue
         }
         
@@ -206,6 +234,9 @@ export default {
             url: e.target.result
           })
         }
+        reader.onerror = () => {
+          alert(`读取文件 "${file.name}" 失败`)
+        }
         reader.readAsDataURL(file)
       }
       
@@ -215,7 +246,33 @@ export default {
     
     // 移除图片
     removeImage(index) {
-      this.form.images.splice(index, 1)
+      if (confirm('确定要删除这张图片吗？')) {
+        // 释放内存中的文件对象
+        if (this.form.images[index].file) {
+          URL.revokeObjectURL(this.form.images[index].url);
+        }
+        this.form.images.splice(index, 1);
+      }
+    },
+    
+    // 拖拽开始
+    dragStart(index, event) {
+      event.dataTransfer.setData('text/plain', index);
+      event.target.style.opacity = '0.5';
+    },
+    
+    // 拖拽放置
+    drop(index, event) {
+      event.preventDefault();
+      const draggedIndex = parseInt(event.dataTransfer.getData('text/plain'));
+      event.target.style.opacity = '1';
+      
+      if (draggedIndex !== index) {
+        // 交换图片位置
+        const temp = this.form.images[draggedIndex];
+        this.form.images.splice(draggedIndex, 1);
+        this.form.images.splice(index, 0, temp);
+      }
     },
     
     // 取消按钮功能
@@ -281,6 +338,12 @@ export default {
   color: var(--text-light);
 }
 
+.upload-tip {
+  color: var(--text-light);
+  font-size: 0.8rem;
+  margin-top: 10px;
+}
+
 .image-preview {
   display: flex;
   flex-wrap: wrap;
@@ -292,8 +355,26 @@ export default {
   position: relative;
   width: 100px;
   height: 100px;
-  border-radius: 5px;
+  border-radius: 8px;
   overflow: hidden;
+  border: 2px solid #eee;
+  transition: all 0.3s ease;
+  cursor: move;
+}
+
+.preview-item:hover {
+  border-color: #3498db;
+  transform: scale(1.05);
+}
+
+.preview-item:active {
+  cursor: grabbing;
+}
+
+.preview-item.dragging {
+  opacity: 0.5;
+  transform: scale(1.1);
+  z-index: 1000;
 }
 
 .preview-item img {
@@ -306,16 +387,64 @@ export default {
   position: absolute;
   top: 5px;
   right: 5px;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(231, 76, 60, 0.9);
   color: white;
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  font-size: 12px;
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+
+.remove-btn:hover {
+  background-color: rgba(231, 76, 60, 1);
+  transform: scale(1.1);
+}
+
+.image-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  padding: 5px;
+  display: flex;
+  justify-content: center;
+}
+
+.image-index {
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.no-images {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100px;
+  height: 100px;
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  color: #999;
+  font-size: 12px;
+}
+
+.no-images i {
+  font-size: 24px;
+  margin-bottom: 5px;
+}
+
+.no-images p {
+  margin: 0;
 }
 
 .form-actions {

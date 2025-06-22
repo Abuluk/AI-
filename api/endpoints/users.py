@@ -74,10 +74,11 @@ def get_user_items(
     status: Optional[str] = Query("selling", description="商品状态: selling(在售), sold(已售), offline(下架)"),
     skip: int = Query(0, description="跳过记录数"),
     limit: int = Query(10, description="每页记录数"),
+    order_by: str = Query("created_at_desc", description="排序方式: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎)"),
     db: Session = Depends(get_db)
 ):
     """
-    获取指定用户的商品列表，可按状态筛选
+    获取指定用户的商品列表，可按状态筛选和排序
     """
     # 验证用户存在
     user = db.query(User).filter(User.id == user_id).first()
@@ -99,6 +100,19 @@ def get_user_items(
     else:
         # 如果是不支持的状态，返回空列表
         return []
+    
+    # 根据排序参数进行排序
+    if order_by == "created_at_desc":
+        query = query.order_by(Item.created_at.desc())
+    elif order_by == "price_asc":
+        query = query.order_by(Item.price.asc())
+    elif order_by == "price_desc":
+        query = query.order_by(Item.price.desc())
+    elif order_by == "views_desc":
+        query = query.order_by(Item.views.desc())
+    else:
+        # 默认按最新发布排序
+        query = query.order_by(Item.created_at.desc())
     
     # 添加分页
     items = query.offset(skip).limit(limit).all()

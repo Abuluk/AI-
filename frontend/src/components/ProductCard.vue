@@ -25,28 +25,67 @@
     </router-link>
     
     <!-- 操作按钮区域 -->
-    <div v-if="showActions && !product.sold" class="product-actions">
-      <button 
-        v-if="product.status === 'online'"
-        class="btn btn-danger btn-sm" 
-        @click.stop="offlineItem"
-      >
-        <i class="fas fa-ban"></i> 下架
-      </button>
-      <button 
-        v-else-if="product.status === 'offline'"
-        class="btn btn-success btn-sm" 
-        @click.stop="onlineItem"
-      >
-        <i class="fas fa-check"></i> 上架
-      </button>
-      <button 
-        v-if="product.status === 'online'"
-        class="btn btn-warning btn-sm"
-        @click.stop="markSold"
-      >
-        <i class="fas fa-check-double"></i> 已售出
-      </button>
+    <div v-if="showActions" class="product-actions">
+      <!-- 用户自己的商品按钮 -->
+      <div v-if="!isFavorite">
+        <!-- 在售商品的按钮 -->
+        <div v-if="!product.sold">
+          <div class="action-buttons">
+            <button 
+              v-if="product.status === 'online'"
+              class="btn btn-danger btn-sm" 
+              @click.stop="offlineItem"
+            >
+              <i class="fas fa-ban"></i> 下架
+            </button>
+            <button 
+              v-else-if="product.status === 'offline'"
+              class="btn btn-success btn-sm" 
+              @click.stop="onlineItem"
+            >
+              <i class="fas fa-check"></i> 上架
+            </button>
+            <button 
+              v-if="product.status === 'online'"
+              class="btn btn-warning btn-sm"
+              @click.stop="markSold"
+            >
+              <i class="fas fa-check-double"></i> 已售出
+            </button>
+            
+            <!-- 删除按钮 - 放在其他按钮右边 -->
+            <button 
+              class="btn btn-delete btn-sm"
+              @click.stop="deleteItem"
+              title="删除商品"
+            >
+              <i class="fas fa-trash"></i> 删除
+            </button>
+          </div>
+        </div>
+        
+        <!-- 已售商品的删除按钮 -->
+        <div v-else>
+          <button 
+            class="btn btn-delete btn-sm"
+            @click.stop="deleteItem"
+            title="删除商品"
+          >
+            <i class="fas fa-trash"></i> 删除
+          </button>
+        </div>
+      </div>
+      
+      <!-- 收藏商品的按钮 -->
+      <div v-else>
+        <button 
+          class="btn btn-danger btn-sm"
+          @click.stop="unfavoriteItem"
+          title="取消收藏"
+        >
+          <i class="fas fa-heart-broken"></i> 取消收藏
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -61,9 +100,13 @@ export default {
     showActions: {
       type: Boolean,
       default: false
+    },
+    isFavorite: {
+      type: Boolean,
+      default: false
     }
   },
-  emits: ['offline', 'online', 'sold'],
+  emits: ['offline', 'online', 'sold', 'delete', 'unfavorite'],
   methods: {
     // 获取并处理第一张图片
     getFirstImage(product) {
@@ -144,6 +187,13 @@ export default {
     },
     markSold() {
       this.$emit('sold', this.product.id);
+    },
+    deleteItem() {
+      // 触发删除事件
+      this.$emit('delete', this.product.id);
+    },
+    unfavoriteItem() {
+      this.$emit('unfavorite', this.product.id);
     }
   },
   data() {
@@ -245,6 +295,12 @@ export default {
   z-index: 10;
 }
 
+.action-buttons {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
 .btn-sm {
   padding: 6px 12px;
   font-size: 12px;
@@ -279,6 +335,15 @@ export default {
 
 .btn-warning:hover {
   background-color: #d68910;
+}
+
+.btn-delete {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.btn-delete:hover {
+  background-color: #c0392b;
 }
 
 @media (max-width: 768px) {

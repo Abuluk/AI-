@@ -113,6 +113,7 @@
                 @offline="handleOfflineItem"
                 @online="handleOnlineItem"
                 @sold="handleSoldItem"
+                @delete="handleDeleteItem"
               />
             </div>
             <div v-else class="empty-state">
@@ -166,6 +167,8 @@
                 :key="`sold-${item.id}`" 
                 :product="item" 
                 :sold="true"
+                :showActions="true"
+                @delete="handleDeleteItem"
               />
             </div>
             <div v-else class="empty-state">
@@ -209,6 +212,9 @@
                 v-for="item in favoriteItems" 
                 :key="`fav-${item.id}`" 
                 :product="item" 
+                :showActions="true"
+                :isFavorite="true"
+                @unfavorite="handleUnfavoriteItem"
               />
             </div>
             <div v-else class="empty-state">
@@ -611,12 +617,34 @@ const fetchRealSellingItems = async () => {
       return;
     }
     loading.selling = true;
+    
+    // 构建请求参数，包括排序参数
+    const params = {
+      skip: (pagination.selling.page - 1) * pagination.selling.perPage,
+      limit: pagination.selling.perPage
+    };
+    
+    // 根据排序选项添加排序参数
+    switch(sorting.selling) {
+      case 'newest':
+        params.order_by = 'created_at_desc';
+        break;
+      case 'popular':
+        params.order_by = 'views_desc';
+        break;
+      case 'price_asc':
+        params.order_by = 'price_asc';
+        break;
+      case 'price_desc':
+        params.order_by = 'price_desc';
+        break;
+      default:
+        params.order_by = 'created_at_desc'; // 默认按最新发布排序
+    }
+    
     const response = await api.getUserSellingItems(
       authStore.user.id,
-      {
-        skip: (pagination.selling.page - 1) * pagination.selling.perPage,
-        limit: pagination.selling.perPage
-      }
+      params
     );
     // 自动回退
     if (response.data.length === 0 && pagination.selling.page > 1) {
@@ -710,8 +738,20 @@ const sortedSellingItems = computed(() => {
     case 'newest':
     default:
       // 最新发布（按创建时间）
+      const parseTime = (t) => {
+        if (!t) return 0
+        let date
+        if (typeof t === 'string') {
+          let iso = t.replace(' ', 'T')
+          if (!iso.endsWith('Z')) iso += 'Z'
+          date = new Date(iso)
+        } else {
+          date = new Date(t)
+        }
+        return isNaN(date.getTime()) ? 0 : date.getTime()
+      }
       return items.sort((a, b) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        parseTime(b.created_at) - parseTime(a.created_at)
       )
   }
 })
@@ -743,6 +783,14 @@ watch(activeTab, (newTab) => {
     fetchSoldItems()
   } else if (newTab === 'favorites' && favoriteItems.value.length === 0) {
     fetchFavoriteItems()
+  }
+})
+
+// 监听排序变化
+watch(() => sorting.selling, () => {
+  if (activeTab.value === 'selling') {
+    pagination.selling.page = 1; // 重置到第一页
+    fetchRealSellingItems();
   }
 })
 
@@ -1052,6 +1100,53 @@ const handleSoldItem = async (itemId) => {
     } catch (error) {
       console.error('标记为已售失败:', error)
       alert('操作失败，请重试')
+    }
+  }
+}
+
+// 处理商品删除
+const handleDeleteItem = async (itemId) => {
+  if (confirm('确定要删除该商品吗？删除后将无法恢复。')) {
+    try {
+      await api.deleteItem(itemId)
+      
+      // 从在售商品列表中移除
+      sellingItems.value = sellingItems.value.filter(item => item.id !== itemId)
+      
+      // 从已售商品列表中移除
+      soldItems.value = soldItems.value.filter(item => item.id !== itemId)
+      
+      // 从已下架商品列表中移除（如果存在）
+      offlineItems.value = offlineItems.value.filter(item => item.id !== itemId)
+      
+      // 更新统计数据
+      tabs.value[0].count = sellingItems.value.length
+      tabs.value[1].count = soldItems.value.length
+      
+      alert('商品已删除')
+    } catch (error) {
+      console.error('删除商品失败:', error)
+      alert('删除失败，请重试')
+    }
+  }
+}
+
+// 取消收藏商品
+const handleUnfavoriteItem = async (itemId) => {
+  if (confirm('确定要取消收藏该商品吗？')) {
+    try {
+      await api.removeFavorite(authStore.user.id, itemId)
+      
+      // 从收藏商品列表中移除
+      favoriteItems.value = favoriteItems.value.filter(item => item.id !== itemId)
+      
+      // 更新统计数据
+      tabs.value[2].count = favoriteItems.value.length
+      
+      alert('商品已取消收藏')
+    } catch (error) {
+      console.error('取消收藏失败:', error)
+      alert('取消收藏失败，请重试')
     }
   }
 }

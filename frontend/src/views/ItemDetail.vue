@@ -6,7 +6,7 @@
         <div class="product-meta">
           <span>{{ product.location }}</span>
           <span>浏览: {{ product.views }}</span>
-          <span>发布时间: {{ product.createdAt }}</span>
+          <span>发布时间: {{ formatTime(product.created_at) }}</span>
         </div>
       </div>
       
@@ -48,15 +48,6 @@
                 <i class="fas fa-comment"></i> 联系卖家
               </button>
             </div>
-          </div>
-          
-          <div class="action-buttons">
-            <button class="btn btn-outline">
-              <i class="fas fa-heart"></i> 收藏
-            </button>
-            <button class="btn btn-primary">
-              <i class="fas fa-shopping-cart"></i> 立即购买
-            </button>
           </div>
         </div>
       </div>
@@ -306,6 +297,37 @@ export default {
     },
     startChat() {
       this.$router.push({ name: 'Chat', params: { id: this.seller.id } })
+    },
+    formatTime(createdAt) {
+      if (!createdAt) return '未知时间'
+      let date
+      // 兼容 "2024-06-22 12:34:56" 和 "2024-06-22T12:34:56Z"
+      if (typeof createdAt === 'string') {
+        let iso = createdAt.replace(' ', 'T')
+        if (!iso.endsWith('Z')) iso += 'Z'
+        date = new Date(iso)
+      } else {
+        date = new Date(createdAt)
+      }
+      if (isNaN(date.getTime())) return '未知时间'
+      const now = new Date()
+      const diff = now - date
+      const minutes = Math.floor(diff / (1000 * 60))
+      const hours = Math.floor(diff / (1000 * 60 * 60))
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const months = Math.floor(days / 30)
+      const years = Math.floor(days / 365)
+      if (minutes < 1) return '刚刚'
+      if (minutes < 60) return `${minutes}分钟前`
+      if (hours < 24) return `${hours}小时前`
+      if (days < 30) return `${days}天前`
+      if (months < 12) return `${months}个月前`
+      if (years >= 1) return `${years}年前`
+      return date.toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
     }
   }
 }

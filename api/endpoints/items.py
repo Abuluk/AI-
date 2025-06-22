@@ -18,13 +18,29 @@ router = APIRouter()
 def get_all_items(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
+    order_by: str = Query("created_at_desc", description="排序方式: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎)"),
     db: Session = Depends(get_db)
 ):
-    """获取所有在售商品列表，支持分页（只显示状态为online的商品）"""
-    return db.query(Item).filter(
+    """获取所有在售商品列表，支持分页和排序（只显示状态为online的商品）"""
+    query = db.query(Item).filter(
         Item.status == "online",  # 只显示上架的商品
         Item.sold == False        # 不显示已售出的商品
-    ).offset(skip).limit(limit).all()
+    )
+    
+    # 根据排序参数进行排序
+    if order_by == "created_at_desc":
+        query = query.order_by(Item.created_at.desc())
+    elif order_by == "price_asc":
+        query = query.order_by(Item.price.asc())
+    elif order_by == "price_desc":
+        query = query.order_by(Item.price.desc())
+    elif order_by == "views_desc":
+        query = query.order_by(Item.views.desc())
+    else:
+        # 默认按最新发布排序
+        query = query.order_by(Item.created_at.desc())
+    
+    return query.offset(skip).limit(limit).all()
 
 # 公共端点 - 搜索商品（无需认证）- 必须在/{item_id}之前定义
 @router.get("/search", response_model=List[ItemInDB])
@@ -32,24 +48,40 @@ def search_items(
     q: str = Query(None, min_length=1),
     skip: int = 0,
     limit: int = 100,
+    order_by: str = Query("created_at_desc", description="排序方式: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎)"),
     db: Session = Depends(get_db)
 ):
     if not q:
         # 如果没有搜索关键词，返回所有在售商品
-        return db.query(Item).filter(
+        query = db.query(Item).filter(
             Item.status == "online",  # 只显示上架的商品
             Item.sold == False        # 不显示已售出的商品
-        ).offset(skip).limit(limit).all()
+        )
+    else:
+        # 搜索在售商品
+        query = db.query(Item).filter(
+            or_(
+                Item.title.ilike(f"%{q}%"),
+                Item.description.ilike(f"%{q}%")
+            ),
+            Item.status == "online",  # 只显示上架的商品
+            Item.sold == False        # 不显示已售出的商品
+        )
     
-    # 搜索在售商品
-    return db.query(Item).filter(
-        or_(
-            Item.title.ilike(f"%{q}%"),
-            Item.description.ilike(f"%{q}%")
-        ),
-        Item.status == "online",  # 只显示上架的商品
-        Item.sold == False        # 不显示已售出的商品
-    ).offset(skip).limit(limit).all()
+    # 根据排序参数进行排序
+    if order_by == "created_at_desc":
+        query = query.order_by(Item.created_at.desc())
+    elif order_by == "price_asc":
+        query = query.order_by(Item.price.asc())
+    elif order_by == "price_desc":
+        query = query.order_by(Item.price.desc())
+    elif order_by == "views_desc":
+        query = query.order_by(Item.views.desc())
+    else:
+        # 默认按最新发布排序
+        query = query.order_by(Item.created_at.desc())
+    
+    return query.offset(skip).limit(limit).all()
 
 # 公共端点 - 获取单个商品（无需认证）
 @router.get("/{item_id}", response_model=ItemInDB)

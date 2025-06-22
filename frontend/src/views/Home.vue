@@ -77,7 +77,7 @@ export default {
   },
   data() {
     return {
-      sortOption: 'default',
+      sortOption: 'newest',
       products: [],
       loading: false,
       error: null,
@@ -90,15 +90,25 @@ export default {
   computed: {
     sortedProducts() {
       const products = [...this.products]
-      
+      const parseTime = (t) => {
+        if (!t) return 0
+        let date
+        if (typeof t === 'string') {
+          let iso = t.replace(' ', 'T')
+          if (!iso.endsWith('Z')) iso += 'Z'
+          date = new Date(iso)
+        } else {
+          date = new Date(t)
+        }
+        return isNaN(date.getTime()) ? 0 : date.getTime()
+      }
       switch(this.sortOption) {
         case 'price_asc':
           return products.sort((a, b) => a.price - b.price)
         case 'price_desc':
           return products.sort((a, b) => b.price - a.price)
         case 'newest':
-          return products.sort((a, b) => 
-            new Date(b.createdAt) - new Date(a.createdAt))
+          return products.sort((a, b) => parseTime(b.created_at) - parseTime(a.created_at))
         default:
           return products
       }
@@ -113,6 +123,11 @@ export default {
         this.fetchSellingItems();
       },
       immediate: true
+    },
+    sortOption: {
+      handler() {
+        this.fetchSellingItems();
+      }
     }
   },
   methods: {
@@ -121,16 +136,32 @@ export default {
       try {
         const q = this.$route.query.q;
         let response;
+        
+        // 构建请求参数，包括排序参数
+        const params = {
+          skip: (this.pagination.page - 1) * this.pagination.limit,
+          limit: this.pagination.limit
+        };
+        
+        // 根据排序选项添加排序参数
+        switch(this.sortOption) {
+          case 'newest':
+            params.order_by = 'created_at_desc';
+            break;
+          case 'price_asc':
+            params.order_by = 'price_asc';
+            break;
+          case 'price_desc':
+            params.order_by = 'price_desc';
+            break;
+          default:
+            params.order_by = 'created_at_desc'; // 默认按最新发布排序
+        }
+        
         if (q) {
-          response = await api.searchItems(q, {
-            skip: (this.pagination.page - 1) * this.pagination.limit,
-            limit: this.pagination.limit
-          });
+          response = await api.searchItems(q, params);
         } else {
-          response = await api.getItems({
-            skip: (this.pagination.page - 1) * this.pagination.limit,
-            limit: this.pagination.limit
-          });
+          response = await api.getItems(params);
         }
         this.products = response.data;
       } catch (error) {
