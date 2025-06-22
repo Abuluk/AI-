@@ -68,7 +68,7 @@ const retryRequest = async (requestFn, maxRetries = 3) => {
   }
 }
 
-export default {
+const apiService = {
   // 用户认证
   async register(userData) {
     return api.post('/auth/register', userData)
@@ -91,6 +91,24 @@ export default {
       }
       return response
     })
+  },
+  
+  async adminLogin(credentials) {
+    // 管理员登录不建议自动重试，以避免密码错误时多次尝试
+    const formData = new URLSearchParams();
+    formData.append('identifier', credentials.identifier);
+    formData.append('password', credentials.password);
+
+    const response = await api.post('/admin/login', formData, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+    // 登录成功后，依然将token存入localStorage
+    if (response.data.access_token) {
+      localStorage.setItem('access_token', response.data.access_token)
+    }
+    return response
   },
   
   async logout() {
@@ -257,7 +275,11 @@ export default {
 
   // 添加获取公共系统消息方法
   async getPublicSystemMessages() {
-    return retryRequest(() => api.get('/messages/system'));
+    return retryRequest(() => api.get('/messages/system/public'))
+  },
+  
+  async getSystemMessage(messageId) {
+    return retryRequest(() => api.get(`/messages/system/${messageId}`))
   },
 
   // 管理员API
@@ -309,5 +331,12 @@ export default {
   // 添加发布系统消息的方法
   async publishSystemMessage(messageData) {
     return retryRequest(() => api.post('/admin/messages', messageData))
-  }
+  },
+
+  getFavorites: () => api.get('/favorites/'),
+  addFavorite: (itemId) => api.post(`/favorites/${itemId}`),
+  removeFavorite: (itemId) => api.delete(`/favorites/${itemId}`),
+  getUsersByIds: (userIds) => api.post('/users/by_ids', { user_ids: userIds }),
 }
+
+export default apiService;

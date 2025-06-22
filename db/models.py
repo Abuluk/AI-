@@ -56,7 +56,7 @@ class Message(Base):
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    item_id = Column(Integer, ForeignKey("items.id"), nullable=True)
     created_at = Column(DateTime, server_default=func.now())  # 使用数据库函数
     is_read = Column(Boolean, default=False)  # 添加已读状态
     is_system = Column(Boolean, default=False)  # 添加系统消息标识

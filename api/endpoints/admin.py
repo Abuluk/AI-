@@ -1,17 +1,64 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from db.session import get_db
-from core.security import get_current_user
+from core.security import get_current_user, create_access_token, authenticate_user, ACCESS_TOKEN_EXPIRE_MINUTES
 from db.models import User, Item, Favorite
 from schemas.user import UserInDB
 from schemas.item import ItemInDB
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from crud import crud_message
 import schemas.message
+from schemas.token import Token
 
 router = APIRouter()
+
+@router.post("/login", response_model=Token, tags=["管理员认证"])
+def admin_login(
+    identifier: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    管理员登录接口。
+    这个接口是公开的，但会验证用户是否为管理员。
+    """
+    # 1. 验证用户名和密码
+    user = authenticate_user(db, identifier, password)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="管理员账号或密码错误",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # 2. 验证是否是管理员
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="该账号没有管理员权限",
+        )
+        
+    # 3. 检查用户是否激活
+    if not user.is_active:
+        raise HTTPException(
+            status_code=401,
+            detail="管理员账号未激活",
+        )
+    
+    # 4. 创建Token
+    token_subject = user.username if user.username else user.email
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": token_subject}, expires_delta=access_token_expires
+    )
+    
+    # 更新最后登录时间
+    user.last_login = datetime.utcnow()
+    db.commit()
+    
+    return {"access_token": access_token, "token_type": "bearer"}
 
 def get_current_admin(current_user: User = Depends(get_current_user)):
     """验证当前用户是否为管理员"""

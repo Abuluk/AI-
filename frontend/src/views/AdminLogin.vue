@@ -60,22 +60,17 @@ const handleLogin = async () => {
   loading.value = true;
   errorMessage.value = '';
   try {
-    // 调用登录接口
-    await authStore.login({
+    // 关键修改：调用专门的 adminLogin 接口，而不是 authStore.login
+    await authStore.adminLogin({
       identifier: identifier.value,
       password: password.value,
     });
     
-    // 登录成功后，检查是否是管理员
-    if (authStore.user && authStore.user.is_admin) {
-      // 是管理员，跳转到后台
-      router.push('/admin');
-    } else {
-      // 不是管理员，登出并显示错误
-      await authStore.logout();
-      errorMessage.value = '您没有管理员权限，请使用管理员账号登录。';
-    }
+    // 如果 adminLogin 成功，说明验证通过，直接跳转
+    router.push('/admin');
+
   } catch (error) {
+    // 直接显示后端返回的错误信息
     errorMessage.value = error.response?.data?.detail || '登录失败，请检查您的账号和密码。';
   } finally {
     loading.value = false;

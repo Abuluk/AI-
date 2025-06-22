@@ -3,9 +3,18 @@ from db.models import User
 from schemas.user import UserCreate, UserUpdate
 from core.pwd_util import get_password_hash
 from datetime import datetime
+from typing import List
 
 def get_user(db: Session, user_id: int):
     return db.query(User).filter(User.id == user_id).first()
+
+def get_users_by_ids(db: Session, user_ids: List[int]):
+    """
+    根据用户ID列表批量获取用户
+    """
+    if not user_ids:
+        return []
+    return db.query(User).filter(User.id.in_(user_ids)).all()
 
 def get_user_by_username(db: Session, username: str):
     return db.query(User).filter(User.username == username).first()

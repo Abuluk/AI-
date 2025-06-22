@@ -36,7 +36,7 @@
           }"
         >
           <div v-if="!message.is_system" class="message-avatar">
-            <img :src="getUserAvatar(message.user_id)" class="avatar">
+            <img :src="getUserAvatar(message.user_id)" class="avatar" @error="handleAvatarError">
           </div>
           <div class="message-content">
             <div v-if="message.is_system" class="system-message">
@@ -85,17 +85,27 @@ import { useAuthStore } from '@/store/auth'
 import api from '@/services/api'
 
 export default {
-  setup() {
-    const route = useRoute()
+  props: {
+    id: {
+      type: [String, Number],
+      required: true
+    },
+    other_user_id: {
+      type: [String, Number],
+      required: true
+    }
+  },
+  setup(props) {
     const router = useRouter()
     const authStore = useAuthStore()
-    
-    const itemId = computed(() => route.params.id)
-    const otherUserId = computed(() => route.params.other_user_id)
+
+    const itemId = computed(() => props.id)
+    const otherUserId = computed(() => props.other_user_id)
     const currentUserId = computed(() => authStore.user?.id)
-    
+
     const messages = ref([])
     const item = ref(null)
+    const usersInfo = ref({})
     const newMessage = ref('')
     const loading = ref(false)
     const sending = ref(false)
@@ -106,6 +116,20 @@ export default {
       return authStore.isAuthenticated && item.value && !sending.value
     })
     
+    // 统一图片URL处理
+    const resolveUrl = (path) => {
+      if (!path) {
+        path = '/static/images/default_avatar.png';
+      }
+      if (path.startsWith('http')) {
+        return path;
+      }
+      const baseUrl = 'http://localhost:8000';
+      const cleanedPath = path.startsWith('/') ? path.substring(1) : path;
+      return `${baseUrl}/${cleanedPath.replace(/\\/g, '/')}`;
+    }
+
+    // 获取商品信息
     const loadItem = async () => {
       try {
         const response = await api.getItem(itemId.value)
@@ -114,6 +138,21 @@ export default {
         console.error('加载商品信息失败:', error)
         alert('商品不存在或已被删除')
         router.push('/messages')
+      }
+    }
+
+    // 获取对话双方用户信息
+    const loadUsersInfo = async () => {
+      const userIds = [currentUserId.value, otherUserId.value].filter(id => id);
+      if (userIds.length > 0) {
+        try {
+          const res = await api.getUsersByIds(userIds);
+          res.data.forEach(user => {
+            usersInfo.value[user.id] = user;
+          });
+        } catch (e) {
+          console.error('获取用户信息失败', e);
+        }
       }
     }
     
@@ -202,18 +241,33 @@ export default {
     }
     
     const getItemImage = (images) => {
-      if (!images) return '/vite.svg'
-      const imageList = images.split(',')
-      return imageList[0] || '/vite.svg'
+      if (!images) return '';
+      return resolveUrl(images.split(',')[0]);
     }
     
     const getUserAvatar = (userId) => {
-      return '/vite.svg'
+      const user = usersInfo.value[userId];
+      console.log('getUserAvatar user:', user); // 调试用
+      if (user && user.avatar) {
+        return resolveUrl(user.avatar);
+      }
+      // 如果没有头像，返回默认头像
+      return resolveUrl('/static/images/default_avatar.png');
     }
     
-    onMounted(() => {
-      loadItem()
-      loadMessages()
+    const handleAvatarError = (event) => {
+      if (event.target.src.endsWith('/static/images/default_avatar.png')) {
+        event.target.onerror = null;
+        return;
+      }
+      event.target.onerror = null;
+      event.target.src = 'http://localhost:8000/static/images/default_avatar.png';
+    }
+    
+    onMounted(async () => {
+      await loadItem();
+      await loadUsersInfo();
+      loadMessages();
     })
     
     // 监听消息变化，自动滚动到底部
@@ -236,7 +290,9 @@ export default {
       sendMessage,
       formatTime,
       getItemImage,
-      getUserAvatar
+      getUserAvatar,
+      handleAvatarError,
+      usersInfo
     }
   }
 }
@@ -429,6 +485,7 @@ export default {
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 

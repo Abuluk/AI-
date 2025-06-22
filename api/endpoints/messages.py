@@ -1,143 +1,126 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
+from typing import List
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import datetime
-
 from db.session import get_db
-from db.models import User, Item
-from crud.crud_message import message_crud
-from crud.crud_item import get_item
-from schemas.message import MessageCreate, MessageResponse, SystemMessageCreate
-from core.security import get_current_user
+from db.models import User
+from schemas.message import MessageCreate, MessageResponse, Conversation
+from core.security import get_current_active_user
+from crud.crud_message import (
+    create_message,
+    get_user_conversations,
+    get_conversation_messages,
+    get_unread_count,
+    get_public_system_messages,
+    get_system_message,
+    mark_as_read,
+    delete_message,
+    get_user_messages
+)
 
 router = APIRouter()
 
-@router.get("/system", response_model=List[MessageResponse])
-def get_public_system_messages(
+@router.get("/conversations", response_model=List[Conversation])
+def read_user_conversations(
     db: Session = Depends(get_db),
-    # current_user: User = Depends(get_current_user) #
-    skip: int = 0,
-    limit: int = 10
-):
-    """获取对所有用户可见的系统消息"""
-    return message_crud.get_system_messages(db=db, skip=skip, limit=limit)
-
-@router.get("/", response_model=List[MessageResponse])
-async def get_messages(
-    skip: int = 0,
-    limit: int = 50,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """获取当前用户的消息列表"""
-    messages = message_crud.get_user_messages(db, user_id=current_user.id, skip=skip, limit=limit)
-    return messages
-
-@router.get("/conversations", response_model=List[dict])
-async def get_conversations(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """获取用户的对话列表"""
-    conversations = message_crud.get_user_conversations(db, user_id=current_user.id)
+    conversations = get_user_conversations(db, user_id=current_user.id)
+    if not conversations:
+        return []
     return conversations
 
+@router.get("/system/public", response_model=List[MessageResponse])
+def read_public_system_messages(
+    skip: int = 0,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    """
+    获取公开的系统消息列表。
+    """
+    messages = get_public_system_messages(db, skip=skip, limit=limit)
+    return messages
+
+@router.get("/system/{message_id}", response_model=MessageResponse)
+def read_system_message(
+    message_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    获取单条系统消息。
+    """
+    message = get_system_message(db, message_id=message_id)
+    if message is None:
+        raise HTTPException(status_code=404, detail="消息不存在")
+    return message
+
+@router.get("/unread-count")
+def read_unread_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """获取未读消息数量"""
+    count = get_unread_count(db, user_id=current_user.id)
+    return {"unread_count": count}
+
 @router.get("/conversation/{item_id}/{other_user_id}", response_model=List[MessageResponse])
-async def get_conversation_messages(
+def read_conversation_messages(
     item_id: int,
     other_user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """获取特定商品、特定对话伙伴之间的所有消息"""
-    messages = message_crud.get_conversation_messages(
+    messages = get_conversation_messages(
         db, user_id=current_user.id, item_id=item_id, other_user_id=other_user_id
     )
+    # 标记消息为已读
+    for msg in messages:
+        if msg.user_id != current_user.id and not msg.is_read:
+            mark_as_read(db, message_id=msg.id)
     return messages
 
 @router.post("/", response_model=MessageResponse)
-async def create_message(
+def create_new_message(
     message: MessageCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
-    """发送消息"""
-    # 验证商品是否存在
-    item = get_item(db, item_id=message.item_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="商品不存在")
-    
-    # 不能给自己的商品发消息
-    if item.owner_id == current_user.id:
-        raise HTTPException(status_code=400, detail="不能给自己的商品发消息")
-    
-    message_data = message.dict()
-    message_data["user_id"] = current_user.id
-    return message_crud.create(db, obj_in=message_data)
+    """创建新消息"""
+    return create_message(db, message=message, user_id=current_user.id)
 
-@router.post("/system", response_model=MessageResponse)
-async def create_system_message(
-    message: SystemMessageCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """管理员发布系统消息"""
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="只有管理员可以发布系统消息")
-    
-    # 如果指定了item_id，验证商品是否存在
-    if message.item_id:
-        item = get_item(db, item_id=message.item_id)
-        if not item:
-            raise HTTPException(status_code=404, detail="指定的商品不存在")
-    else:
-        # 如果没有指定item_id，使用第一个商品作为默认值
-        first_item = db.query(Item).first()
-        if not first_item:
-            raise HTTPException(status_code=400, detail="系统中没有商品，无法发布系统消息")
-        message.item_id = first_item.id
-    
-    return message_crud.create_system_message(db, message_in=message, admin_id=current_user.id)
-
-@router.get("/unread-count")
-async def get_unread_count(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """获取未读消息数量"""
-    count = message_crud.get_unread_count(db, user_id=current_user.id)
-    return {"unread_count": count}
-
-@router.put("/{message_id}/read")
-async def mark_as_read(
+@router.patch("/{message_id}/read", response_model=MessageResponse)
+def mark_message_as_read(
     message_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """标记消息为已读"""
-    message = message_crud.get(db, id=message_id)
+    message = get_system_message(db, message_id=message_id) # Reuse get_system_message to get any message
     if not message:
         raise HTTPException(status_code=404, detail="消息不存在")
     
-    # 只能标记自己的消息为已读
-    if message.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="无权限操作此消息")
-    
-    return message_crud.mark_as_read(db, message_id=message_id)
+    # 只能标记发给自己的消息
+    item = message.item
+    if not (message.user_id != current_user.id and (item and item.owner_id == current_user.id)):
+         raise HTTPException(status_code=403, detail="无权限操作此消息")
+            
+    return mark_as_read(db, message_id=message_id)
 
 @router.delete("/{message_id}")
-async def delete_message(
+def remove_message(
     message_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """删除消息（只能删除自己的消息或管理员删除任何消息）"""
-    message = message_crud.get(db, id=message_id)
+    message = get_system_message(db, message_id=message_id) # Reuse get_system_message
     if not message:
         raise HTTPException(status_code=404, detail="消息不存在")
-    
-    if not current_user.is_admin and message.user_id != current_user.id:
+
+    if message.user_id != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="无权限删除此消息")
-    
-    message_crud.remove(db, id=message_id)
+        
+    delete_message(db, message_id=message_id)
     return {"message": "消息已删除"}

@@ -1,9 +1,6 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, EmailStr, Field
-
-from pydantic import BaseModel, EmailStr
-from typing import Optional
 
 class UserBase(BaseModel):
     username: str
@@ -42,3 +39,15 @@ class UserInDB(UserBase):
 class UserLogin(BaseModel):  # 添加登录模型
     identifier: str  # 用户名/邮箱/手机号
     password: str
+
+class UserPublic(BaseModel):
+    id: int
+    username: str
+    avatar_url: Optional[str] = Field(None, alias='avatar')
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True
+
+class UserIds(BaseModel):
+    user_ids: List[int]

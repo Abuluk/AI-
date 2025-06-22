@@ -8,16 +8,18 @@
     <div class="system-notifications card">
       <div class="card-header">
         <h3><i class="fas fa-bullhorn"></i> 系统通知</h3>
-        <a href="#" class="see-all">查看全部</a>
+        <router-link to="/system-messages" class="see-all">查看全部</router-link>
       </div>
       <div v-if="loading.system" class="loading-state">
         <div class="skeleton-row small"></div>
       </div>
       <ul v-else-if="systemMessages.length > 0" class="notification-list">
         <li v-for="msg in systemMessages.slice(0, 3)" :key="msg.id">
-          <span class="notification-title">{{ msg.title || '系统消息' }}</span>
-          <span class="notification-content">{{ msg.content }}</span>
-          <span class="notification-time">{{ formatTime(msg.created_at) }}</span>
+          <router-link :to="`/system-messages/${msg.id}`" class="notification-link">
+            <span class="notification-title">{{ msg.title || '系统消息' }}</span>
+            <span class="notification-content">{{ msg.content }}</span>
+            <span class="notification-time">{{ formatTime(msg.created_at) }}</span>
+          </router-link>
         </li>
       </ul>
       <div v-else class="empty-state small">
@@ -223,16 +225,22 @@ onMounted(() => {
 }
 
 .notification-list li {
-  display: flex;
-  align-items: center;
-  padding: 12px 20px;
+  display: block;
+  padding: 0;
   border-bottom: 1px solid #f0f0f0;
   transition: background-color 0.2s;
-  cursor: pointer;
 }
 
 .notification-list li:last-child {
   border-bottom: none;
+}
+
+.notification-link {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+  text-decoration: none;
+  color: inherit;
 }
 
 .notification-list li:hover {

@@ -47,7 +47,7 @@ STATIC_DIR = os.path.join(BASE_DIR, "static")
 print(f"项目根目录: {BASE_DIR}")
 print(f"静态文件目录: {STATIC_DIR}")
 
-# 配置静态文件服务
+# 恢复静态文件挂载点到原始路径
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # 添加测试路由

@@ -218,6 +218,16 @@ def get_system_messages(db: Session, skip: int = 0, limit: int = 100) -> List[Me
         desc(Message.created_at)
     ).offset(skip).limit(limit).all()
 
+def get_public_system_messages(db: Session, skip: int = 0, limit: int = 20) -> List[Message]:
+    """获取所有公开的系统消息"""
+    return db.query(Message).filter(Message.is_system == True).order_by(
+        desc(Message.created_at)
+    ).offset(skip).limit(limit).all()
+
+def get_system_message(db: Session, message_id: int) -> Optional[Message]:
+    """获取单条系统消息"""
+    return db.query(Message).filter(Message.id == message_id, Message.is_system == True).first()
+
 # 创建CRUD实例（为了保持API兼容性）
 class MessageCRUD:
     def get(self, db: Session, id: int):

@@ -4,7 +4,7 @@ from db.session import get_db
 from core.security import get_current_active_user, get_current_user
 from db.models import User
 from db.models import Item
-from schemas.user import UserInDB, UserUpdate
+from schemas.user import UserInDB, UserUpdate, UserPublic, UserIds
 from db.models import Favorite
 from schemas.item import ItemInDB
 from schemas.favorite import FavoriteInDB
@@ -12,7 +12,8 @@ from typing import List, Optional
 from crud.crud_user import (
     get_user,
     update_user,
-    delete_user
+    delete_user,
+    get_users_by_ids
 )
 
 router = APIRouter()
@@ -169,3 +170,14 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
         "following": user.following,
         "items_count": items_count
     }
+
+@router.post("/by_ids", response_model=List[UserPublic])
+def get_users_info_by_ids(
+    payload: UserIds,
+    db: Session = Depends(get_db)
+):
+    """
+    根据用户ID列表批量获取用户信息
+    """
+    users = get_users_by_ids(db, user_ids=payload.user_ids)
+    return users

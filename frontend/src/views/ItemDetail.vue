@@ -206,25 +206,39 @@ export default {
         const response = await api.getItem(this.id)
         this.product = response.data
         this.isOwner = this.user && this.user.id === this.product.owner_id
-        
-        // 处理图片数据
+
+        // 只做简单图片路径处理
         if (this.product.images) {
           const images = this.product.images.split(',')
           this.product.images = images.map(img => {
-            if (!img) return 'default_product.png'
-            img = img.trim()
-            if (img.startsWith('http')) return img
-            if (img.startsWith('/static/')) return img
-            if (img.startsWith('images/')) return `/static/${img.replace(/^images[\\/]/, '')}`
-            // 兜底：去掉多余static/images/前缀再拼接
-            return `/static/images/${img.replace(/^static[\\/]images[\\/]/, '')}`
+            if (!img) return '/default_product.png'
+            let path = img.trim().replace(/\\/g, '/')
+            if (!path.startsWith('/')) {
+              path = '/' + path
+            }
+            return path
           })
+        } else {
+          this.product.images = ['/default_product.png']
         }
-        
-        // 设置主图片
-        this.mainImage = this.product.images && this.product.images.length > 0 
-          ? this.product.images[0] 
-          : 'default_product.png'
+
+        this.mainImage = this.product.images[0]
+
+        // 卖家头像
+        if (this.product.owner_id) {
+          try {
+            const sellerResponse = await api.getUser(this.product.owner_id)
+            this.seller = sellerResponse.data;
+            if (this.seller.avatar && !this.seller.avatar.startsWith('/')) {
+              this.seller.avatar = '/static/images/' + this.seller.avatar.replace(/^.*[\\/]/, '');
+            }
+            if (!this.seller.avatar) {
+              this.seller.avatar = '/static/images/default_avatar.png';
+            }
+          } catch (error) {
+            this.seller = { ...this.seller, username: '未知用户', avatar: '/static/images/default_avatar.png' };
+          }
+        }
         
         // 更新浏览量
         try {
@@ -234,234 +248,94 @@ export default {
           console.warn('更新浏览量失败:', error)
         }
         
-        // 获取卖家信息
-        if (this.product.owner_id) {
-          console.log('获取卖家信息，owner_id:', this.product.owner_id)
-          try {
-            const sellerResponse = await api.getUser(this.product.owner_id)
-            console.log('卖家信息API响应:', sellerResponse.data)
-            this.seller = {
-              id: sellerResponse.data.id,
-              username: sellerResponse.data.username || '未知用户',
-              avatar: sellerResponse.data.avatar || 'default_avatar.png',
-              bio: sellerResponse.data.bio || '',
-              location: sellerResponse.data.location || '',
-              contact: sellerResponse.data.contact || '',
-              phone: sellerResponse.data.phone || '',
-              created_at: sellerResponse.data.created_at || '',
-              last_login: sellerResponse.data.last_login || '',
-              items_count: sellerResponse.data.items_count || 0
-            }
-            console.log('设置卖家信息:', this.seller)
-          } catch (error) {
-            console.error('获取卖家信息失败:', error)
-            // 使用默认卖家信息
-            this.seller = {
-              id: this.product.owner_id,
-              username: '未知用户',
-              avatar: 'default_avatar.png',
-              bio: '',
-              location: '',
-              contact: '',
-              phone: '',
-              created_at: '',
-              last_login: '',
-              items_count: 0
-            }
-          }
-        } else {
-          console.warn('商品没有owner_id，无法获取卖家信息')
-        }
-        
-        // 获取推荐商品（简化版，实际可以根据分类或标签获取）
-        try {
-          const relatedResponse = await api.getItems({ 
-            limit: 3,
-            skip: 0
-          })
-          this.relatedProducts = relatedResponse.data.filter(item => item.id !== this.id)
-        } catch (error) {
-          console.warn('获取推荐商品失败:', error)
-        }
+        await this.fetchRelatedProducts()
         
       } catch (error) {
-        console.error('获取商品数据失败:', error)
-        // 如果商品不存在或已被删除，跳转到首页
-        if (error.response && error.response.status === 404) {
-          alert('商品不存在或已被删除')
-          this.$router.push('/')
-        } else {
-          alert('获取商品信息失败，请重试')
-        }
+        console.error('获取商品详情失败:', error)
       }
     },
     async checkFavoriteStatus() {
-      if (!this.user) return
+      if (!this.user) return;
       try {
-        // 调用真实API检查收藏状态
-        const response = await api.checkFavorite(this.user.id, this.id)
-        this.isFavorited = response.data.isFavorited
+        const response = await api.checkFavorite(this.user.id, this.id);
+        this.isFavorited = response.data.is_favorited;
       } catch (error) {
-        console.error('检查收藏状态失败:', error)
-        this.isFavorited = false
+        console.error('检查收藏状态失败:', error);
       }
     },
     async toggleFavorite() {
       if (!this.user) {
-        this.$router.push('/login')
-        return
+        return;
       }
-      
       try {
         if (this.isFavorited) {
-          // 移除收藏
-          await api.removeFavorite(this.user.id, this.id)
-          this.product.favorited_count = Math.max(0, (this.product.favorited_count || 0) - 1)
+          await api.removeFavorite(this.user.id, this.id);
+          this.product.favorited_count = Math.max(0, (this.product.favorited_count || 1) - 1);
         } else {
-          // 添加收藏
-          await api.addFavorite(this.user.id, this.id)
-          this.product.favorited_count = (this.product.favorited_count || 0) + 1
+          await api.addFavorite(this.user.id, this.id);
+          this.product.favorited_count = (this.product.favorited_count || 0) + 1;
         }
-        this.isFavorited = !this.isFavorited
+        this.isFavorited = !this.isFavorited;
       } catch (error) {
-        console.error('收藏操作失败:', error)
-        alert('操作失败，请重试')
+        console.error('切换收藏状态失败:', error);
       }
     },
     async offlineItem() {
-      if (confirm('确定要下架该商品吗？下架后其他用户将无法看到此商品。')) {
-        try {
-          // 调用真实API下架商品
-          await api.updateItemStatus(this.product.id, 'offline')
-          
-          // 更新本地状态
-          this.product.status = 'offline'
-          alert('商品已成功下架')
-        } catch (error) {
-          console.error('下架商品失败:', error)
-          alert('操作失败，请重试')
-        }
+      try {
+        await api.updateItemStatus(this.id, 'offline');
+        this.product.status = 'offline';
+      } catch (error) {
+        console.error('下架商品失败:', error);
       }
     },
     async onlineItem() {
       try {
-        // 调用真实API上架商品
-        await api.updateItemStatus(this.product.id, 'online')
-        
-        // 更新本地状态
-        this.product.status = 'online'
-        alert('商品已重新上架')
+        await api.updateItemStatus(this.id, 'online');
+        this.product.status = 'online';
       } catch (error) {
-        console.error('上架商品失败:', error)
-        alert('操作失败，请重试')
+        console.error('上架商品失败:', error);
       }
     },
-    purchaseItem() {
-      // 购买商品逻辑
-      alert('购买流程开始...')
+    async purchaseItem() {
     },
     startChat() {
-      if (!this.product.id) {
-        alert('无法获取商品ID，无法开始聊天。')
-        return
+      if (this.isOwner) {
+        return;
       }
-      this.$router.push({ name: 'Chat', params: { id: this.product.id } })
-    },
-    formatTime(createdAt) {
-      if (!createdAt) return '未知时间'
-      let date
-      // 兼容 "2024-06-22 12:34:56" 和 "2024-06-22T12:34:56Z"
-      if (typeof createdAt === 'string') {
-        let iso = createdAt.replace(' ', 'T')
-        if (!iso.endsWith('Z')) iso += 'Z'
-        date = new Date(iso)
-      } else {
-        date = new Date(createdAt)
+      if (!this.user) {
+        this.$router.push('/login');
+        return;
       }
-      if (isNaN(date.getTime())) return '未知时间'
-      const now = new Date()
-      const diff = now - date
-      const minutes = Math.floor(diff / (1000 * 60))
-      const hours = Math.floor(diff / (1000 * 60 * 60))
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-      const months = Math.floor(days / 30)
-      const years = Math.floor(days / 365)
-      if (minutes < 1) return '刚刚'
-      if (minutes < 60) return `${minutes}分钟前`
-      if (hours < 24) return `${hours}小时前`
-      if (days < 30) return `${days}天前`
-      if (months < 12) return `${months}个月前`
-      if (years >= 1) return `${years}年前`
-      return date.toLocaleDateString('zh-CN', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      })
+      this.$router.push(`/chat/${this.product.id}/${this.product.owner_id}`);
     },
-    formatJoinDate(createdAt) {
-      if (!createdAt) return '未知时间'
-      let date
-      // 兼容 "2024-06-22 12:34:56" 和 "2024-06-22T12:34:56Z"
-      if (typeof createdAt === 'string') {
-        let iso = createdAt.replace(' ', 'T')
-        if (!iso.endsWith('Z')) iso += 'Z'
-        date = new Date(iso)
-      } else {
-        date = new Date(createdAt)
+    formatTime(time) {
+      if (!time) return '未知';
+      return new Date(time).toLocaleDateString();
+    },
+    formatJoinDate(time) {
+      if (!time) return '未知';
+      return new Date(time).toLocaleDateString();
+    },
+    formatLastActive(time) {
+      if (!time) return '未知';
+      const lastLogin = new Date(time);
+      const now = new Date();
+      const diff = Math.floor((now - lastLogin) / (1000 * 60 * 60 * 24));
+      if (diff === 0) return '今天';
+      if (diff < 30) return `${diff}天前`;
+      return '很久以前';
+    },
+    handleAvatarError(event) {
+      event.target.src = '/static/images/default_avatar.png';
+      event.target.onerror = null;
+    },
+    async fetchRelatedProducts() {
+      try {
+        const response = await api.getItems({ limit: 5, order_by: 'created_at_desc' });
+        this.relatedProducts = response.data.filter(p => p.id !== this.product.id).slice(0, 4);
+      } catch (error) {
+        console.error('获取推荐商品失败:', error);
       }
-      if (isNaN(date.getTime())) return '未知时间'
-      const now = new Date()
-      const diff = now - date
-      const minutes = Math.floor(diff / (1000 * 60))
-      const hours = Math.floor(diff / (1000 * 60 * 60))
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-      const months = Math.floor(days / 30)
-      const years = Math.floor(days / 365)
-      if (minutes < 1) return '刚刚'
-      if (minutes < 60) return `${minutes}分钟前`
-      if (hours < 24) return `${hours}小时前`
-      if (days < 30) return `${days}天前`
-      if (months < 12) return `${months}个月前`
-      if (years >= 1) return `${years}年前`
-      return date.toLocaleDateString('zh-CN', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      })
-    },
-    formatLastActive(lastLogin) {
-      if (!lastLogin) return '未知时间'
-      let date
-      // 兼容 "2024-06-22 12:34:56" 和 "2024-06-22T12:34:56Z"
-      if (typeof lastLogin === 'string') {
-        let iso = lastLogin.replace(' ', 'T')
-        if (!iso.endsWith('Z')) iso += 'Z'
-        date = new Date(iso)
-      } else {
-        date = new Date(lastLogin)
-      }
-      if (isNaN(date.getTime())) return '未知时间'
-      const now = new Date()
-      const diff = now - date
-      const minutes = Math.floor(diff / (1000 * 60))
-      const hours = Math.floor(diff / (1000 * 60 * 60))
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-      const months = Math.floor(days / 30)
-      const years = Math.floor(days / 365)
-      if (minutes < 1) return '刚刚'
-      if (minutes < 60) return `${minutes}分钟前`
-      if (hours < 24) return `${hours}小时前`
-      if (days < 30) return `${days}天前`
-      if (months < 12) return `${months}个月前`
-      if (years >= 1) return `${years}年前`
-      return date.toLocaleDateString('zh-CN', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      })
-    },
-    handleAvatarError() {
-      this.seller.avatar = 'default_avatar.png'
     }
   }
 }

@@ -29,6 +29,25 @@ export const useAuthStore = defineStore('auth', {
       }
     },
     
+    async adminLogin(credentials) {
+      this.loading = true
+      this.error = null
+      try {
+        const response = await api.adminLogin(credentials)
+        if (response.data.access_token) {
+          this.isAuthenticated = true
+          // 登录成功后，获取用户信息
+          await this.fetchCurrentUser()
+        }
+        return response
+      } catch (error) {
+        this.error = error.response?.data?.detail || '管理员登录失败'
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+    
     async register(userData) {
       this.loading = true
       this.error = null

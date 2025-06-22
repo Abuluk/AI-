@@ -814,12 +814,16 @@ const fetchTabData = (tabId) => {
 }
 
 // 获取已售商品
-const fetchSoldItems = async () => {
-  loading.sold = true
+const fetchSoldItems = async (reset = false) => {
+  if (reset) {
+    pagination.sold.page = 1;
+    soldItems.value = [];
+  }
+  loading.sold = true;
   try {
     if (!authStore.user || !authStore.user.id) {
-      console.error('用户信息未加载')
-      return
+      console.error('用户信息未加载');
+      return;
     }
     
     const response = await api.getUserSoldItems(
@@ -828,40 +832,44 @@ const fetchSoldItems = async () => {
         skip: (pagination.sold.page - 1) * pagination.sold.perPage,
         limit: pagination.sold.perPage
       }
-    )
+    );
     
     // 自动回退
     if (response.data.length === 0 && pagination.sold.page > 1) {
-      pagination.sold.page -= 1
-      alert('已经是最后一页')
-      await fetchSoldItems()
-      return
+      pagination.sold.page -= 1;
+      alert('已经是最后一页');
+      await fetchSoldItems();
+      return;
     }
     
     if (pagination.sold.page === 1) {
-      soldItems.value = response.data
+      soldItems.value = response.data;
     } else {
-      soldItems.value = [...soldItems.value, ...response.data]
+      soldItems.value = [...soldItems.value, ...response.data];
     }
     
     // 更新统计数据
-    tabs.value[1].count = soldItems.value.length
+    tabs.value[1].count = soldItems.value.length;
   } catch (error) {
-    console.error('获取已售商品失败:', error)
-    alert('获取已售商品失败，请重试')
+    console.error('获取已售商品失败:', error);
+    alert('获取已售商品失败，请重试');
   } finally {
-    loading.sold = false
-    loading.more = false
+    loading.sold = false;
+    loading.more = false;
   }
-}
+};
 
 // 获取收藏商品
-const fetchFavoriteItems = async () => {
-  loading.favorites = true
+const fetchFavoriteItems = async (reset = false) => {
+  if (reset) {
+    pagination.favorites.page = 1;
+    favoriteItems.value = [];
+  }
+  loading.favorites = true;
   try {
     if (!authStore.user || !authStore.user.id) {
-      console.error('用户信息未加载')
-      return
+      console.error('用户信息未加载');
+      return;
     }
     
     const response = await api.getUserFavorites(
@@ -870,74 +878,80 @@ const fetchFavoriteItems = async () => {
         skip: (pagination.favorites.page - 1) * pagination.favorites.perPage,
         limit: pagination.favorites.perPage
       }
-    )
+    );
     
     // 提取商品信息（新的API返回的是包含商品信息的收藏记录）
-    const items = response.data.map(favorite => favorite.item)
+    const items = response.data.map(favorite => favorite.item);
     
     // 自动回退
     if (items.length === 0 && pagination.favorites.page > 1) {
-      pagination.favorites.page -= 1
-      alert('已经是最后一页')
-      await fetchFavoriteItems()
-      return
+      pagination.favorites.page -= 1;
+      alert('已经是最后一页');
+      await fetchFavoriteItems();
+      return;
     }
     
     if (pagination.favorites.page === 1) {
-      favoriteItems.value = items
+      favoriteItems.value = items;
     } else {
-      favoriteItems.value = [...favoriteItems.value, ...items]
+      favoriteItems.value = [...favoriteItems.value, ...items];
     }
     
     // 更新统计数据
-    tabs.value[2].count = favoriteItems.value.length
+    tabs.value[2].count = favoriteItems.value.length;
   } catch (error) {
-    console.error('获取收藏商品失败:', error)
-    alert('获取收藏商品失败，请重试')
+    console.error('获取收藏商品失败:', error);
+    alert('获取收藏商品失败，请重试');
   } finally {
-    loading.favorites = false
-    loading.more = false
+    loading.favorites = false;
+    loading.more = false;
   }
-}
+};
 
 // 加载更多
 const loadMore = (type) => {
-  loading.more = true
-  pagination[type].page += 1
-  
-  if (type === 'selling') {
-    fetchRealSellingItems()
-  } else if (type === 'sold') {
-    fetchSoldItems()
-  } else if (type === 'favorites') {
-    fetchFavoriteItems()
-  }
-}
+  loading.more = true;
+  pagination[type].page += 1;
+  fetchTabData(type);
+};
 
 // 加载上一页
 const loadPrevious = (type) => {
   if (pagination[type].page > 1) {
-    loading.more = true
-    pagination[type].page -= 1
-    
-    if (type === 'selling') {
-      fetchRealSellingItems()
-    } else if (type === 'sold') {
-      fetchSoldItems()
-    } else if (type === 'favorites') {
-      fetchFavoriteItems()
-    }
+    loading.more = true;
+    pagination[type].page -= 1;
+    fetchTabData(type);
   }
-}
+};
 
 // 导航函数
 const navigateToPublish = () => {
   router.push({ name: 'Publish' }); // 确保与路由配置中的名称匹配
-}
+};
 
 const navigateToDiscover = () => {
-  router.push({ path: '/' })
-}
+  router.push('/');
+};
+
+// 获取在售商品
+const fetchSellingItems = async (reset = false) => {
+  if (reset) {
+    pagination.selling.page = 1;
+    sellingItems.value = [];
+  }
+  loading.selling = true;
+  try {
+    const response = await api.getUserSellingItems(user.value.id, {
+      page: pagination.selling.page,
+      per_page: pagination.selling.perPage
+    });
+    sellingItems.value = reset ? response.data : [...sellingItems.value, ...response.data];
+  } catch (error) {
+    console.error('获取在售商品失败:', error);
+  } finally {
+    loading.selling = false;
+  }
+};
 
 // 模拟数据生成函数
 const generateMockSellingItems = (count) => {
@@ -950,7 +964,7 @@ const generateMockSellingItems = (count) => {
     views: Math.floor(Math.random() * 500),
     createdAt: new Date(Date.now() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000).toISOString()
   }))
-}
+};
 
 const generateMockSoldItems = (count) => {
   return Array.from({ length: count }, (_, i) => ({
@@ -961,7 +975,7 @@ const generateMockSoldItems = (count) => {
     location: ['北京', '上海', '广州', '深圳'][Math.floor(Math.random() * 4)],
     soldAt: new Date(Date.now() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000).toISOString()
   }))
-}
+};
 
 const generateMockFavoriteItems = (count) => {
   return Array.from({ length: count }, (_, i) => ({

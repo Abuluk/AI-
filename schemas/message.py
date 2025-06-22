@@ -31,6 +31,18 @@ class MessageResponse(MessageBase):
     class Config:
         from_attributes = True
 
+class Conversation(BaseModel):
+    item_id: int
+    other_user_id: int
+    other_user_name: str
+    other_user_avatar: Optional[str] = None
+    last_message_content: str
+    last_message_time: datetime
+    unread_count: int
+    
+    class Config:
+        from_attributes = True
+
 class ConversationSummary(BaseModel):
     item_id: int
     item_title: str
