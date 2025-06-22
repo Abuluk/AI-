@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 
 class FavoriteBase(BaseModel):
     user_id: int
@@ -10,7 +11,7 @@ class FavoriteCreate(FavoriteBase):
 
 class FavoriteInDB(FavoriteBase):
     id: int
-    created_at: datetime
+    created_at: Optional[datetime] = None
     
     class Config:
-        from_attributes  = True
+        from_attributes = True

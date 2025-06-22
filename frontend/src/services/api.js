@@ -156,11 +156,16 @@ export default {
   },
 
   async addFavorite(userId, itemId) {
-    return api.post(`/favorites/?user_id=${userId}&item_id=${itemId}`)
+    return api.post(`/favorites/add?user_id=${userId}&item_id=${itemId}`)
   },
 
   async removeFavorite(userId, itemId) {
-    return api.delete(`/favorites/?user_id=${userId}&item_id=${itemId}`)
+    return api.delete(`/favorites/remove?user_id=${userId}&item_id=${itemId}`)
+  },
+
+  // 添加获取用户收藏商品列表方法
+  async getUserFavorites(userId, params = {}) {
+    return api.get(`/favorites/user/${userId}`, { params })
   },
 
   // 文件上传

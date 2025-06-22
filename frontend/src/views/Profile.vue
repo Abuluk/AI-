@@ -229,7 +229,7 @@
               <button 
                 class="btn btn-outline" 
                 @click="loadMore('favorites')"
-                :disabled="!hasMore.favorites || loading.more"
+                :disabled="favoriteItems.length < pagination.favorites.perPage || loading.more"
               >
                 <span v-if="loading.more">加载中...</span>
                 <span v-else>下一页</span>
@@ -810,19 +810,38 @@ const fetchSoldItems = async () => {
 const fetchFavoriteItems = async () => {
   loading.favorites = true
   try {
-    await new Promise(resolve => setTimeout(resolve, 800))
-    const mockData = generateMockFavoriteItems(pagination.favorites.perPage)
-    
-    if (pagination.favorites.page === 1) {
-      favoriteItems.value = mockData
-    } else {
-      favoriteItems.value = [...favoriteItems.value, ...mockData]
+    if (!authStore.user || !authStore.user.id) {
+      console.error('用户信息未加载')
+      return
     }
     
-    pagination.favorites.total = 24
-    hasMore.favorites = favoriteItems.value.length < pagination.favorites.total
+    const response = await api.getUserFavorites(
+      authStore.user.id,
+      {
+        skip: (pagination.favorites.page - 1) * pagination.favorites.perPage,
+        limit: pagination.favorites.perPage
+      }
+    )
+    
+    // 自动回退
+    if (response.data.length === 0 && pagination.favorites.page > 1) {
+      pagination.favorites.page -= 1
+      alert('已经是最后一页')
+      await fetchFavoriteItems()
+      return
+    }
+    
+    if (pagination.favorites.page === 1) {
+      favoriteItems.value = response.data
+    } else {
+      favoriteItems.value = [...favoriteItems.value, ...response.data]
+    }
+    
+    // 更新统计数据
+    tabs.value[2].count = favoriteItems.value.length
   } catch (error) {
     console.error('获取收藏商品失败:', error)
+    alert('获取收藏商品失败，请重试')
   } finally {
     loading.favorites = false
     loading.more = false
