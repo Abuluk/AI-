@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_
 from db.session import get_db
-from db.models import User
+from db.models import User, Message
 from schemas.message import MessageCreate, MessageResponse, Conversation
 from core.security import get_current_active_user
 from crud.crud_message import (
@@ -124,3 +125,25 @@ def remove_message(
         
     delete_message(db, message_id=message_id)
     return {"message": "消息已删除"}
+
+@router.delete("/conversation/{item_id}/{other_user_id}")
+def delete_conversation(
+    item_id: int,
+    other_user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    删除某商品下与某用户的所有消息（仅限当前用户与对方的消息）
+    """
+    db.query(Message).filter(
+        Message.item_id == item_id,
+        Message.is_system == False,
+        or_(
+            and_(Message.user_id == current_user.id, Message.target_users == str(other_user_id)),
+            and_(Message.user_id == other_user_id, Message.target_users == str(current_user.id)),
+            and_(Message.user_id.in_([current_user.id, other_user_id]), Message.target_users == None)
+        )
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"message": "对话已删除"}

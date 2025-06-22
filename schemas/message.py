@@ -7,7 +7,7 @@ class MessageBase(BaseModel):
     item_id: Optional[int] = None
 
 class MessageCreate(MessageBase):
-    pass
+    target_user: Optional[str] = None
 
 class MessageUpdate(BaseModel):
     content: Optional[str] = None

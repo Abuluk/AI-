@@ -14,7 +14,7 @@ def create_message(db: Session, message: MessageCreate, user_id: int):
         content=message.content,
         user_id=user_id,
         item_id=message.item_id,
-        created_at=datetime.utcnow(),
+        target_users=message.target_user,
         is_read=False,
         is_system=False
     )
@@ -60,28 +60,20 @@ def get_user_messages(db: Session, user_id: int, skip: int = 0, limit: int = 50)
     return db.query(Message).filter(Message.id.in_(all_ids)).order_by(desc(Message.created_at)).offset(skip).limit(limit).all()
 
 def get_conversation_messages(db: Session, user_id: int, item_id: int, other_user_id: int) -> List[Message]:
-    """获取特定商品、特定对话伙伴之间的所有消息"""
-    # 验证用户是否为对话的参与者之一
+    """获取特定商品、特定对话伙伴之间的所有消息（item_id + user_id + target_user 关联一个消息框）"""
     item = db.query(Item).filter(Item.id == item_id).first()
     if not item:
         return []
-        
-    is_my_item = item.owner_id == user_id
-    is_other_users_item = item.owner_id == other_user_id
-
-    # 我是卖家，对方是买家 或 我是买家，对方是卖家
-    valid_participants = (is_my_item and not is_other_users_item) or (not is_my_item and is_other_users_item)
-    
-    if not valid_participants:
-        # 如果两人都不是商品的买卖方，则无权查看
-        # (这也可以防止用户通过构造URL查看不相关的对话)
-        return []
-
-    # 获取此商品下，这两个用户之间的所有非系统消息
     return db.query(Message).filter(
         Message.item_id == item_id,
         Message.is_system == False,
-        Message.user_id.in_([user_id, other_user_id])
+        or_(
+            # 新消息：target_users为对方ID
+            and_(Message.user_id == user_id, Message.target_users == str(other_user_id)),
+            and_(Message.user_id == other_user_id, Message.target_users == str(user_id)),
+            # 兼容历史消息：target_users为NULL
+            and_(Message.user_id.in_([user_id, other_user_id]), Message.target_users == None)
+        )
     ).order_by(Message.created_at).all()
 
 def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:

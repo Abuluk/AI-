@@ -75,6 +75,7 @@
         </button>
       </div>
     </div>
+    <button @click="handleDeleteConversation" class="delete-btn">删除对话</button>
   </div>
 </template>
 
@@ -161,7 +162,6 @@ export default {
         router.push('/login')
         return
       }
-      
       loading.value = true
       try {
         const response = await api.getConversationMessages(itemId.value, otherUserId.value)
@@ -169,23 +169,8 @@ export default {
         scrollToBottom()
       } catch (error) {
         console.error('加载消息失败:', error)
-        // 使用模拟数据
-        messages.value = [
-          {
-            id: 1,
-            content: '你好，请问这个商品还在吗？',
-            user_id: 2,
-            created_at: new Date(Date.now() - 1000 * 60 * 30),
-            is_system: false
-          },
-          {
-            id: 2,
-            content: '还在的，您感兴趣吗？',
-            user_id: currentUserId.value,
-            created_at: new Date(Date.now() - 1000 * 60 * 20),
-            is_system: false
-          }
-        ]
+        // 不再使用模拟数据，直接清空消息
+        messages.value = []
       } finally {
         loading.value = false
       }
@@ -193,17 +178,15 @@ export default {
     
     const sendMessage = async () => {
       if (!newMessage.value.trim() || !canSendMessage.value) return
-      
       const messageContent = newMessage.value.trim()
       newMessage.value = ''
       sending.value = true
-      
       try {
         const response = await api.sendMessage({
           content: messageContent,
-          item_id: parseInt(itemId.value)
+          item_id: parseInt(itemId.value),
+          target_user: otherUserId.value
         })
-        
         messages.value.push(response.data)
         scrollToBottom()
       } catch (error) {
@@ -257,6 +240,18 @@ export default {
       event.target.src = 'http://localhost:8000/static/images/default_avatar.png';
     }
     
+    const handleDeleteConversation = async () => {
+      if (confirm('确定要删除该对话吗？此操作不可恢复！')) {
+        try {
+          await api.deleteConversation(itemId.value, otherUserId.value)
+          alert('对话已删除')
+          router.push('/messages')
+        } catch (e) {
+          alert('删除失败，请重试')
+        }
+      }
+    }
+    
     onMounted(async () => {
       await loadItem();
       await loadUsersInfo();
@@ -285,7 +280,8 @@ export default {
       getItemImage,
       getUserAvatar,
       handleAvatarError,
-      usersInfo
+      usersInfo,
+      handleDeleteConversation
     }
   }
 }
@@ -617,5 +613,15 @@ export default {
 .message.system .message-content {
   max-width: 80%;
   text-align: center;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: var(--danger);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 10px;
+  margin-top: 10px;
 }
 </style>
