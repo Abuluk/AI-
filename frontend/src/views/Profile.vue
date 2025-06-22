@@ -65,6 +65,9 @@
         <button class="btn btn-primary" @click="navigateToPublish">
           <i class="fas fa-plus"></i> 上传商品
         </button>
+        <button class="btn btn-outline" @click="openOfflineModal">
+          <i class="fas fa-ban"></i> 已下架商品
+        </button>
       </div>    
     <!-- 商品标签页 -->
     <div class="profile-tabs card">
@@ -106,6 +109,9 @@
                 v-for="item in sortedSellingItems" 
                 :key="`selling-${item.id}`" 
                 :product="item" 
+                :showActions="true"
+                @offline="handleOfflineItem"
+                @online="handleOnlineItem"
               />
             </div>
             <div v-else class="empty-state">
@@ -116,14 +122,21 @@
               </button>
             </div>
             
-            <div class="pagination" v-if="sellingItems.length > 0 && hasMore.selling">
+            <div class="pagination" v-if="sellingItems.length > 0">
+              <button 
+                class="btn btn-outline" 
+                @click="loadPrevious('selling')"
+                :disabled="pagination.selling.page === 1 || loading.more"
+              >
+                上一页
+              </button>
               <button 
                 class="btn btn-outline" 
                 @click="loadMore('selling')"
-                :disabled="loading.more"
+                :disabled="sellingItems.length < pagination.selling.perPage || loading.more"
               >
                 <span v-if="loading.more">加载中...</span>
-                <span v-else>加载更多</span>
+                <span v-else>下一页</span>
               </button>
             </div>
           </div>
@@ -159,14 +172,21 @@
               <p>暂无已售商品</p>
             </div>
             
-            <div class="pagination" v-if="soldItems.length > 0 && hasMore.sold">
+            <div class="pagination" v-if="soldItems.length > 0">
+              <button 
+                class="btn btn-outline" 
+                @click="loadPrevious('sold')"
+                :disabled="pagination.sold.page === 1 || loading.more"
+              >
+                上一页
+              </button>
               <button 
                 class="btn btn-outline" 
                 @click="loadMore('sold')"
-                :disabled="loading.more"
+                :disabled="!hasMore.sold || loading.more"
               >
                 <span v-if="loading.more">加载中...</span>
-                <span v-else>加载更多</span>
+                <span v-else>下一页</span>
               </button>
             </div>
           </div>
@@ -198,14 +218,21 @@
               </button>
             </div>
             
-            <div class="pagination" v-if="favoriteItems.length > 0 && hasMore.favorites">
+            <div class="pagination" v-if="favoriteItems.length > 0">
+              <button 
+                class="btn btn-outline" 
+                @click="loadPrevious('favorites')"
+                :disabled="pagination.favorites.page === 1 || loading.more"
+              >
+                上一页
+              </button>
               <button 
                 class="btn btn-outline" 
                 @click="loadMore('favorites')"
-                :disabled="loading.more"
+                :disabled="!hasMore.favorites || loading.more"
               >
                 <span v-if="loading.more">加载中...</span>
-                <span v-else>加载更多</span>
+                <span v-else>下一页</span>
               </button>
             </div>
           </div>
@@ -277,6 +304,50 @@
         </div>
       </div>
     </div>
+    
+    <!-- 已下架商品模态框 -->
+    <div v-if="showOfflineModal" class="modal-overlay" @click.self="closeOfflineModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>已下架商品</h3>
+          <button class="modal-close" @click="closeOfflineModal">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div class="modal-body">
+          <div v-if="loading.offline" class="loading-state">
+            <div class="skeleton-card" v-for="n in 4" :key="n"></div>
+          </div>
+          
+          <div v-else>
+            <div v-if="offlineItems.length > 0" class="offline-items-grid">
+              <div v-for="item in offlineItems" :key="`offline-${item.id}`" class="offline-item">
+                <img :src="getFirstImage(item)" :alt="item.title" class="item-image">
+                <div class="item-info">
+                  <h4>{{ item.title }}</h4>
+                  <p class="price">¥{{ item.price }}</p>
+                  <p class="status">已下架</p>
+                </div>
+                <div class="item-actions">
+                  <button class="btn btn-success btn-sm" @click="handleOnlineItem(item.id)">
+                    <i class="fas fa-check"></i> 重新上架
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty-state">
+              <i class="fas fa-box-open"></i>
+              <p>暂无已下架商品</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button class="btn btn-outline" @click="closeOfflineModal">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -296,6 +367,7 @@ onBeforeUnmount(() => {
 const router = useRouter()
 const activeTab = ref('selling')
 const showEditModal = ref(false)
+const showOfflineModal = ref(false)
 const savingProfile = ref(false)
 // 添加响应式时间戳
 const avatarTimestamp = ref(Date.now())
@@ -533,15 +605,11 @@ watch(
 );
 const fetchRealSellingItems = async () => {
   try {
-    // 确保用户信息存在
     if (!authStore.user || !authStore.user.id) {
       console.error('用户信息未加载');
       return;
     }
-    
     loading.selling = true;
-    
-    // 使用正确的 API 方法
     const response = await api.getUserSellingItems(
       authStore.user.id,
       {
@@ -549,9 +617,14 @@ const fetchRealSellingItems = async () => {
         limit: pagination.selling.perPage
       }
     );
-    
+    // 自动回退
+    if (response.data.length === 0 && pagination.selling.page > 1) {
+      pagination.selling.page -= 1;
+      alert('已经是最后一页');
+      await fetchRealSellingItems();
+      return;
+    }
     sellingItems.value = response.data;
-    
     // 更新统计数据
     tabs.value[0].count = sellingItems.value.length;
   } catch (error) {
@@ -559,6 +632,7 @@ const fetchRealSellingItems = async () => {
     alert('获取商品失败，请刷新页面重试');
   } finally {
     loading.selling = false;
+    loading.more = false;
   }
 };
 
@@ -602,6 +676,7 @@ const loading = reactive({
   selling: false,
   sold: false,
   favorites: false,
+  offline: false,
   more: false
 })
 
@@ -612,6 +687,7 @@ const sorting = reactive({
 const sellingItems = ref([])
 const soldItems = ref([])
 const favoriteItems = ref([])
+const offlineItems = ref([])
 
 // 计算属性：排序后的在售商品
 const sortedSellingItems = computed(() => {
@@ -759,11 +835,27 @@ const loadMore = (type) => {
   pagination[type].page += 1
   
   if (type === 'selling') {
-    fetchSellingItems()
+    fetchRealSellingItems()
   } else if (type === 'sold') {
     fetchSoldItems()
   } else if (type === 'favorites') {
     fetchFavoriteItems()
+  }
+}
+
+// 加载上一页
+const loadPrevious = (type) => {
+  if (pagination[type].page > 1) {
+    loading.more = true
+    pagination[type].page -= 1
+    
+    if (type === 'selling') {
+      fetchRealSellingItems()
+    } else if (type === 'sold') {
+      fetchSoldItems()
+    } else if (type === 'favorites') {
+      fetchFavoriteItems()
+    }
   }
 }
 
@@ -809,6 +901,95 @@ const generateMockFavoriteItems = (count) => {
     location: ['北京', '上海', '广州', '深圳'][Math.floor(Math.random() * 4)],
     favoritedAt: new Date(Date.now() - Math.floor(Math.random() * 30) * 24 * 60 * 60 * 1000).toISOString()
   }))
+}
+
+// 关闭已下架商品模态框
+const closeOfflineModal = () => {
+  showOfflineModal.value = false
+}
+
+// 打开已下架商品模态框
+const openOfflineModal = async () => {
+  showOfflineModal.value = true
+  if (offlineItems.value.length === 0) {
+    await fetchOfflineItems()
+  }
+}
+
+// 获取已下架商品
+const fetchOfflineItems = async () => {
+  loading.offline = true
+  try {
+    if (!authStore.user || !authStore.user.id) {
+      console.error('用户信息未加载')
+      return
+    }
+    
+    const response = await api.getUserOfflineItems(
+      authStore.user.id,
+      {
+        skip: 0,
+        limit: 50 // 获取更多已下架商品
+      }
+    )
+    
+    offlineItems.value = response.data
+  } catch (error) {
+    console.error('获取已下架商品失败:', error)
+    alert('获取已下架商品失败，请重试')
+  } finally {
+    loading.offline = false
+  }
+}
+
+// 重新上架商品
+const handleOnlineItem = async (itemId) => {
+  try {
+    await api.updateItemStatus(itemId, 'online')
+    
+    // 从在售商品列表中移除（如果存在）
+    sellingItems.value = sellingItems.value.filter(item => item.id !== itemId)
+    
+    // 从已下架商品列表中移除（如果存在）
+    offlineItems.value = offlineItems.value.filter(item => item.id !== itemId)
+    
+    // 刷新在售商品列表
+    await fetchRealSellingItems()
+    
+    alert('商品已重新上架')
+  } catch (error) {
+    console.error('上架商品失败:', error)
+    alert('上架失败，请重试')
+  }
+}
+
+// 处理商品下架
+const handleOfflineItem = async (itemId) => {
+  if (confirm('确定要下架该商品吗？下架后其他用户将无法看到此商品。')) {
+    try {
+      await api.updateItemStatus(itemId, 'offline')
+      
+      // 从在售商品列表中移除
+      sellingItems.value = sellingItems.value.filter(item => item.id !== itemId)
+      
+      // 如果已下架商品模态框是打开的，刷新已下架商品列表
+      if (showOfflineModal.value) {
+        await fetchOfflineItems()
+      }
+      
+      alert('商品已下架')
+    } catch (error) {
+      console.error('已下架商品失败:', error)
+      alert('下架失败，请重试')
+    }
+  }
+}
+
+// 获取商品第一张图片
+const getFirstImage = (item) => {
+  if (!item.images) return 'default_product.png'
+  const images = item.images.split(',')
+  return images[0] || 'default_product.png'
 }
 
 </script>
@@ -1188,5 +1369,79 @@ const generateMockFavoriteItems = (count) => {
 /* 空状态按钮优化 */
 .empty-state .btn {
   margin-top: 15px;
+}
+
+/* 已下架商品模态框样式 */
+.offline-items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.offline-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  background: #f9f9f9;
+}
+
+.offline-item .item-image {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #f0f0f0;
+}
+
+.offline-item .item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.offline-item .item-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.offline-item .item-info .price {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #e74c3c;
+}
+
+.offline-item .item-info .status {
+  margin: 0;
+  font-size: 12px;
+  color: #999;
+}
+
+.offline-item .item-actions {
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.btn-success {
+  background-color: #27ae60;
+  color: white;
+  border: none;
+}
+
+.btn-success:hover {
+  background-color: #229954;
 }
 </style>

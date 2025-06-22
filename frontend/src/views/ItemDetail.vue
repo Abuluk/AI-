@@ -84,7 +84,7 @@
           class="btn btn-danger"
           @click="offlineItem"
             >
-          <i class="fas fa-ban"></i> 下架商品
+          <i class="fas fa-ban"></i> 已下架商品
       </button>
             
       <!-- 重新上架按钮（仅显示给所有者） -->
@@ -261,7 +261,7 @@ export default {
           this.product.status = 'offline'
           alert('商品已成功下架')
         } catch (error) {
-          console.error('下架商品失败:', error)
+          console.error('已下架商品失败:', error)
           alert('操作失败，请重试')
         }
       }

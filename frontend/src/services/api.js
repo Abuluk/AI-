@@ -60,11 +60,7 @@ export default {
     return api.put(`/users/${userId}`, userData)
   },
   
-  updateProfile(userData) {
-    return api.put('/profile/', userData)
-  },
-  
-    // 更新用户资料
+  // 更新用户资料
   updateProfile(userData) {
     return api.put('/profile/', userData)
   },
@@ -102,6 +98,13 @@ export default {
       params: { ...params, status: 'selling' } 
     })
   },
+
+  // 添加获取用户已下架商品方法
+  async getUserOfflineItems(userId, params = {}) {
+    return api.get(`/users/${userId}/items`, { 
+      params: { ...params, status: 'offline' } 
+    })
+  },
   
   async updateItem(itemId, itemData) {
     return api.put(`/items/${itemId}`, itemData)
@@ -111,6 +114,10 @@ export default {
     return api.delete(`/items/${itemId}`)
   },
   
+  // 添加更新商品状态方法
+  async updateItemStatus(itemId, status) {
+    return api.patch(`/items/${itemId}/status?status=${status}`)
+  },
   
   // 消息操作
   async getConversations() {
@@ -125,7 +132,7 @@ export default {
     return api.post('/messages', messageData)
   },
 
-  // 添加新方法
+  // 搜索商品方法
   async searchItems(query, params = {}) {
     return api.get('/items/search', { 
       params: { ...params, q: query } 
@@ -158,12 +165,5 @@ export default {
         'Content-Type': 'multipart/form-data'
       }
     })
-  },
-
-  // 在api.js中添加搜索方法
-async searchItems(query, params = {}) {
-  return api.get('/items/search', { 
-    params: { ...params, q: query } 
-  })
-}
+  }
 }

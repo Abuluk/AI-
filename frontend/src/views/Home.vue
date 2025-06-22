@@ -32,7 +32,17 @@
       </div>
     </div>
     
-    <div class="products-grid">
+    <div v-if="loading" class="loading-state">
+      <div class="skeleton-card" v-for="n in 4" :key="n"></div>
+    </div>
+    <div v-else-if="error" class="error-state">
+      <p>{{ error }}</p>
+      <button @click="fetchSellingItems" class="btn btn-primary">重试</button>
+    </div>
+    <div v-else-if="products.length === 0" class="empty-state">
+      <p>暂无在售商品</p>
+    </div>
+    <div v-else class="products-grid">
       <ProductCard 
         v-for="product in sortedProducts" 
         :key="product.id" 
@@ -47,7 +57,8 @@ import ProductCard from '@/components/ProductCard.vue'
 import { useAuthStore } from '@/store/auth'
 import { useRouter } from 'vue-router'
 import SearchBar from '@/components/SearchBar.vue'
-import { ref } from 'vue';
+import { ref, onMounted, watch } from 'vue';
+import api from '@/services/api';
 
 export default {
   name: 'HomeView',
@@ -67,62 +78,13 @@ export default {
   data() {
     return {
       sortOption: 'default',
-      products: [
-        { 
-          id: 1, 
-          title: 'Apple iPhone 13 128GB 蓝色 国行在保', 
-          price: 4299, 
-          image: 'https://picsum.photos/300/300?random=1', 
-          location: '北京', 
-          views: 128,
-          createdAt: '2023-06-10'
-        },
-        { 
-          id: 2, 
-          title: '华为MateBook X Pro 13.9英寸笔记本电脑', 
-          price: 6999, 
-          image: 'https://picsum.photos/300/300?random=2', 
-          location: '上海', 
-          views: 89,
-          createdAt: '2023-06-12'
-        },
-        { 
-          id: 3, 
-          title: 'Sony PlayStation 5 光驱版 双手柄套装', 
-          price: 4499, 
-          image: 'https://picsum.photos/300/300?random=3', 
-          location: '广州', 
-          views: 210,
-          createdAt: '2023-06-15'
-        },
-        { 
-          id: 4, 
-          title: '佳能 EOS R5 全画幅微单相机 95新', 
-          price: 18999, 
-          image: 'https://picsum.photos/300/300?random=4', 
-          location: '深圳', 
-          views: 45,
-          createdAt: '2023-06-16'
-        },
-        { 
-          id: 5, 
-          title: 'Bose QuietComfort 45 无线降噪耳机', 
-          price: 1599, 
-          image: 'https://picsum.photos/300/300?random=5', 
-          location: '杭州', 
-          views: 76,
-          createdAt: '2023-06-17'
-        },
-        { 
-          id: 6, 
-          title: 'Kindle Paperwhite 4 32GB 黑色 全新未拆', 
-          price: 998, 
-          image: 'https://picsum.photos/300/300?random=6', 
-          location: '南京', 
-          views: 62,
-          createdAt: '2023-06-18'
-        }
-      ]
+      products: [],
+      loading: false,
+      error: null,
+      pagination: {
+        page: 1,
+        limit: 10
+      }
     }
   },
   computed: {
@@ -142,7 +104,46 @@ export default {
       }
     }
   },
+  mounted() {
+    this.fetchSellingItems();
+  },
+  watch: {
+    '$route.query.q': {
+      handler() {
+        this.fetchSellingItems();
+      },
+      immediate: true
+    }
+  },
   methods: {
+    async fetchSellingItems() {
+      this.loading = true;
+      try {
+        const q = this.$route.query.q;
+        let response;
+        if (q) {
+          response = await api.searchItems(q, {
+            skip: (this.pagination.page - 1) * this.pagination.limit,
+            limit: this.pagination.limit
+          });
+        } else {
+          response = await api.getItems({
+            skip: (this.pagination.page - 1) * this.pagination.limit,
+            limit: this.pagination.limit
+          });
+        }
+        this.products = response.data;
+      } catch (error) {
+        this.error = 'Failed to load products. Please try again later.';
+        console.error('Error loading selling items:', error);
+        if (error.response) {
+          console.error('Response status:', error.response.status);
+          console.error('Response data:', error.response.data);
+        }
+      } finally {
+        this.loading = false;
+      }
+    },
     // 跳转到登录页面
     goToLogin() {
       this.router.push('/login')
@@ -285,5 +286,35 @@ export default {
   .products-grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   }
+}
+
+.loading-state {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.skeleton-card {
+  height: 300px;
+  background: #f0f0f0;
+  border-radius: 8px;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.5; }
+}
+
+.error-state {
+  text-align: center;
+  padding: 40px;
+  color: #e74c3c;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #777;
 }
 </style>

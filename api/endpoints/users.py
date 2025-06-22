@@ -93,7 +93,7 @@ def get_user_items(
         # 已售商品：已售出
         query = query.filter(Item.sold == True)
     elif status == "offline":
-        # 下架商品：状态为 offline
+        # 已下架商品：状态为 offline
         query = query.filter(Item.status == "offline")
     else:
         # 如果是不支持的状态，返回空列表

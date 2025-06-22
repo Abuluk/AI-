@@ -13,6 +13,53 @@ from sqlalchemy import or_
 
 router = APIRouter()
 
+# 公共端点 - 获取所有商品（无需认证）
+@router.get("/", response_model=List[ItemInDB])
+def get_all_items(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """获取所有在售商品列表，支持分页（只显示状态为online的商品）"""
+    return db.query(Item).filter(
+        Item.status == "online",  # 只显示上架的商品
+        Item.sold == False        # 不显示已售出的商品
+    ).offset(skip).limit(limit).all()
+
+# 公共端点 - 搜索商品（无需认证）- 必须在/{item_id}之前定义
+@router.get("/search", response_model=List[ItemInDB])
+def search_items(
+    q: str = Query(None, min_length=1),
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    if not q:
+        # 如果没有搜索关键词，返回所有在售商品
+        return db.query(Item).filter(
+            Item.status == "online",  # 只显示上架的商品
+            Item.sold == False        # 不显示已售出的商品
+        ).offset(skip).limit(limit).all()
+    
+    # 搜索在售商品
+    return db.query(Item).filter(
+        or_(
+            Item.title.ilike(f"%{q}%"),
+            Item.description.ilike(f"%{q}%")
+        ),
+        Item.status == "online",  # 只显示上架的商品
+        Item.sold == False        # 不显示已售出的商品
+    ).offset(skip).limit(limit).all()
+
+# 公共端点 - 获取单个商品（无需认证）
+@router.get("/{item_id}", response_model=ItemInDB)
+def read_item(item_id: int, db: Session = Depends(get_db)):
+    item = crud_item.get_item(db, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return item
+
+# 需要认证的端点
 @router.post("/", response_model=ItemInDB)
 async def create_item(
     title: str = Form(...),
@@ -69,13 +116,6 @@ async def create_item(
         db.refresh(db_item)
     
     return db_item
-
-@router.get("/{item_id}", response_model=ItemInDB)
-def read_item(item_id: int, db: Session = Depends(get_db)):
-    item = crud_item.get_item(db, item_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
-    return item
 
 @router.put("/{item_id}", response_model=ItemInDB)
 def update_item(
@@ -135,20 +175,30 @@ async def upload_item_image(
     
     return {"message": "Image uploaded", "path": file_path}
 
-# 添加搜索路由
-@router.get("/search/", response_model=List[ItemInDB])
-def search_items(
-    q: str = Query(None, min_length=1),
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
+@router.patch("/{item_id}/status")
+def update_item_status(
+    item_id: int,
+    status: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    if not q:
-        return crud_item.get_items(db, skip, limit)
+    """更新商品状态：online(上架) 或 offline(下架)"""
+    # 验证商品存在
+    item = crud_item.get_item(db, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="商品不存在")
     
-    return db.query(Item).filter(
-        or_(
-            Item.title.ilike(f"%{q}%"),
-            Item.description.ilike(f"%{q}%")
-        )
-    ).offset(skip).limit(limit).all()
+    # 验证用户权限
+    if item.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="无权操作此商品")
+    
+    # 验证状态值
+    if status not in ["online", "offline"]:
+        raise HTTPException(status_code=400, detail="状态值无效，只能是 'online' 或 'offline'")
+    
+    # 更新状态
+    item.status = status
+    db.commit()
+    db.refresh(item)
+    
+    return {"message": f"商品已{'上架' if status == 'online' else '下架'}", "item": item}

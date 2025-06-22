@@ -1,27 +1,47 @@
 <template>
-  <router-link :to="`/item/${product.id}`" class="product-card">
-    <div class="image-container">
-      <img :src="getFirstImage(product)" 
-           :alt="product.title" 
-           class="product-image"
-           @error="handleImageError">
-      <!-- 添加下架/已售状态显示 -->
-      <div v-if="product.status === 'offline'" class="sold-badge">已下架</div>
-      <div v-else-if="product.sold" class="sold-badge">已售出</div>
-    </div>
-    
-    <div class="product-info">
-      <h3 class="product-title">{{ product.title }}</h3>
-      <div class="product-price">¥{{ product.price }}</div>
-      <div class="product-meta">
-        <span>{{ product.location }}</span>
-        <div class="stats">
-          <span><i class="fas fa-eye"></i> {{ product.views }}</span>
-          <span><i class="fas fa-heart"></i> {{ product.favorited_count || 0 }}</span>
+  <div class="product-card-wrapper">
+    <router-link :to="`/item/${product.id}`" class="product-card">
+      <div class="image-container">
+        <img :src="getFirstImage(product)" 
+             :alt="product.title" 
+             class="product-image"
+             @error="handleImageError">
+        <!-- 添加下架/已售状态显示 -->
+        <div v-if="product.status === 'offline'" class="sold-badge">已下架</div>
+        <div v-else-if="product.sold" class="sold-badge">已售出</div>
+      </div>
+      
+      <div class="product-info">
+        <h3 class="product-title">{{ product.title }}</h3>
+        <div class="product-price">¥{{ product.price }}</div>
+        <div class="product-meta">
+          <span>{{ product.location }}</span>
+          <div class="stats">
+            <span><i class="fas fa-eye"></i> {{ product.views }}</span>
+            <span><i class="fas fa-heart"></i> {{ product.favorited_count || 0 }}</span>
+          </div>
         </div>
       </div>
+    </router-link>
+    
+    <!-- 操作按钮区域 -->
+    <div v-if="showActions && !product.sold" class="product-actions">
+      <button 
+        v-if="product.status === 'online'"
+        class="btn btn-danger btn-sm" 
+        @click.stop="offlineItem"
+      >
+        <i class="fas fa-ban"></i> 下架
+      </button>
+      <button 
+        v-else-if="product.status === 'offline'"
+        class="btn btn-success btn-sm" 
+        @click.stop="onlineItem"
+      >
+        <i class="fas fa-check"></i> 上架
+      </button>
     </div>
-  </router-link>
+  </div>
 </template>
 
 <script>
@@ -30,8 +50,13 @@ export default {
     product: {
       type: Object,
       required: true
+    },
+    showActions: {
+      type: Boolean,
+      default: false
     }
   },
+  emits: ['offline', 'online'],
   methods: {
     // 获取并处理第一张图片
     getFirstImage(product) {
@@ -101,6 +126,14 @@ export default {
       
       // 防止无限循环
       event.target.onerror = null;
+    },
+    offlineItem() {
+      // 触发下架事件
+      this.$emit('offline', this.product.id);
+    },
+    onlineItem() {
+      // 触发上架事件
+      this.$emit('online', this.product.id);
     }
   },
   data() {
@@ -117,6 +150,10 @@ export default {
 
 <style scoped>
 /* 原有样式保持不变 */
+.product-card-wrapper {
+  position: relative;
+}
+
 .product-card {
   background-color: var(--card-bg);
   border-radius: 10px;
@@ -189,6 +226,40 @@ export default {
 .stats {
   display: flex;
   gap: 10px;
+}
+
+.product-actions {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.btn-danger {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #c0392b;
+}
+
+.btn-success {
+  background-color: #27ae60;
+  color: white;
+}
+
+.btn-success:hover {
+  background-color: #229954;
 }
 
 @media (max-width: 768px) {
