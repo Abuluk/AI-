@@ -91,6 +91,7 @@ export default {
     const authStore = useAuthStore()
     
     const itemId = computed(() => route.params.id)
+    const otherUserId = computed(() => route.params.other_user_id)
     const currentUserId = computed(() => authStore.user?.id)
     
     const messages = ref([])
@@ -124,7 +125,7 @@ export default {
       
       loading.value = true
       try {
-        const response = await api.getConversationMessages(itemId.value)
+        const response = await api.getConversationMessages(itemId.value, otherUserId.value)
         messages.value = response.data
         scrollToBottom()
       } catch (error) {
@@ -159,7 +160,7 @@ export default {
       sending.value = true
       
       try {
-        const response = await api.post('/messages/', {
+        const response = await api.sendMessage({
           content: messageContent,
           item_id: parseInt(itemId.value)
         })
@@ -201,14 +202,13 @@ export default {
     }
     
     const getItemImage = (images) => {
-      if (!images) return '/static/images/default.jpg'
+      if (!images) return '/vite.svg'
       const imageList = images.split(',')
-      return imageList[0] || '/static/images/default.jpg'
+      return imageList[0] || '/vite.svg'
     }
     
     const getUserAvatar = (userId) => {
-      // 这里可以根据用户ID获取头像，暂时使用默认头像
-      return '/static/images/default.jpg'
+      return '/vite.svg'
     }
     
     onMounted(() => {
@@ -223,6 +223,7 @@ export default {
     
     return {
       itemId,
+      otherUserId,
       currentUserId,
       messages,
       item,

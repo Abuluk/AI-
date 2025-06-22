@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func, desc, case
+from sqlalchemy import and_, or_, func, desc, case, union_all
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
@@ -45,113 +45,146 @@ def delete_message(db: Session, message_id: int):
     return db_message
 
 def get_user_messages(db: Session, user_id: int, skip: int = 0, limit: int = 50) -> List[Message]:
-    """获取用户的所有消息"""
-    return db.query(Message).filter(
-        Message.user_id == user_id
-    ).order_by(desc(Message.created_at)).offset(skip).limit(limit).all()
+    """获取用户的所有消息（包括自己发出的和别人发给自己商品的）"""
+    # 用户发出的消息
+    sent = db.query(Message.id).filter(Message.user_id == user_id).all()
+    # 别人发给自己商品的消息
+    received = db.query(Message.id).join(Item, Message.item_id == Item.id).filter(
+        Item.owner_id == user_id,
+        Message.user_id != user_id
+    ).all()
+    all_ids = [row.id for row in sent] + [row.id for row in received]
+    if not all_ids:
+        return []
+    # 查询所有消息并按时间排序
+    return db.query(Message).filter(Message.id.in_(all_ids)).order_by(desc(Message.created_at)).offset(skip).limit(limit).all()
 
-def get_conversation_messages(db: Session, user_id: int, item_id: int) -> List[Message]:
-    """获取特定商品的对话消息"""
-    # 获取用户作为买家或卖家的消息
+def get_conversation_messages(db: Session, user_id: int, item_id: int, other_user_id: int) -> List[Message]:
+    """获取特定商品、特定对话伙伴之间的所有消息"""
+    # 验证用户是否为对话的参与者之一
     item = db.query(Item).filter(Item.id == item_id).first()
     if not item:
         return []
+        
+    is_my_item = item.owner_id == user_id
+    is_other_users_item = item.owner_id == other_user_id
+
+    # 我是卖家，对方是买家 或 我是买家，对方是卖家
+    valid_participants = (is_my_item and not is_other_users_item) or (not is_my_item and is_other_users_item)
     
-    # 如果用户是商品所有者，获取所有关于这个商品的消息
-    if item.owner_id == user_id:
-        return db.query(Message).filter(
-            Message.item_id == item_id
-        ).order_by(Message.created_at).all()
-    else:
-        # 如果用户是买家，只获取自己发送的消息
-        return db.query(Message).filter(
-            and_(
-                Message.item_id == item_id,
-                Message.user_id == user_id
-            )
-        ).order_by(Message.created_at).all()
+    if not valid_participants:
+        # 如果两人都不是商品的买卖方，则无权查看
+        # (这也可以防止用户通过构造URL查看不相关的对话)
+        return []
+
+    # 获取此商品下，这两个用户之间的所有非系统消息
+    return db.query(Message).filter(
+        Message.item_id == item_id,
+        Message.is_system == False,
+        Message.user_id.in_([user_id, other_user_id])
+    ).order_by(Message.created_at).all()
 
 def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
-    """获取用户的对话列表"""
-    # 获取用户作为买家的对话
-    buyer_conversations = db.query(
+    """
+    获取用户的对话列表，以"对话伙伴"为中心进行聚合。
+    使用更简单、更健壮的逻辑来避免SQL复杂性带来的bug。
+    增加了对None值的过滤，确保other_user_id始终有效。
+    """
+
+    # 1. 获取所有与用户相关的对话对 (item_id, other_user_id)
+    # 子查询1: 用户是发送者，对话伙伴是商品所有者
+    sent_messages = db.query(
         Message.item_id,
-        func.count(Message.id).label('message_count'),
-        func.max(Message.created_at).label('last_message_time'),
-        func.sum(case((Message.is_read == False, 1), else_=0)).label('unread_count')
-    ).filter(
-        Message.user_id == user_id
-    ).group_by(Message.item_id).all()
-    
-    # 获取用户作为卖家的对话（用户发布的商品收到的消息）
-    seller_conversations = db.query(
-        Message.item_id,
-        func.count(Message.id).label('message_count'),
-        func.max(Message.created_at).label('last_message_time'),
-        func.sum(case((Message.is_read == False, 1), else_=0)).label('unread_count')
+        Item.owner_id.label('other_user_id')
     ).join(Item, Message.item_id == Item.id).filter(
-        Item.owner_id == user_id
-    ).group_by(Message.item_id).all()
+        Message.user_id == user_id,
+        Message.is_system == False,
+        Item.owner_id.isnot(None),  # 确保商品所有者存在
+        Item.owner_id != user_id      # 排除与自己的对话
+    ).distinct()
+
+    # 子查询2: 用户是商品所有者，对话伙伴是消息发送者
+    received_messages = db.query(
+        Message.item_id,
+        Message.user_id.label('other_user_id')
+    ).join(Item, Message.item_id == Item.id).filter(
+        Item.owner_id == user_id,
+        Message.is_system == False,
+        Message.user_id.isnot(None), # 确保消息发送者存在
+        Message.user_id != user_id   # 排除与自己的对话
+    ).distinct()
+
+    # 合并并去重所有对话对
+    all_conversations_query = sent_messages.union(received_messages)
     
-    # 合并对话列表
-    all_conversations = {}
-    
-    for conv in buyer_conversations:
-        item = db.query(Item).filter(Item.id == conv.item_id).first()
-        if item:
-            all_conversations[conv.item_id] = {
-                'item_id': conv.item_id,
-                'item_title': item.title,
-                'item_price': item.price,
-                'item_images': item.images,
-                'message_count': conv.message_count,
-                'last_message_time': conv.last_message_time,
-                'unread_count': conv.unread_count or 0,
-                'is_seller': False
-            }
-    
-    for conv in seller_conversations:
-        item = db.query(Item).filter(Item.id == conv.item_id).first()
-        if item:
-            if conv.item_id in all_conversations:
-                all_conversations[conv.item_id]['message_count'] += conv.message_count
-                all_conversations[conv.item_id]['unread_count'] += conv.unread_count or 0
-                if conv.last_message_time > all_conversations[conv.item_id]['last_message_time']:
-                    all_conversations[conv.item_id]['last_message_time'] = conv.last_message_time
-            else:
-                all_conversations[conv.item_id] = {
-                    'item_id': conv.item_id,
-                    'item_title': item.title,
-                    'item_price': item.price,
-                    'item_images': item.images,
-                    'message_count': conv.message_count,
-                    'last_message_time': conv.last_message_time,
-                    'unread_count': conv.unread_count or 0,
-                    'is_seller': True
-                }
-    
-    # 按最后消息时间排序
-    return sorted(all_conversations.values(), key=lambda x: x['last_message_time'], reverse=True)
+    # 直接从数据库获取干净的、唯一的(item_id, other_user_id)列表
+    conversation_keys = all_conversations_query.all()
+
+    if not conversation_keys:
+        return []
+
+    # 2. 为每个唯一的对话填充详细信息
+    output = []
+    for item_id, other_user_id in conversation_keys:
+        # a. 获取对话伙伴的用户信息
+        other_user = db.query(User).filter(User.id == other_user_id).first()
+        if not other_user:
+            continue
+
+        # b. 找到这个对话的最后一条消息
+        last_message = db.query(Message).filter(
+            Message.item_id == item_id,
+            Message.user_id.in_([user_id, other_user_id])
+        ).order_by(Message.created_at.desc()).first()
+
+        if not last_message:
+            continue
+            
+        # c. 计算当前用户在此对话中的未读消息数
+        unread_count = db.query(func.count(Message.id)).filter(
+            Message.item_id == item_id,
+            Message.is_read == False,
+            Message.user_id == other_user_id  # 未读消息是由对方发送的
+        ).scalar() or 0
+
+        # d. 组装对话摘要
+        output.append({
+            'item_id': item_id,
+            'other_user_id': other_user.id,
+            'other_user_name': other_user.username,
+            'other_user_avatar': other_user.avatar,
+            'last_message_content': last_message.content,
+            'last_message_time': last_message.created_at,
+            'unread_count': unread_count
+        })
+
+    # 3. 按最后消息时间排序
+    output.sort(key=lambda x: x['last_message_time'], reverse=True)
+
+    return output
 
 def get_unread_count(db: Session, user_id: int) -> int:
-    """获取用户未读消息数量"""
-    # 用户作为买家的未读消息
-    buyer_unread = db.query(func.count(Message.id)).filter(
-        and_(
-            Message.user_id == user_id,
-            Message.is_read == False
-        )
+    """获取用户所有对话的未读消息总数"""
+    
+    # 找出用户参与的所有对话的 item_id
+    buyer_item_ids = db.query(Message.item_id).filter(Message.user_id == user_id, Message.is_system == False).distinct()
+    seller_item_ids = db.query(Item.id).join(Message, Message.item_id == Item.id).filter(Item.owner_id == user_id, Message.is_system == False).distinct()
+    
+    involved_item_ids_query = buyer_item_ids.union(seller_item_ids)
+    involved_item_ids = {row[0] for row in involved_item_ids_query.all()}
+    
+    if not involved_item_ids:
+        return 0
+
+    # 计算这些对话中所有未读消息的总和
+    total_unread = db.query(func.count(Message.id)).filter(
+        Message.item_id.in_(involved_item_ids),
+        Message.is_read == False,
+        Message.is_system == False,
+        Message.user_id != user_id
     ).scalar() or 0
     
-    # 用户作为卖家的未读消息（其他用户发给用户商品的消息）
-    seller_unread = db.query(func.count(Message.id)).join(Item, Message.item_id == Item.id).filter(
-        and_(
-            Item.owner_id == user_id,
-            Message.is_read == False
-        )
-    ).scalar() or 0
-    
-    return buyer_unread + seller_unread
+    return total_unread
 
 def mark_as_read(db: Session, message_id: int) -> Message:
     """标记消息为已读"""
@@ -213,8 +246,8 @@ class MessageCRUD:
     def get_user_messages(self, db: Session, user_id: int, skip: int = 0, limit: int = 50):
         return get_user_messages(db, user_id, skip, limit)
     
-    def get_conversation_messages(self, db: Session, user_id: int, item_id: int):
-        return get_conversation_messages(db, user_id, item_id)
+    def get_conversation_messages(self, db: Session, user_id: int, item_id: int, other_user_id: int):
+        return get_conversation_messages(db, user_id, item_id, other_user_id)
     
     def get_user_conversations(self, db: Session, user_id: int):
         return get_user_conversations(db, user_id)

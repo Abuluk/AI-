@@ -203,8 +203,8 @@ export default {
   },
 
   // 添加获取特定商品对话方法
-  async getConversationMessages(itemId) {
-    return api.get(`/messages/conversation/${itemId}`)
+  async getConversationMessages(itemId, otherUserId) {
+    return api.get(`/messages/conversation/${itemId}/${otherUserId}`)
   },
 
   // 搜索商品方法
@@ -253,6 +253,11 @@ export default {
   // 标记商品为已售
   async markItemSold(itemId) {
     return api.patch(`/items/${itemId}/sold`)
+  },
+
+  // 添加获取公共系统消息方法
+  async getPublicSystemMessages() {
+    return retryRequest(() => api.get('/messages/system'));
   },
 
   // 管理员API

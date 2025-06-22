@@ -12,6 +12,16 @@ from core.security import get_current_user
 
 router = APIRouter()
 
+@router.get("/system", response_model=List[MessageResponse])
+def get_public_system_messages(
+    db: Session = Depends(get_db),
+    # current_user: User = Depends(get_current_user) #
+    skip: int = 0,
+    limit: int = 10
+):
+    """获取对所有用户可见的系统消息"""
+    return message_crud.get_system_messages(db=db, skip=skip, limit=limit)
+
 @router.get("/", response_model=List[MessageResponse])
 async def get_messages(
     skip: int = 0,
@@ -32,14 +42,17 @@ async def get_conversations(
     conversations = message_crud.get_user_conversations(db, user_id=current_user.id)
     return conversations
 
-@router.get("/conversation/{item_id}", response_model=List[MessageResponse])
+@router.get("/conversation/{item_id}/{other_user_id}", response_model=List[MessageResponse])
 async def get_conversation_messages(
     item_id: int,
+    other_user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """获取特定商品的对话消息"""
-    messages = message_crud.get_conversation_messages(db, user_id=current_user.id, item_id=item_id)
+    """获取特定商品、特定对话伙伴之间的所有消息"""
+    messages = message_crud.get_conversation_messages(
+        db, user_id=current_user.id, item_id=item_id, other_user_id=other_user_id
+    )
     return messages
 
 @router.post("/", response_model=MessageResponse)

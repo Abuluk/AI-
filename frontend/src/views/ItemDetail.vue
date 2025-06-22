@@ -158,7 +158,7 @@ export default {
     return {
       mainImage: '',
       product: {
-        id: null,
+        id: this.id,
         title: '',
         price: 0,
         description: '',
@@ -184,30 +184,28 @@ export default {
         items_count: 0
       },
       relatedProducts: [],
-      isFavorited: false
+      isFavorited: false,
+      isOwner: false
     }
   },
-  created() {
-    this.mainImage = this.product.images[0]
-  },
-  async created() {
+  async mounted() {
     await this.fetchItemData()
+    if (this.user) {
+      this.isOwner = this.user.id === this.product.owner_id
+    }
     this.checkFavoriteStatus()
   },
   computed: {
     user() {
       return useAuthStore().user
-    },
-    isOwner() {
-      return this.user && this.user.id === this.product.owner_id
     }
   },
   methods: {
     async fetchItemData() {
       try {
-        // 调用真实API获取商品数据
         const response = await api.getItem(this.id)
         this.product = response.data
+        this.isOwner = this.user && this.user.id === this.product.owner_id
         
         // 处理图片数据
         if (this.product.images) {
@@ -363,7 +361,11 @@ export default {
       alert('购买流程开始...')
     },
     startChat() {
-      this.$router.push({ name: 'Chat', params: { id: this.seller.id } })
+      if (!this.product.id) {
+        alert('无法获取商品ID，无法开始聊天。')
+        return
+      }
+      this.$router.push({ name: 'Chat', params: { id: this.product.id } })
     },
     formatTime(createdAt) {
       if (!createdAt) return '未知时间'
