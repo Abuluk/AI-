@@ -36,17 +36,54 @@
           <div class="seller-info">
             <h3>卖家信息</h3>
             <div class="seller-card">
-              <img :src="seller.avatar" class="seller-avatar">
+              <div class="seller-header">
+                <img :src="seller.avatar" class="seller-avatar" @error="handleAvatarError">
+                <div class="seller-basic-info">
+                  <div class="seller-name">{{ seller.username }}</div>
+                  <div class="seller-stats">
+                    <span class="stat-item">
+                      <i class="fas fa-box"></i>
+                      {{ seller.items_count || 0 }} 件商品
+                    </span>
+                    <span class="stat-item">
+                      <i class="fas fa-calendar-alt"></i>
+                      {{ formatJoinDate(seller.created_at) }} 加入
+                    </span>
+                  </div>
+                </div>
+                <button class="btn btn-outline" @click="startChat">
+                  <i class="fas fa-comment"></i> 联系卖家
+                </button>
+              </div>
+              
               <div class="seller-details">
-                <div class="seller-name">{{ seller.username }}</div>
-                <div class="seller-rating">
-                  <i class="fas fa-star"></i>
-                  <span>4.8 (256评价)</span>
+                <div v-if="seller.bio" class="seller-bio">
+                  <h4>个人简介</h4>
+                  <p>{{ seller.bio }}</p>
+                </div>
+                
+                <div class="seller-contact-info">
+                  <div v-if="seller.location" class="contact-item">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <span>所在地：{{ seller.location }}</span>
+                  </div>
+                  <div v-if="seller.contact" class="contact-item">
+                    <i class="fas fa-phone"></i>
+                    <span>联系方式：{{ seller.contact }}</span>
+                  </div>
+                  <div v-if="seller.phone" class="contact-item">
+                    <i class="fas fa-mobile-alt"></i>
+                    <span>手机：{{ seller.phone }}</span>
+                  </div>
+                </div>
+                
+                <div class="seller-activity">
+                  <div class="activity-item">
+                    <i class="fas fa-eye"></i>
+                    <span>最近活跃：{{ formatLastActive(seller.last_login) }}</span>
+                  </div>
                 </div>
               </div>
-              <button class="btn btn-outline" @click="startChat">
-                <i class="fas fa-comment"></i> 联系卖家
-              </button>
             </div>
           </div>
         </div>
@@ -137,7 +174,14 @@ export default {
       seller: {
         id: null,
         username: '',
-        avatar: ''
+        avatar: '',
+        bio: '',
+        location: '',
+        contact: '',
+        phone: '',
+        created_at: '',
+        last_login: '',
+        items_count: 0
       },
       relatedProducts: [],
       isFavorited: false
@@ -194,18 +238,41 @@ export default {
         
         // 获取卖家信息
         if (this.product.owner_id) {
+          console.log('获取卖家信息，owner_id:', this.product.owner_id)
           try {
             const sellerResponse = await api.getUser(this.product.owner_id)
-            this.seller = sellerResponse.data
+            console.log('卖家信息API响应:', sellerResponse.data)
+            this.seller = {
+              id: sellerResponse.data.id,
+              username: sellerResponse.data.username || '未知用户',
+              avatar: sellerResponse.data.avatar || 'default_avatar.png',
+              bio: sellerResponse.data.bio || '',
+              location: sellerResponse.data.location || '',
+              contact: sellerResponse.data.contact || '',
+              phone: sellerResponse.data.phone || '',
+              created_at: sellerResponse.data.created_at || '',
+              last_login: sellerResponse.data.last_login || '',
+              items_count: sellerResponse.data.items_count || 0
+            }
+            console.log('设置卖家信息:', this.seller)
           } catch (error) {
-            console.warn('获取卖家信息失败:', error)
+            console.error('获取卖家信息失败:', error)
             // 使用默认卖家信息
             this.seller = {
               id: this.product.owner_id,
               username: '未知用户',
-              avatar: 'default_avatar.png'
+              avatar: 'default_avatar.png',
+              bio: '',
+              location: '',
+              contact: '',
+              phone: '',
+              created_at: '',
+              last_login: '',
+              items_count: 0
             }
           }
+        } else {
+          console.warn('商品没有owner_id，无法获取卖家信息')
         }
         
         // 获取推荐商品（简化版，实际可以根据分类或标签获取）
@@ -328,6 +395,71 @@ export default {
         month: 'long',
         day: 'numeric'
       })
+    },
+    formatJoinDate(createdAt) {
+      if (!createdAt) return '未知时间'
+      let date
+      // 兼容 "2024-06-22 12:34:56" 和 "2024-06-22T12:34:56Z"
+      if (typeof createdAt === 'string') {
+        let iso = createdAt.replace(' ', 'T')
+        if (!iso.endsWith('Z')) iso += 'Z'
+        date = new Date(iso)
+      } else {
+        date = new Date(createdAt)
+      }
+      if (isNaN(date.getTime())) return '未知时间'
+      const now = new Date()
+      const diff = now - date
+      const minutes = Math.floor(diff / (1000 * 60))
+      const hours = Math.floor(diff / (1000 * 60 * 60))
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const months = Math.floor(days / 30)
+      const years = Math.floor(days / 365)
+      if (minutes < 1) return '刚刚'
+      if (minutes < 60) return `${minutes}分钟前`
+      if (hours < 24) return `${hours}小时前`
+      if (days < 30) return `${days}天前`
+      if (months < 12) return `${months}个月前`
+      if (years >= 1) return `${years}年前`
+      return date.toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    },
+    formatLastActive(lastLogin) {
+      if (!lastLogin) return '未知时间'
+      let date
+      // 兼容 "2024-06-22 12:34:56" 和 "2024-06-22T12:34:56Z"
+      if (typeof lastLogin === 'string') {
+        let iso = lastLogin.replace(' ', 'T')
+        if (!iso.endsWith('Z')) iso += 'Z'
+        date = new Date(iso)
+      } else {
+        date = new Date(lastLogin)
+      }
+      if (isNaN(date.getTime())) return '未知时间'
+      const now = new Date()
+      const diff = now - date
+      const minutes = Math.floor(diff / (1000 * 60))
+      const hours = Math.floor(diff / (1000 * 60 * 60))
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const months = Math.floor(days / 30)
+      const years = Math.floor(days / 365)
+      if (minutes < 1) return '刚刚'
+      if (minutes < 60) return `${minutes}分钟前`
+      if (hours < 24) return `${hours}小时前`
+      if (days < 30) return `${days}天前`
+      if (months < 12) return `${months}个月前`
+      if (years >= 1) return `${years}年前`
+      return date.toLocaleDateString('zh-CN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+    },
+    handleAvatarError() {
+      this.seller.avatar = 'default_avatar.png'
     }
   }
 }
@@ -422,39 +554,110 @@ export default {
 
 .seller-card {
   display: flex;
-  align-items: center;
-  padding: 15px;
-  background-color: var(--secondary);
+  flex-direction: column;
+  padding: 20px;
+  border: 1px solid var(--border);
   border-radius: 8px;
+  background: #f9f9f9;
   margin-bottom: 20px;
 }
 
-.seller-avatar {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  object-fit: cover;
-  margin-right: 15px;
+.seller-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border);
 }
 
-.seller-details {
+.seller-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border);
+}
+
+.seller-basic-info {
   flex: 1;
 }
 
 .seller-name {
+  font-size: 1.2rem;
   font-weight: 600;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
+  color: var(--text-dark);
 }
 
-.seller-rating {
+.seller-stats {
   color: var(--text-light);
+  display: flex;
+  gap: 15px;
+  font-size: 0.9rem;
+}
+
+.stat-item {
   display: flex;
   align-items: center;
   gap: 5px;
 }
 
-.seller-rating i {
-  color: #ffc107;
+.stat-item i {
+  color: var(--primary);
+}
+
+.seller-details {
+  width: 100%;
+}
+
+.seller-bio {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.seller-bio h4 {
+  margin-bottom: 10px;
+  font-size: 1.1rem;
+  color: var(--text-dark);
+}
+
+.seller-bio p {
+  color: var(--text-light);
+  line-height: 1.5;
+}
+
+.seller-contact-info {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  color: var(--text-light);
+}
+
+.contact-item i {
+  margin-right: 8px;
+  width: 16px;
+  color: var(--primary);
+}
+
+.seller-activity {
+  text-align: left;
+}
+
+.activity-item {
+  color: var(--text-light);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-item i {
+  color: var(--primary);
 }
 
 .action-buttons {
@@ -476,17 +679,41 @@ export default {
     flex-direction: column;
   }
   
-  .detail-images, .detail-info {
-    width: 100%;
-    padding: 0;
-  }
-  
   .detail-images {
     margin-bottom: 20px;
   }
   
+  .main-image {
+    height: 300px;
+  }
+  
+  .thumbnail-container {
+    justify-content: center;
+  }
+  
+  .seller-header {
+    flex-direction: column;
+    text-align: center;
+    gap: 10px;
+  }
+  
+  .seller-stats {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  
   .action-buttons {
     flex-direction: column;
+    gap: 10px;
+  }
+  
+  .action-buttons .btn {
+    width: 100%;
+  }
+  
+  .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 15px;
   }
 }
 /* 状态标签样式 */

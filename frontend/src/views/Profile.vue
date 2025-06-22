@@ -55,7 +55,7 @@
       </div>
       
       <div>
-        <button class="btn btn-outline" @click="showEditModal = true">
+        <button class="btn btn-outline" @click="openEditModal">
           <i class="fas fa-edit"></i> 编辑资料
         </button>
       </div>
@@ -252,61 +252,52 @@
       <div class="modal-content">
         <div class="modal-header">
           <h3>编辑个人资料</h3>
-          <button class="modal-close" @click="closeEditModal">
-            <i class="fas fa-times"></i>
-          </button>
+          <button class="modal-close" @click="closeEditModal">&times;</button>
         </div>
         
         <div class="modal-body">
-          <div class="form-group">
-            <label>用户名</label>
-            <input type="text" v-model="editForm.username" maxlength="20">
-            <div class="char-count">{{ editForm.username.length }}/20</div>
-          </div>
-          
-          <div class="form-group">
-            <label>个人简介</label>
-            <textarea v-model="editForm.bio" rows="3" maxlength="120"></textarea>
-            <div class="char-count">{{ editForm.bio.length }}/120</div>
-          </div>
-          
-          <div class="form-group">
-            <label>头像</label>
-            <div class="avatar-edit-preview">
-                  <img 
-                    :src="editForm.avatarPreview" 
-                    class="preview-image"
-                    @error="handlePreviewError"
+          <form @submit.prevent="saveProfile">
+            <div class="form-group avatar-form-group">
+              <label>头像</label>
+              <div class="avatar-edit-preview">
+                <img :src="editForm.avatarPreview" class="preview-image">
+                <label for="edit-avatar-upload" class="avatar-edit-btn">
+                  <i class="fas fa-camera"></i> 更换
+                  <input 
+                    id="edit-avatar-upload" 
+                    type="file" 
+                    accept="image/*" 
+                    @change="handleAvatarFileChange"
+                    hidden
                   >
-              <label for="edit-avatar-upload" class="avatar-edit-btn">
-                <i class="fas fa-camera"></i> 更换头像
-                <input 
-                  id="edit-avatar-upload" 
-                  type="file" 
-                  accept="image/*" 
-                  @change="handleAvatarUpload"
-                  hidden
-                >
-              </label>
+                </label>
+              </div>
             </div>
-          </div>
-          
-          <div class="form-group">
-            <label>联系方式</label>
-            <input type="text" v-model="editForm.contact" placeholder="微信/QQ/手机号">
-          </div>
-          
-          <div class="form-group">
-            <label>地址</label>
-            <input type="text" v-model="editForm.location" placeholder="所在城市">
-          </div>
+
+            <div class="form-group">
+              <label for="username">用户名</label>
+              <input id="username" type="text" v-model="editForm.username" required>
+            </div>
+            <div class="form-group">
+              <label for="bio">个人简介</label>
+              <textarea id="bio" v-model="editForm.bio" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="location">所在地区</label>
+              <input id="location" type="text" v-model="editForm.location">
+            </div>
+            <div class="form-group">
+              <label for="contact">联系方式</label>
+              <input id="contact" type="text" v-model="editForm.contact">
+            </div>
+          </form>
         </div>
         
         <div class="modal-footer">
-          <button class="btn btn-outline" @click="closeEditModal">取消</button>
-          <button class="btn btn-primary" @click="saveProfile" :disabled="savingProfile">
+          <button type="button" class="btn btn-outline" @click="closeEditModal">取消</button>
+          <button type="button" class="btn btn-primary" @click="saveProfile" :disabled="savingProfile">
             <span v-if="savingProfile">保存中...</span>
-            <span v-else>保存资料</span>
+            <span v-else>保存</span>
           </button>
         </div>
       </div>
@@ -423,82 +414,72 @@ const editForm = reactive({
 // 用于保存新头像文件对象
 const newAvatarFile = ref(null)
 
-// 确保编辑模态框打开时正确初始化预览
+// 新增：打开编辑模态框并填充数据
 const openEditModal = () => {
-  initEditForm()
-  showEditModal.value = true
-}
+  const currentUser = authStore.user;
+  if (currentUser) {
+    editForm.username = currentUser.username || '';
+    editForm.bio = currentUser.bio || '';
+    editForm.location = currentUser.location || '';
+    editForm.contact = currentUser.contact || '';
+    editForm.avatarPreview = currentUser.avatar ? `${currentUser.avatar}?t=${new Date().getTime()}` : ''; // 加时间戳避免缓存
+  }
+  newAvatarFile.value = null; // 重置文件
+  showEditModal.value = true;
+};
 
-// 初始化编辑表单
-const initEditForm = () => {
-  const user = authStore.user || {}
-  editForm.username = user.username || ''
-  editForm.bio = user.bio || ''
-  editForm.avatarPreview = user.avatar || 'default_avatar.png'
-  editForm.contact = user.contact || ''
-  editForm.location = user.location || ''
-
-   // 使用带时间戳的头像URL
-  editForm.avatarPreview = user.avatar 
-    ? `${user.avatar}?t=${Date.now()}` 
-    : 'default_avatar.png'
-    
-  editForm.contact = user.contact || ''
-  editForm.location = user.location || ''
-  newAvatarFile.value = null
-}
-
-// 关闭编辑模态框
+// 关闭模态框，并清理可能存在的Blob URL
 const closeEditModal = () => {
-  showEditModal.value = false
-  // 重置新头像文件
-  newAvatarFile.value = null
-}
+  if (editForm.avatarPreview && editForm.avatarPreview.startsWith('blob:')) {
+    URL.revokeObjectURL(editForm.avatarPreview);
+  }
+  showEditModal.value = false;
+};
 
-// 保存资料
+// 当用户选择新头像文件时
+const handleAvatarFileChange = (event) => {
+  const file = event.target.files[0];
+  if (file) {
+    newAvatarFile.value = file;
+    // 创建一个临时的URL用于预览
+    editForm.avatarPreview = URL.createObjectURL(file);
+  }
+};
+
+// 保存所有资料
 const saveProfile = async () => {
-  savingProfile.value = true
+  if (!editForm.username) {
+    alert('用户名不能为空！');
+    return;
+  }
+  savingProfile.value = true;
   try {
-    // 如果有新头像，先上传头像
+    // 1. 如果有新头像，先上传头像
     if (newAvatarFile.value) {
-      const updatedUser = await authStore.updateAvatar(newAvatarFile.value)
-      // 使用服务器返回的永久URL更新预览
-      editForm.avatarPreview = updatedUser.avatar
-      authStore.user.avatar = updatedUser.avatar
+      await authStore.updateAvatar(newAvatarFile.value);
     }
     
-    // 保存其他资料
-    const { avatarPreview, ...profileData } = editForm
-    const updatedUser = await authStore.updateUserProfile(profileData)
+    // 2. 更新其他文本资料
+    const profileData = {
+      username: editForm.username,
+      bio: editForm.bio,
+      location: editForm.location,
+      contact: editForm.contact,
+    };
+    await authStore.updateUserProfile(profileData);
     
-    // 更新本地用户信息
-    authStore.user = { ...authStore.user, ...updatedUser }
-    
-   // 关闭编辑模态框
-const closeEditModal = () => {
-  // 如果当前预览是blob URL，则释放
-  if (editForm.avatarPreview.startsWith('blob:')) {
-    URL.revokeObjectURL(editForm.avatarPreview)
-  }
-  showEditModal.value = false
-  newAvatarFile.value = null
-}
+    alert('资料更新成功！');
+    closeEditModal();
+    // 强制刷新一次用户信息，确保页面数据同步
+    await authStore.fetchCurrentUser();
+
   } catch (error) {
-    console.error('保存资料失败:', error)
-    
-    // 显示更具体的错误信息
-    let errorMessage = '保存失败，请重试'
-    if (error.response?.data?.detail) {
-      errorMessage = error.response.data.detail
-    } else if (error.message) {
-      errorMessage = error.message
-    }
-    
-    alert(errorMessage)
+    console.error('资料更新失败:', error);
+    alert('资料更新失败，请重试。');
   } finally {
-    savingProfile.value = false
+    savingProfile.value = false;
   }
-}
+};
 
 // 通用的头像上传处理函数
 const handleAvatarUpload = async (e, isProfileHeader = false) => {

@@ -83,9 +83,12 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # 确定token的sub字段：优先使用username，如果为空则使用邮箱
+    token_subject = user.username if user.username else user.email
+    
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": token_subject}, expires_delta=access_token_expires
     )
     
     # 更新最后登录时间

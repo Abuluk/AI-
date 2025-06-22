@@ -27,8 +27,10 @@ class UserInDB(UserBase):
     contact: Optional[str]
     location: Optional[str]
     is_active: bool
+    is_admin: bool
     created_at: datetime
     updated_at: datetime
+    last_login: Optional[datetime]
     followers: int
     following: int
     items_count: int

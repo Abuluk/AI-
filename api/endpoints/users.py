@@ -19,9 +19,31 @@ router = APIRouter()
 
 @router.get("/me", response_model=UserInDB)
 def read_user_me(
-    current_user: UserInDB = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    return current_user
+    # 计算用户的商品数量
+    items_count = db.query(Item).filter(Item.owner_id == current_user.id).count()
+    
+    # 返回完整的用户信息，包括is_admin字段
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "phone": current_user.phone,
+        "avatar": current_user.avatar,
+        "bio": current_user.bio,
+        "location": current_user.location,
+        "contact": current_user.contact,
+        "created_at": current_user.created_at,
+        "updated_at": current_user.updated_at,
+        "last_login": current_user.last_login,
+        "is_active": current_user.is_active,
+        "is_admin": current_user.is_admin,
+        "followers": current_user.followers,
+        "following": current_user.following,
+        "items_count": items_count
+    }
 
 @router.put("/me", response_model=UserInDB)
 def update_user_me(
@@ -47,7 +69,8 @@ def get_user_stats(
     # 获取用户商品统计
     selling_count = db.query(Item).filter(
         Item.owner_id == user_id,
-        Item.sold == False
+        Item.sold == False,
+        Item.status == "online"
     ).count()
     
     sold_count = db.query(Item).filter(
@@ -67,7 +90,6 @@ def get_user_stats(
     }
 
 # 添加用户商品查询路由
-# users.py
 @router.get("/{user_id}/items", response_model=List[ItemInDB])
 def get_user_items(
     user_id: int,
@@ -124,9 +146,25 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    return user
-
-@router.get("/me", response_model=UserInDB)
-def get_current_user_info(current_user: User = Depends(get_current_user)):
-    """获取当前用户信息"""
-    return current_user
+    
+    # 计算用户的商品数量
+    items_count = db.query(Item).filter(Item.owner_id == user_id).count()
+    
+    # 返回用户信息，包含商品数量
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "avatar": user.avatar,
+        "bio": user.bio,
+        "location": user.location,
+        "contact": user.contact,
+        "phone": user.phone,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "last_login": user.last_login,
+        "is_active": user.is_active,
+        "followers": user.followers,
+        "following": user.following,
+        "items_count": items_count
+    }

@@ -228,15 +228,31 @@ const calculatePasswordStrength = (password) => {
 }
 
 const submitForm = async () => {
+  console.log('submitForm called. Mode:', isLoginMode.value ? 'Login' : 'Register');
+  // 使用 toRaw 来获取原始对象，避免响应式代理的复杂结构
+  console.log('Form data:', form.phone, form.password);
+
   if (isLoginMode.value) {
     try {
+      const identifier = form.phone;
+      console.log('Attempting login with identifier:', identifier);
+      
+      if (!identifier || !form.password) {
+        console.error('Identifier or password is empty.');
+        authStore.error = '手机号和密码不能为空';
+        return;
+      }
+
       await authStore.login({
-        identifier: form.username || form.phone,
+        identifier: identifier,
         password: form.password
       })
-      router.push('/')
+      console.log('Login call finished in submitForm.');
+      // 普通用户登录成功后，跳转到首页
+      router.push('/');
     } catch (error) {
-      console.error('登录失败:', error)
+      console.error('Login failed in submitForm:', error);
+      // 错误信息已经在authStore中设置，这里只记录日志
     }
   } else {
     if (form.password !== form.confirmPassword) {
@@ -251,36 +267,17 @@ const submitForm = async () => {
     }
     
     try {
-  await authStore.register({
-    username: form.username,
-    email: form.email,
-    phone: form.phone,
-    password: form.password
-  })
-  router.push('/')
-} catch (error) {
-  // 处理Axios等HTTP客户端的错误
-  if (error.response) {
-    console.error('API错误响应:', error.response.data)
-    console.error('状态码:', error.response.status)
-    console.error('请求头:', error.response.headers)
-    
-    // 处理常见错误
-    if (error.response.status === 400) {
-      console.error('输入验证失败:', error.response.data.errors)
-    } else if (error.response.status === 409) {
-      console.error('用户名或邮箱已存在')
+      await authStore.register({
+        username: form.username,
+        email: form.email,
+        phone: form.phone,
+        password: form.password
+      })
+      // 注册并自动登录后，跳转到首页
+      router.push('/');
+    } catch (error) {
+      // 错误已在store中处理
     }
-  } 
-  // 处理网络错误
-  else if (error.request) {
-    console.error('网络请求已发出，但未收到响应:', error.request)
-  } 
-  // 处理其他错误
-  else {
-    console.error('注册过程中发生错误:', error.message)
-  }
-}
   }
 }
 </script>

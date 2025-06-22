@@ -17,6 +17,7 @@ export const useAuthStore = defineStore('auth', {
         const response = await api.login(credentials)
         if (response.data.access_token) {
           this.isAuthenticated = true
+          // 登录成功后，只获取用户信息，不再负责跳转
           await this.fetchCurrentUser()
         }
         return response

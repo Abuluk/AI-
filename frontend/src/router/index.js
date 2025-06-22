@@ -7,8 +7,13 @@ const routes = [
   { path: '/login', component: () => import('@/views/LoginRegister.vue') },
   { path: '/profile',name: 'Profile', component: () => import('@/views/Profile.vue') },
   { path: '/messages', component: () => import('@/views/MessagesList.vue') },
-  { path: '/chat/:id', name: 'Chat', component: () => import('@/views/Chat.vue'), props: true }
-
+  { path: '/chat/:id', name: 'Chat', component: () => import('@/views/Chat.vue'), props: true },
+  { path: '/admin', name: 'Admin', component: () => import('@/views/Admin.vue') },
+  { path: '/admin/login', name: 'AdminLogin', component: () => import('@/views/AdminLogin.vue') },
+  { path: '/discover', component: () => import('@/views/Home.vue') },
+  { path: '/forgot-password', component: () => import('@/views/LoginRegister.vue') },
+  { path: '/terms', component: () => import('@/views/Home.vue') },
+  { path: '/privacy', component: () => import('@/views/Home.vue') }
 ]
 
 const router = createRouter({

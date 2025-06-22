@@ -191,5 +191,46 @@ export default {
   // 标记商品为已售
   async markItemSold(itemId) {
     return api.patch(`/items/${itemId}/sold`)
+  },
+
+  // 管理员API
+  async getAdminStats() {
+    return api.get('/admin/stats')
+  },
+
+  async getAdminUsers(params = {}) {
+    return api.get('/admin/users', { params })
+  },
+
+  async getAdminUser(userId) {
+    return api.get(`/admin/users/${userId}`)
+  },
+
+  async updateUserStatus(userId, isActive) {
+    return api.patch(`/admin/users/${userId}/status?is_active=${isActive}`)
+  },
+
+  async updateUserAdminStatus(userId, isAdmin) {
+    return api.patch(`/admin/users/${userId}/admin?is_admin=${isAdmin}`)
+  },
+
+  async deleteAdminUser(userId) {
+    return api.delete(`/admin/users/${userId}`)
+  },
+
+  async getAdminItems(params = {}) {
+    return api.get('/admin/items', { params })
+  },
+
+  async getAdminItem(itemId) {
+    return api.get(`/admin/items/${itemId}`)
+  },
+
+  async updateAdminItemStatus(itemId, status) {
+    return api.patch(`/admin/items/${itemId}/status?status=${status}`)
+  },
+
+  async deleteAdminItem(itemId) {
+    return api.delete(`/admin/items/${itemId}`)
   }
 }

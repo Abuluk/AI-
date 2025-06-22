@@ -62,14 +62,24 @@ async def get_current_user(
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
+        subject: str = payload.get("sub")
+        if not subject:
             raise credentials_exception
-        token_data = TokenData(username=username)
+        token_data = TokenData(username=subject)
     except JWTError:
         raise credentials_exception
     
+    # 尝试通过用户名查找用户
     user = get_user_by_username(db, token_data.username)
+    
+    # 如果用户名查找失败，尝试通过邮箱查找
+    if user is None:
+        user = get_user_by_email(db, token_data.username)
+    
+    # 如果邮箱查找也失败，尝试通过手机号查找
+    if user is None:
+        user = get_user_by_phone(db, token_data.username)
+    
     if user is None:
         raise credentials_exception
     return user

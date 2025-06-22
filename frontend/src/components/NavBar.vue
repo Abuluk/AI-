@@ -20,6 +20,10 @@
         <router-link to="/publish" class="nav-icon">
           <i class="fas fa-plus-circle"></i>
         </router-link>
+        <!-- 管理员入口 -->
+        <router-link v-if="isAdmin" to="/admin" class="nav-icon admin-icon" title="管理员控制台">
+          <i class="fas fa-cog"></i>
+        </router-link>
       </div>
     </div>
   </header>
@@ -28,6 +32,8 @@
 <script>
 import SearchBar from './SearchBar.vue'
 import { useRoute } from 'vue-router'
+import { useAuthStore } from '@/store/auth'
+import { computed } from 'vue'
 import { ref } from 'vue'
 
 export default {
@@ -36,8 +42,15 @@ export default {
   },
   setup() {
     const route = useRoute()
+    const authStore = useAuthStore()
+    
+    const isAdmin = computed(() => {
+      return authStore.user && authStore.user.is_admin
+    })
+    
     return {
-      route
+      route,
+      isAdmin
     }
   },
   data() {
@@ -116,6 +129,15 @@ header {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.admin-icon {
+  color: #e74c3c !important;
+}
+
+.admin-icon:hover i,
+.admin-icon.router-link-active i {
+  color: #c0392b !important;
 }
 
 @media (max-width: 768px) {

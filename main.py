@@ -80,3 +80,10 @@ app.add_middleware(
     # 关键：允许暴露 Content-Type 头
     expose_headers=["Content-Type", "Content-Disposition"]
 )
+
+# 添加启动服务器的代码
+if __name__ == "__main__":
+    import uvicorn
+    print("正在启动 Uvicorn 服务器...")
+    # 注意：为了让reload生效，app必须以字符串形式传入
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

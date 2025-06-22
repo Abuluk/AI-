@@ -18,6 +18,7 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)  # 添加管理员字段
     last_login = Column(DateTime, nullable=True)
     followers = Column(Integer, default=0)
     following = Column(Integer, default=0)

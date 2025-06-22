@@ -5,7 +5,8 @@ from .endpoints import (
     users, 
     messages, 
     auth,
-    profile
+    profile,
+    admin
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
@@ -43,5 +44,13 @@ api_router.include_router(
     profile.router,
     prefix="/profile",
     tags=["个人中心"],
+    dependencies=[Depends(oauth2_scheme)]
+)
+
+# 管理员路由 - 需要管理员权限
+api_router.include_router(
+    admin.router,
+    prefix="/admin",
+    tags=["管理员"],
     dependencies=[Depends(oauth2_scheme)]
 )
