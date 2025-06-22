@@ -202,3 +202,21 @@ def update_item_status(
     db.refresh(item)
     
     return {"message": f"商品已{'上架' if status == 'online' else '下架'}", "item": item}
+
+@router.patch("/{item_id}/views")
+def update_item_views(
+    item_id: int,
+    db: Session = Depends(get_db)
+):
+    """更新商品浏览量"""
+    # 验证商品存在
+    item = crud_item.get_item(db, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="商品不存在")
+    
+    # 更新浏览量
+    item.views += 1
+    db.commit()
+    db.refresh(item)
+    
+    return {"message": "浏览量已更新", "views": item.views}

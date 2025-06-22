@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from db.session import get_db
-from core.security import get_current_active_user
+from core.security import get_current_active_user, get_current_user
 from db.models import User
 from db.models import Item
 from schemas.user import UserInDB, UserUpdate
 from db.models import Favorite
 from schemas.item import ItemInDB
+from schemas.favorite import FavoriteInDB
 from typing import List, Optional
 from crud.crud_user import (
     get_user,
@@ -102,3 +103,16 @@ def get_user_items(
     # 添加分页
     items = query.offset(skip).limit(limit).all()
     return items
+
+@router.get("/{user_id}", response_model=UserInDB)
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    """获取指定用户信息"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return user
+
+@router.get("/me", response_model=UserInDB)
+def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """获取当前用户信息"""
+    return current_user

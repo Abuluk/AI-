@@ -79,6 +79,7 @@ export default {
     return api.get('/items', { params })
   },
   
+  // 添加获取单个商品方法
   async getItem(itemId) {
     return api.get(`/items/${itemId}`)
   },
@@ -119,6 +120,11 @@ export default {
     return api.patch(`/items/${itemId}/status?status=${status}`)
   },
   
+  // 添加更新商品浏览量方法
+  async updateItemViews(itemId) {
+    return api.patch(`/items/${itemId}/views`)
+  },
+  
   // 消息操作
   async getConversations() {
     return api.get('/messages')
@@ -139,21 +145,24 @@ export default {
    })
   },
 
-  async checkFavorite(userId, itemId) {
-   return api.get(`/favorites/check?user_id=${userId}&item_id=${itemId}`)
-  },
-
-  async addFavorite(userId, itemId) {
-    return api.post('/favorites', { user_id: userId, item_id: itemId })
-  },
-
-  async removeFavorite(userId, itemId) {
-    return api.delete(`/favorites?user_id=${userId}&item_id=${itemId}`)
-  },
-
+  // 添加获取用户信息方法
   async getUser(userId) {
     return api.get(`/users/${userId}`)
   },
+
+  // 添加收藏相关方法
+  async checkFavorite(userId, itemId) {
+    return api.get(`/favorites/check?user_id=${userId}&item_id=${itemId}`)
+  },
+
+  async addFavorite(userId, itemId) {
+    return api.post(`/favorites/?user_id=${userId}&item_id=${itemId}`)
+  },
+
+  async removeFavorite(userId, itemId) {
+    return api.delete(`/favorites/?user_id=${userId}&item_id=${itemId}`)
+  },
+
   // 文件上传
   async uploadItemImages(itemId, files) {
     const formData = new FormData()
