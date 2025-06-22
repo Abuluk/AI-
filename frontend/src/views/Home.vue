@@ -57,7 +57,7 @@ import ProductCard from '@/components/ProductCard.vue'
 import { useAuthStore } from '@/store/auth'
 import { useRouter } from 'vue-router'
 import SearchBar from '@/components/SearchBar.vue'
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import api from '@/services/api';
 
 export default {
@@ -67,13 +67,26 @@ export default {
     SearchBar 
   },
   setup() {
-    const authStore = useAuthStore()
-    const router = useRouter()
-    
+    const authStore = useAuthStore();
+    const router = useRouter();
+    const formatDateTime = (datetime) => {
+      if (!datetime) return '未知';
+      const date = new Date(datetime);
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      const h = String(date.getHours()).padStart(2, '0');
+      const min = String(date.getMinutes()).padStart(2, '0');
+      return `${y}-${m}-${d} ${h}:${min}`;
+    };
+    // 防御式 user
+    const user = computed(() => authStore.user || {});
     return {
       authStore,
-      router
-    }
+      router,
+      formatDateTime,
+      user
+    };
   },
   data() {
     return {
@@ -136,13 +149,11 @@ export default {
       try {
         const q = this.$route.query.q;
         let response;
-        
         // 构建请求参数，包括排序参数
         const params = {
           skip: (this.pagination.page - 1) * this.pagination.limit,
           limit: this.pagination.limit
         };
-        
         // 根据排序选项添加排序参数
         switch(this.sortOption) {
           case 'newest':
@@ -157,7 +168,6 @@ export default {
           default:
             params.order_by = 'created_at_desc'; // 默认按最新发布排序
         }
-        
         if (q) {
           response = await api.searchItems(q, params);
         } else {
@@ -179,17 +189,14 @@ export default {
     goToLogin() {
       this.router.push('/login')
     },
-    
     // 退出登录
     handleLogout() {
       this.authStore.logout()
       // 可以添加登出后的操作，如跳转页面等
     },
-
     goToProfile() {
       this.router.push('/profile');
     }
-    
   }
 }
 </script>

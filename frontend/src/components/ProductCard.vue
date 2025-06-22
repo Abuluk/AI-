@@ -21,6 +21,7 @@
             <span><i class="fas fa-heart"></i> {{ product.favorited_count || 0 }}</span>
           </div>
         </div>
+        <span>发布时间：{{ formatDateTime(product.created_at) }}</span>
       </div>
     </router-link>
     
@@ -154,6 +155,18 @@ export default {
       // 或者使用在线默认图片：
        defaultImage: '/static/images/default_avatar.png'
     }
+  },
+  setup() {
+    const formatDateTime = (datetime) => {
+      const date = new Date(datetime);
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      const h = String(date.getHours()).padStart(2, '0');
+      const min = String(date.getMinutes()).padStart(2, '0');
+      return `${y}-${m}-${d} ${h}:${min}`;
+    };
+    return { formatDateTime };
   }
 }
 </script>

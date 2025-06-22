@@ -114,7 +114,9 @@
                 @online="handleOnlineItem"
                 @sold="handleSoldItem"
                 @delete="handleDeleteItem"
-              />
+              >
+                <span>发布时间：{{ formatDateTime(item.created_at) }}</span>
+              </ProductCard>
             </div>
             <div v-else class="empty-state">
               <i class="fas fa-store-slash"></i>
@@ -169,7 +171,9 @@
                 :sold="true"
                 :showActions="true"
                 @delete="handleDeleteItem"
-              />
+              >
+                <span>售出时间：{{ formatDateTime(item.soldAt) }}</span>
+              </ProductCard>
             </div>
             <div v-else class="empty-state">
               <i class="fas fa-box-open"></i>
@@ -215,7 +219,9 @@
                 :showActions="true"
                 :isFavorite="true"
                 @unfavorite="handleUnfavoriteItem"
-              />
+              >
+                <span>收藏时间：{{ formatDateTime(item.favoritedAt) }}</span>
+              </ProductCard>
             </div>
             <div v-else class="empty-state">
               <i class="fas fa-heart"></i>
@@ -1145,6 +1151,17 @@ const handleUnfavoriteItem = async (itemId) => {
     }
   }
 }
+
+const formatDateTime = (datetime) => {
+  if (!datetime) return '未知';
+  const date = new Date(datetime);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const h = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${d} ${h}:${min}`;
+};
 
 </script>
 

@@ -44,7 +44,7 @@
               <span>{{ message.title || '系统消息' }}</span>
             </div>
             <div class="message-text">{{ message.content }}</div>
-            <div class="message-time">{{ formatTime(message.created_at) }}</div>
+            <div class="message-time">{{ formatDateTime(message.created_at) }}</div>
           </div>
         </div>
         
@@ -223,21 +223,14 @@ export default {
       })
     }
     
-    const formatTime = (timestamp) => {
+    const formatDateTime = (timestamp) => {
       const date = new Date(timestamp)
-      const now = new Date()
-      const diff = now - date
-      const minutes = Math.floor(diff / 60000)
-      const hours = Math.floor(minutes / 60)
-      const days = Math.floor(hours / 24)
-      
-      if (minutes < 1) return '刚刚'
-      if (minutes < 60) return `${minutes}分钟前`
-      if (hours < 24) return `${hours}小时前`
-      if (days === 1) return '昨天'
-      if (days < 7) return `${days}天前`
-      
-      return date.toLocaleDateString()
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      const h = String(date.getHours()).padStart(2, '0');
+      const min = String(date.getMinutes()).padStart(2, '0');
+      return `${y}-${m}-${d} ${h}:${min}`;
     }
     
     const getItemImage = (images) => {
@@ -288,7 +281,7 @@ export default {
       showEmojiPicker,
       canSendMessage,
       sendMessage,
-      formatTime,
+      formatDateTime,
       getItemImage,
       getUserAvatar,
       handleAvatarError,

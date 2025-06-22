@@ -27,7 +27,7 @@ class ItemInDB(ItemBase):
     # 添加可选字段和默认值
     status: Optional[str] = "online"
     sold: Optional[bool] = False
-    created_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = None
     images: Optional[str] = None  # 添加图片字段，多个路径用逗号分隔
     owner_id: Optional[int] = None  # 添加所有者ID字段
     views: Optional[int] = 0  # 添加浏览量字段

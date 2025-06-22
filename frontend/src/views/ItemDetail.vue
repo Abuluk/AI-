@@ -6,7 +6,7 @@
         <div class="product-meta">
           <span>{{ product.location }}</span>
           <span>浏览: {{ product.views }}</span>
-          <span>发布时间: {{ formatTime(product.created_at) }}</span>
+          <span>发布时间: {{ formatDateTime(product.created_at) }}</span>
         </div>
       </div>
       
@@ -336,6 +336,15 @@ export default {
       } catch (error) {
         console.error('获取推荐商品失败:', error);
       }
+    },
+    formatDateTime(datetime) {
+      const date = new Date(datetime);
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      const h = String(date.getHours()).padStart(2, '0');
+      const min = String(date.getMinutes()).padStart(2, '0');
+      return `${y}-${m}-${d} ${h}:${min}`;
     }
   }
 }

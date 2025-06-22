@@ -22,7 +22,9 @@ def get_items_by_search(db: Session, query: str, skip: int = 0, limit: int = 100
     ).offset(skip).limit(limit).all()
 
 def create_item(db: Session, item: ItemCreate, owner_id: int):
-    db_item = Item(**item.dict(), owner_id=owner_id)
+    data = item.dict()
+    data.pop('created_at', None)  # 确保不传递 created_at
+    db_item = Item(**data, owner_id=owner_id)
     db.add(db_item)
     db.commit()
     db.refresh(db_item)

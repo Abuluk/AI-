@@ -41,7 +41,7 @@ class Item(Base):
     location = Column(String(100))
     images = Column(String(500))  # 存储图片路径，多个用逗号分隔
     owner_id = Column(Integer, ForeignKey("users.id"))
-    created_at = Column(DateTime, server_default=func.now())  # 使用数据库函数
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
     sold = Column(Boolean, default=False)
     views = Column(Integer, default=0)  # 添加浏览量字段
     favorited_count = Column(Integer, default=0)  # 添加收藏计数

@@ -18,7 +18,7 @@
           <router-link :to="`/system-messages/${msg.id}`" class="notification-link">
             <span class="notification-title">{{ msg.title || '系统消息' }}</span>
             <span class="notification-content">{{ msg.content }}</span>
-            <span class="notification-time">{{ formatTime(msg.created_at) }}</span>
+            <span class="notification-time">{{ formatDateTime(msg.created_at) }}</span>
           </router-link>
         </li>
       </ul>
@@ -57,7 +57,7 @@
           <div class="conversation-content">
             <div class="conversation-header">
               <span class="item-title">{{ conv.other_user_name }}</span>
-              <span class="time">{{ formatTime(conv.last_message_time) }}</span>
+              <span class="time">{{ formatDateTime(conv.last_message_time) }}</span>
             </div>
             <p class="last-message">{{ conv.last_message_content }}</p>
           </div>
@@ -123,19 +123,15 @@ const fetchConversations = async () => {
   }
 };
 
-const formatTime = (timestamp) => {
-  if (!timestamp) return '';
-  const date = new Date(timestamp);
-  if (isNaN(date.getTime())) return ''; //
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return '刚刚';
-  if (minutes < 60) return `${minutes}分钟前`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24 && date.getDate() === now.getDate()) return `${hours}小时前`;
-  if (now.getDate() - date.getDate() === 1) return '昨天';
-  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+const formatDateTime = (datetime) => {
+  if (!datetime) return '未知';
+  const date = new Date(datetime);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const h = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${d} ${h}:${min}`;
 };
 
 const getUserAvatar = (avatar) => {
