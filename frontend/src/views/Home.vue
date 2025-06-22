@@ -57,7 +57,7 @@ import ProductCard from '@/components/ProductCard.vue'
 import { useAuthStore } from '@/store/auth'
 import { useRouter } from 'vue-router'
 import SearchBar from '@/components/SearchBar.vue'
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue';
 import api from '@/services/api';
 
 export default {
@@ -96,8 +96,9 @@ export default {
       error: null,
       pagination: {
         page: 1,
-        limit: 10
-      }
+        limit: 30
+      },
+      hasMore: true
     }
   },
   computed: {
@@ -129,60 +130,75 @@ export default {
   },
   mounted() {
     this.fetchSellingItems();
+    window.addEventListener('scroll', this.handleScroll);
+  },
+  beforeUnmount() {
+    window.removeEventListener('scroll', this.handleScroll);
   },
   watch: {
     '$route.query.q': {
       handler() {
+        this.pagination.page = 1;
+        this.hasMore = true;
         this.fetchSellingItems();
       },
       immediate: true
     },
     sortOption: {
       handler() {
+        this.pagination.page = 1;
+        this.hasMore = true;
         this.fetchSellingItems();
       }
     }
   },
   methods: {
-    async fetchSellingItems() {
+    async fetchSellingItems(isLoadMore = false) {
+      if (this.loading) return;
       this.loading = true;
       try {
         const q = this.$route.query.q;
         let response;
-        // 构建请求参数，包括排序参数
         const params = {
           skip: (this.pagination.page - 1) * this.pagination.limit,
-          limit: this.pagination.limit
+          limit: this.pagination.limit,
+          order_by: this.getOrderByParam()
         };
-        // 根据排序选项添加排序参数
-        switch(this.sortOption) {
-          case 'newest':
-            params.order_by = 'created_at_desc';
-            break;
-          case 'price_asc':
-            params.order_by = 'price_asc';
-            break;
-          case 'price_desc':
-            params.order_by = 'price_desc';
-            break;
-          default:
-            params.order_by = 'created_at_desc'; // 默认按最新发布排序
-        }
         if (q) {
           response = await api.searchItems(q, params);
         } else {
           response = await api.getItems(params);
         }
-        this.products = response.data;
+        const items = response.data;
+        if (isLoadMore) {
+          this.products = [...this.products, ...items];
+        } else {
+          this.products = items;
+        }
+        this.hasMore = items.length === this.pagination.limit;
       } catch (error) {
         this.error = 'Failed to load products. Please try again later.';
         console.error('Error loading selling items:', error);
-        if (error.response) {
-          console.error('Response status:', error.response.status);
-          console.error('Response data:', error.response.data);
-        }
       } finally {
         this.loading = false;
+      }
+    },
+    getOrderByParam() {
+      switch(this.sortOption) {
+        case 'newest': return 'created_at_desc';
+        case 'price_asc': return 'price_asc';
+        case 'price_desc': return 'price_desc';
+        default: return 'created_at_desc';
+      }
+    },
+    handleScroll() {
+      if (this.loading || !this.hasMore) return;
+      const scrollTop = window.scrollY;
+      const windowHeight = window.innerHeight;
+      const docHeight = document.documentElement.scrollHeight;
+      if (scrollTop + windowHeight >= docHeight - 100) {
+        this.pagination.page++;
+        this.fetchSellingItems(true);
       }
     },
     // 跳转到登录页面
