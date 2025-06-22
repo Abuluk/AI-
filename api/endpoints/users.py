@@ -15,6 +15,7 @@ from crud.crud_user import (
     delete_user,
     get_users_by_ids
 )
+from fastapi.responses import JSONResponse
 
 router = APIRouter()
 
@@ -91,7 +92,7 @@ def get_user_stats(
     }
 
 # 添加用户商品查询路由
-@router.get("/{user_id}/items", response_model=List[ItemInDB])
+@router.get("/{user_id}/items")
 def get_user_items(
     user_id: int,
     status: Optional[str] = Query("selling", description="商品状态: selling(在售), sold(已售), offline(下架)"),
@@ -101,30 +102,25 @@ def get_user_items(
     db: Session = Depends(get_db)
 ):
     """
-    获取指定用户的商品列表，可按状态筛选和排序
+    获取指定用户的商品列表，可按状态筛选和排序，返回分页数据和总数
     """
     # 验证用户存在
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    
     # 根据状态筛选商品
     query = db.query(Item).filter(Item.owner_id == user_id)
-    
     if status == "selling":
-        # 在售商品：未售出且状态为 online
         query = query.filter(Item.sold == False, Item.status == "online")
     elif status == "sold":
-        # 已售商品：已售出
         query = query.filter(Item.sold == True)
     elif status == "offline":
-        # 已下架商品：状态为 offline
         query = query.filter(Item.status == "offline")
     else:
-        # 如果是不支持的状态，返回空列表
-        return []
-    
-    # 根据排序参数进行排序
+        return JSONResponse(content={"data": [], "total": 0})
+    # 总数
+    total = query.count()
+    # 排序
     if order_by == "created_at_desc":
         query = query.order_by(Item.created_at.desc())
     elif order_by == "price_asc":
@@ -134,12 +130,10 @@ def get_user_items(
     elif order_by == "views_desc":
         query = query.order_by(Item.views.desc())
     else:
-        # 默认按最新发布排序
         query = query.order_by(Item.created_at.desc())
-    
-    # 添加分页
+    # 分页
     items = query.offset(skip).limit(limit).all()
-    return items
+    return {"data": items, "total": total}
 
 @router.get("/{user_id}", response_model=UserInDB)
 def get_user(user_id: int, db: Session = Depends(get_db)):

@@ -557,7 +557,6 @@ const fetchRealSellingItems = async () => {
     }
     loading.selling = true;
     hasMoreSelling.value = true;
-    // 构建请求参数，包括排序参数
     const params = {
       skip: 0,
       limit: pagination.selling.perPage,
@@ -567,11 +566,11 @@ const fetchRealSellingItems = async () => {
       authStore.user.id,
       params
     );
-    sellingItems.value = response.data;
-    if (response.data.length < pagination.selling.perPage) {
+    sellingItems.value = response.data.data;
+    if (response.data.data.length < pagination.selling.perPage) {
       hasMoreSelling.value = false;
     }
-    tabs.value[0].count = sellingItems.value.length;
+    tabs.value[0].count = response.data.total;
   } catch (error) {
     console.error('获取商品失败:', error);
     alert('获取商品失败，请刷新页面重试');
@@ -582,10 +581,10 @@ const fetchRealSellingItems = async () => {
 };
 
 // 标签页数据
-const tabs = computed(() => [
-  { id: 'selling', label: '在售', count: sellingItems.value.length },
-  { id: 'sold', label: '已售', count: soldItems.value.length },
-  { id: 'favorites', label: '收藏', count: favoriteItems.value.length }
+const tabs = ref([
+  { id: 'selling', label: '在售', count: 0 },
+  { id: 'sold', label: '已售', count: 0 },
+  { id: 'favorites', label: '收藏', count: 0 }
 ])
 
 // 用户信息
@@ -763,7 +762,6 @@ const fetchSoldItems = async (reset = false) => {
       console.error('用户信息未加载');
       return;
     }
-    
     const response = await api.getUserSoldItems(
       authStore.user.id,
       {
@@ -771,23 +769,21 @@ const fetchSoldItems = async (reset = false) => {
         limit: pagination.sold.perPage
       }
     );
-    
-    // 自动回退
-    if (response.data.length === 0 && pagination.sold.page > 1) {
+    if (response.data.data.length === 0 && pagination.sold.page > 1) {
       pagination.sold.page -= 1;
       alert('已经是最后一页');
       await fetchSoldItems();
       return;
     }
-    
     if (pagination.sold.page === 1) {
-      soldItems.value = response.data;
+      soldItems.value = response.data.data;
     } else {
-      soldItems.value = [...soldItems.value, ...response.data];
+      soldItems.value = [...soldItems.value, ...response.data.data];
     }
-    
-    // 更新统计数据
-    tabs.value[1].count = soldItems.value.length;
+    tabs.value[1].count = response.data.total;
+    if (response.data.data.length < pagination.sold.perPage) {
+      hasMoreSold.value = false;
+    }
   } catch (error) {
     console.error('获取已售商品失败:', error);
     alert('获取已售商品失败，请重试');
@@ -809,7 +805,6 @@ const fetchFavoriteItems = async (reset = false) => {
       console.error('用户信息未加载');
       return;
     }
-    
     const response = await api.getUserFavorites(
       authStore.user.id,
       {
@@ -817,10 +812,7 @@ const fetchFavoriteItems = async (reset = false) => {
         limit: pagination.favorites.perPage
       }
     );
-    
-    // 提取商品信息（新的API返回的是包含商品信息的收藏记录）
     const items = response.data.map(favorite => favorite.item);
-    
     // 自动回退
     if (items.length === 0 && pagination.favorites.page > 1) {
       pagination.favorites.page -= 1;
@@ -828,15 +820,20 @@ const fetchFavoriteItems = async (reset = false) => {
       await fetchFavoriteItems();
       return;
     }
-    
     if (pagination.favorites.page === 1) {
       favoriteItems.value = items;
     } else {
       favoriteItems.value = [...favoriteItems.value, ...items];
     }
-    
-    // 更新统计数据
-    tabs.value[2].count = favoriteItems.value.length;
+    // 收藏总数（如后端支持total字段）
+    if (response.data.total !== undefined) {
+      tabs.value[2].count = response.data.total;
+    } else {
+      tabs.value[2].count = items.length;
+    }
+    if (items.length < pagination.favorites.perPage) {
+      hasMoreFavorite.value = false;
+    }
   } catch (error) {
     console.error('获取收藏商品失败:', error);
     alert('获取收藏商品失败，请重试');
@@ -883,7 +880,7 @@ const fetchSellingItems = async (reset = false) => {
       page: pagination.selling.page,
       per_page: pagination.selling.perPage
     });
-    sellingItems.value = reset ? response.data : [...sellingItems.value, ...response.data];
+    sellingItems.value = reset ? response.data.data : [...sellingItems.value, ...response.data.data];
   } catch (error) {
     console.error('获取在售商品失败:', error);
   } finally {
@@ -941,13 +938,12 @@ const openOfflineModal = async () => {
 
 // 获取已下架商品
 const fetchOfflineItems = async () => {
-  loading.offline = true
+  loading.offline = true;
   try {
     if (!authStore.user || !authStore.user.id) {
       console.error('用户信息未加载')
       return
     }
-    
     const response = await api.getUserOfflineItems(
       authStore.user.id,
       {
@@ -955,8 +951,8 @@ const fetchOfflineItems = async () => {
         limit: 50 // 获取更多已下架商品
       }
     )
-    
-    offlineItems.value = response.data
+    offlineItems.value = response.data.data
+    // 可选：tabs.value[3].count = response.data.total
   } catch (error) {
     console.error('获取已下架商品失败:', error)
     alert('获取已下架商品失败，请重试')
@@ -1105,11 +1101,11 @@ const loadMoreSelling = async () => {
       limit: pagination.selling.perPage,
       order_by: sorting.selling
     });
-    if (response.data.length < pagination.selling.perPage) {
+    if (response.data.data.length < pagination.selling.perPage) {
       hasMoreSelling.value = false;
     }
-    // 只追加新数据
-    sellingItems.value = [...sellingItems.value, ...response.data];
+    sellingItems.value = [...sellingItems.value, ...response.data.data];
+    tabs.value[0].count = response.data.total;
   } catch (error) {
     console.error('加载更多商品失败:', error);
     alert('加载更多失败，请重试');
@@ -1154,10 +1150,11 @@ const loadMoreSold = async () => {
       skip: (pagination.sold.page - 1) * pagination.sold.perPage,
       limit: pagination.sold.perPage
     });
-    if (response.data.length < pagination.sold.perPage) {
+    if (response.data.data.length < pagination.sold.perPage) {
       hasMoreSold.value = false;
     }
-    soldItems.value = [...soldItems.value, ...response.data];
+    soldItems.value = [...soldItems.value, ...response.data.data];
+    tabs.value[1].count = response.data.total;
   } catch (error) {
     console.error('加载更多已售商品失败:', error);
     alert('加载更多失败，请重试');
