@@ -99,10 +99,12 @@ export default {
   setup(props) {
     const router = useRouter()
     const authStore = useAuthStore()
+    const route = useRoute()
 
     const itemId = computed(() => props.id)
     const otherUserId = computed(() => props.other_user_id)
     const currentUserId = computed(() => authStore.user?.id)
+    const type = computed(() => route.params.type)
 
     const messages = ref([])
     const item = ref(null)
@@ -130,14 +132,19 @@ export default {
       return `${baseUrl}/${cleanedPath.replace(/\\/g, '/')}`;
     }
 
-    // 获取商品信息
+    // 获取商品或求购信息
     const loadItem = async () => {
       try {
-        const response = await api.getItem(itemId.value)
-        item.value = response.data
+        if (type.value === 'buy_request') {
+          const response = await api.getBuyRequest(itemId.value)
+          item.value = response.data
+        } else {
+          const response = await api.getItem(itemId.value)
+          item.value = response.data
+        }
       } catch (error) {
         console.error('加载商品信息失败:', error)
-        alert('商品不存在或已被删除')
+        alert(type.value === 'buy_request' ? '求购信息不存在或已被删除' : '商品不存在或已被删除')
         router.push('/messages')
       }
     }

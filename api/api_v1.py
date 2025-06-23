@@ -6,7 +6,8 @@ from .endpoints import (
     messages, 
     auth,
     profile,
-    admin
+    admin,
+    buy_requests  # 新增导入
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
@@ -53,4 +54,11 @@ api_router.include_router(
     prefix="/admin",
     tags=["管理员"],
     dependencies=[Depends(oauth2_scheme)]
+)
+
+# 求购信息路由
+api_router.include_router(
+    buy_requests.router,
+    prefix="/buy_requests",
+    tags=["求购信息"]
 )

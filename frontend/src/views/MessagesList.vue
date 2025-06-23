@@ -56,7 +56,10 @@
           <img :src="getUserAvatar(conv.other_user_avatar)" :alt="conv.other_user_name" class="item-image">
           <div class="conversation-content">
             <div class="conversation-header">
-              <span class="item-title">{{ conv.other_user_name }}</span>
+              <span class="item-title">
+                {{ conv.other_user_name }}
+                <span v-if="conv.item_title" style="margin-left: 16px; color: #888; font-size: 0.98em;">（{{ conv.item_title }}）</span>
+              </span>
               <span class="time">{{ formatDateTime(conv.last_message_time) }}</span>
             </div>
             <p class="last-message">{{ conv.last_message_content }}</p>

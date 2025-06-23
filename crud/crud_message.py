@@ -123,6 +123,10 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
         if not other_user:
             continue
 
+        # b. 获取商品信息
+        item = db.query(Item).filter(Item.id == item_id).first()
+        item_title = item.title if item else ''
+
         # b. 找到这个对话的最后一条消息
         last_message = db.query(Message).filter(
             Message.item_id == item_id,
@@ -145,6 +149,7 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
             'other_user_id': other_user.id,
             'other_user_name': other_user.username,
             'other_user_avatar': other_user.avatar,
+            'item_title': item_title,
             'last_message_content': last_message.content,
             'last_message_time': last_message.created_at,
             'unread_count': unread_count

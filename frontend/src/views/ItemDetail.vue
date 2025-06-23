@@ -51,7 +51,7 @@
                     </span>
                   </div>
                 </div>
-                <button class="btn btn-outline" @click="startChat">
+                <button class="btn btn-outline" @click="startChat" :disabled="isOwner">
                   <i class="fas fa-comment"></i> 联系卖家
                 </button>
               </div>
@@ -198,6 +198,9 @@ export default {
   computed: {
     user() {
       return useAuthStore().user
+    },
+    isOwner() {
+      return this.user && this.user.id === this.product.owner_id;
     }
   },
   watch: {

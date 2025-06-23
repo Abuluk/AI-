@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Text, Boolean, DateTime, ForeignKey, func, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, Text, Boolean, DateTime, ForeignKey, func, UniqueConstraint, DECIMAL
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from db.base import Base
@@ -27,6 +27,7 @@ class User(Base):
     items = relationship("Item", back_populates="owner")
     messages = relationship("Message", back_populates="user")
     favorites = relationship("Favorite", back_populates="user")
+    buy_requests = relationship("BuyRequest", back_populates="user")  # 新增
 
 class Item(Base):
     __tablename__ = "items"
@@ -81,3 +82,14 @@ class Favorite(Base):
     
     user = relationship("User", back_populates="favorites")
     item = relationship("Item", back_populates="favorited_by")
+
+class BuyRequest(Base):
+    __tablename__ = 'buy_requests'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    title = Column(String(100), nullable=False)
+    description = Column(Text)
+    budget = Column(DECIMAL(10, 2))
+    created_at = Column(DateTime, server_default=func.now())
+
+    user = relationship('User', back_populates='buy_requests')

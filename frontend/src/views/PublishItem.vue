@@ -92,8 +92,9 @@
         </div>
         
         <div class="form-actions">
-          <button type="button" class="btn btn-outline" @click="cancel">取消</button>
+          <button type="button" class="btn btn-outline wide-btn" @click="cancel">取消</button>
           <button type="submit" class="btn btn-primary">{{ editing ? '更新商品' : '发布商品' }}</button>
+          <button type="button" class="btn btn-outline wide-btn" @click="autoFillAI">AI自动补充</button>
         </div>
       </form>
     </div>
@@ -290,6 +291,10 @@ export default {
           this.form.price = value;
         }
       }
+    },
+    autoFillAI() {
+      // 这里可以实现AI自动补充逻辑
+      alert('AI自动补充功能待实现');
     }
   }
 }
@@ -462,6 +467,14 @@ export default {
   display: flex;
   gap: 15px;
   margin-top: 30px;
+  align-items: center;
+}
+
+.btn.wide-btn {
+  min-width: 110px;
+  height: 56px;
+  font-size: 1.1rem;
+  box-sizing: border-box;
 }
 
 @media (max-width: 768px) {
@@ -472,6 +485,12 @@ export default {
   
   .form-actions {
     flex-direction: column-reverse;
+  }
+  .btn.wide-btn {
+    width: 100%;
+    min-width: unset;
+    height: 48px;
+    font-size: 1rem;
   }
 }
 </style>

@@ -151,7 +151,7 @@ const apiService = {
   
   // 添加创建商品方法（支持FormData）
   async createItem(formData) {
-    return api.post('/items/', formData, {
+    return api.post('/items', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -337,6 +337,19 @@ const apiService = {
 
   async deleteConversation(itemId, otherUserId) {
     return api.delete(`/messages/conversation/${itemId}/${otherUserId}`)
+  },
+
+  // 求购相关
+  async createBuyRequest(data) {
+    return api.post('/buy_requests', data)
+  },
+
+  async getBuyRequests(params = {}) {
+    return api.get('/buy_requests', { params });
+  },
+
+  async getBuyRequest(id) {
+    return api.get(`/buy_requests/${id}`);
   },
 }
 
