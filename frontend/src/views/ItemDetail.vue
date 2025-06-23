@@ -200,6 +200,18 @@ export default {
       return useAuthStore().user
     }
   },
+  watch: {
+    async id(newId, oldId) {
+      if (newId && newId !== oldId) {
+        window.scrollTo(0, 0);
+        await this.fetchItemData();
+        if (this.user) {
+          this.isOwner = this.user.id === this.product.owner_id;
+        }
+        this.checkFavoriteStatus();
+      }
+    }
+  },
   methods: {
     async fetchItemData() {
       try {
