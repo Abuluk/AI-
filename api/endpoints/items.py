@@ -10,6 +10,7 @@ import os
 import uuid
 from db.models import Item
 from sqlalchemy import or_
+from core.spark_ai import spark_ai_service
 
 router = APIRouter()
 
@@ -82,6 +83,82 @@ def search_items(
         query = query.order_by(Item.created_at.desc())
     
     return query.offset(skip).limit(limit).all()
+
+# 公共端点 - 获取AI分析的低价好物推荐
+@router.get("/ai-cheap-deals")
+def get_ai_cheap_deals(
+    limit: int = Query(10, ge=1, le=20, description="获取商品数量"),
+    db: Session = Depends(get_db)
+):
+    """获取AI分析的低价好物推荐"""
+    try:
+        # 获取当前在售的商品
+        items = db.query(Item).filter(
+            Item.status == "online",
+            Item.sold == False
+        ).order_by(Item.price.asc()).limit(limit).all()
+        
+        # 转换为字典格式
+        items_data = []
+        for item in items:
+            items_data.append({
+                "id": item.id,
+                "title": item.title,
+                "price": float(item.price),
+                "condition": item.condition,
+                "description": item.description,
+                "category": item.category,
+                "location": item.location,
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+                "user": {
+                    "id": item.owner_id,
+                    "username": item.owner.username if item.owner else "未知用户"
+                } if item.owner else None
+            })
+        
+        # 调用AI服务进行分析
+        ai_result = spark_ai_service.analyze_price_competition(items_data)
+        
+        if ai_result.get("success"):
+            # 将AI推荐的商品与数据库中的商品信息合并
+            recommendations = ai_result.get("recommendations", [])
+            enhanced_recommendations = []
+            
+            for rec in recommendations:
+                # 在数据库中找到对应的商品
+                matching_item = next(
+                    (item for item in items_data if item["title"] == rec["title"]), 
+                    None
+                )
+                
+                if matching_item:
+                    enhanced_recommendations.append({
+                        **matching_item,
+                        "ai_reason": rec.get("reason", ""),
+                        "ai_price": rec.get("price", matching_item["price"])
+                    })
+            
+            return {
+                "success": True,
+                "analysis": ai_result.get("analysis", ""),
+                "market_insights": ai_result.get("market_insights", ""),
+                "recommendations": enhanced_recommendations,
+                "total_items_analyzed": len(items_data)
+            }
+        else:
+            # 如果AI服务失败，返回简单的低价商品列表
+            return {
+                "success": False,
+                "message": ai_result.get("message", "AI分析服务暂时不可用"),
+                "fallback_recommendations": items_data[:5],  # 返回前5个最低价的商品
+                "total_items_analyzed": len(items_data)
+            }
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"获取AI推荐失败: {str(e)}"
+        )
 
 # 公共端点 - 获取单个商品（无需认证）
 @router.get("/{item_id}", response_model=ItemInDB)

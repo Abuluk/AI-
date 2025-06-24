@@ -85,24 +85,49 @@
       <!-- 右侧低价推荐栏 -->
       <div class="cheap-deals-sidebar">
         <div class="cheap-deals-header">
-          <h3>低价好物</h3>
+          <h3>AI智能推荐</h3>
+          <div class="ai-status" :class="{ 'ai-active': aiAnalysis.success }">
+            <span v-if="aiAnalysis.success" class="ai-indicator">🤖 AI分析</span>
+            <span v-else class="ai-indicator">📊 基础推荐</span>
+          </div>
         </div>
+        
+        <!-- AI分析结果展示 -->
+        <div v-if="aiAnalysis.success && aiAnalysis.analysis" class="ai-analysis">
+          <div class="analysis-text">{{ aiAnalysis.analysis }}</div>
+        </div>
+        
         <div class="cheap-deals-list">
           <div v-if="loadingCheapDeals" class="loading-deals">
             <div class="skeleton-deal" v-for="n in 3" :key="n"></div>
           </div>
           <div v-else-if="cheapDeals.length === 0" class="empty-deals">
-            暂无低价商品
+            暂无推荐商品
           </div>
           <div v-else class="deal-items">
             <div v-for="deal in cheapDeals" :key="deal.id" class="deal-item" @click="goToItemDetail(deal.id)">
               <div class="deal-title">{{ deal.title }}</div>
-              <div class="deal-footer">
+              <div class="deal-price-section">
                 <span class="deal-price">¥{{ deal.price }}</span>
-                <span class="deal-user-name">{{ deal.user.username }}</span>
+                <span v-if="deal.ai_reason" class="ai-reason">{{ deal.ai_reason }}</span>
+              </div>
+              <div class="deal-footer">
+                <span class="deal-user-name">{{ deal.user ? deal.user.username : '未知用户' }}</span>
+                <span class="deal-condition">{{ getConditionText(deal.condition) }}</span>
               </div>
             </div>
           </div>
+        </div>
+        
+        <!-- 市场洞察 -->
+        <div v-if="aiAnalysis.success && aiAnalysis.market_insights" class="market-insights">
+          <h4>市场洞察</h4>
+          <p>{{ aiAnalysis.market_insights }}</p>
+        </div>
+        
+        <!-- AI服务状态提示 -->
+        <div v-if="!aiAnalysis.success && aiAnalysis.message" class="ai-status-message">
+          <p>{{ aiAnalysis.message }}</p>
         </div>
       </div>
     </div>
@@ -154,7 +179,13 @@ export default {
       buyingRequests: [],
       loadingRequests: false,
       cheapDeals: [],
-      loadingCheapDeals: false
+      loadingCheapDeals: false,
+      aiAnalysis: {
+        success: false,
+        analysis: null,
+        market_insights: null,
+        message: null
+      }
     }
   },
   computed: {
@@ -282,11 +313,42 @@ export default {
     async fetchCheapDeals() {
       this.loadingCheapDeals = true;
       try {
+        const response = await api.getAICheapDeals(10);
+        
+        if (response.data.success) {
+          // AI分析成功
+          this.aiAnalysis = {
+            success: true,
+            analysis: response.data.analysis,
+            market_insights: response.data.market_insights,
+            message: null
+          };
+          this.cheapDeals = response.data.recommendations || [];
+        } else {
+          // AI分析失败，使用备用数据
+          this.aiAnalysis = {
+            success: false,
+            analysis: null,
+            market_insights: null,
+            message: response.data.message || "AI分析服务暂时不可用"
+          };
+          this.cheapDeals = response.data.fallback_recommendations || [];
+        }
+      } catch (error) {
+        console.error('Error loading AI cheap deals:', error);
+        // 如果API调用失败，使用本地模拟数据
+        this.aiAnalysis = {
+          success: false,
+          analysis: null,
+          market_insights: null,
+          message: "AI服务连接失败，显示基础推荐"
+        };
         this.cheapDeals = [
           {
             id: 1,
             title: "二手 iPad Air 4",
             price: 2000,
+            condition: "good",
             user: {
               username: "李四"
             }
@@ -295,13 +357,12 @@ export default {
             id: 2,
             title: "99新 AirPods Pro",
             price: 800,
+            condition: "like_new",
             user: {
               username: "王五"
             }
           }
         ];
-      } catch (error) {
-        console.error('Error loading cheap deals:', error);
       } finally {
         this.loadingCheapDeals = false;
       }
@@ -314,6 +375,15 @@ export default {
     },
     goToBuyRequestDetail(id) {
       this.$router.push(`/buy-request/${id}`)
+    },
+    getConditionText(condition) {
+      const conditionMap = {
+        'new': '全新',
+        'like_new': '几乎全新',
+        'good': '轻微使用痕迹',
+        'fair': '使用痕迹明显'
+      };
+      return conditionMap[condition] || condition || '未知状态';
     }
   }
 }
@@ -688,11 +758,10 @@ export default {
   line-height: 1.4;
 }
 
-.deal-footer {
+.deal-price-section {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: auto;
 }
 
 .deal-price {
@@ -701,11 +770,87 @@ export default {
   font-weight: bold;
 }
 
+.deal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+}
+
 .deal-user-name {
   font-size: 0.9rem;
   color: #666;
 }
 
+.deal-condition {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.ai-status {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 4px;
+  background-color: #f0f0f0;
+  margin-top: 10px;
+}
+
+.ai-active {
+  background-color: #42b983;
+}
+
+.ai-indicator {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: white;
+  margin-left: 5px;
+}
+
+.ai-analysis {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.analysis-text {
+  font-size: 1rem;
+  color: #333;
+}
+
+.market-insights {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.market-insights h4 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.market-insights p {
+  font-size: 1rem;
+  color: #666;
+}
+
+.ai-status-message {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+/* 加载状态样式 */
 .loading-deals {
   display: flex;
   flex-direction: column;

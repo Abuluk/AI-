@@ -7,8 +7,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import os
+from dotenv import load_dotenv
 from api.api_v1 import api_router
 from api.endpoints import items, users
+
+# 加载环境变量
+load_dotenv()
 
 def create_tables():
     Base.metadata.create_all(bind=engine)

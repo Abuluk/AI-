@@ -5,3 +5,5 @@ python-dotenv
 passlib
 python-jose[cryptography]
 python-multipart
+requests
+websocket-client

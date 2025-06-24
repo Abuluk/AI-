@@ -29,5 +29,11 @@ class Settings:
     CLOUDINARY_API_KEY: str = os.getenv("CLOUDINARY_API_KEY")
     CLOUDINARY_API_SECRET: str = os.getenv("CLOUDINARY_API_SECRET")
     USE_CLOUD_STORAGE: bool = os.getenv("USE_CLOUD_STORAGE", "false").lower() == "true"
+    
+    # 科大讯飞星火大模型配置
+    XUNFEI_APP_ID: str = os.getenv("XUNFEI_APP_ID", "")
+    XUNFEI_API_KEY: str = os.getenv("XUNFEI_API_KEY", "")
+    XUNFEI_API_SECRET: str = os.getenv("XUNFEI_API_SECRET", "")
+    XUNFEI_SPARK_URL: str = os.getenv("XUNFEI_SPARK_URL", "wss://spark-api.xf-yun.com/v1/x1")
 
 settings = Settings()

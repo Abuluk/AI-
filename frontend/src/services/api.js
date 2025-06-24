@@ -282,6 +282,13 @@ const apiService = {
     return retryRequest(() => api.get(`/messages/system/${messageId}`))
   },
 
+  // 添加获取AI分析的低价好物推荐方法
+  async getAICheapDeals(limit = 10) {
+    return retryRequest(() => api.get('/items/ai-cheap-deals', { 
+      params: { limit } 
+    }))
+  },
+
   // 管理员API
   async getAdminStats() {
     return retryRequest(() => api.get('/admin/stats'))
