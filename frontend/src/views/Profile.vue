@@ -202,6 +202,29 @@
             <div v-if="favoriteItems.length > 0 && hasMoreFavorite" ref="infiniteScrollFavTrigger" style="height: 1px;"></div>
           </div>
         </div>
+        <!-- 求购信息tab -->
+        <div v-if="activeTab === 'buy_requests'">
+          <div class="section-header">
+            <h3>求购信息</h3>
+            <button class="post-request-btn" @click="goToPublishBuyRequest">发布</button>
+          </div>
+          <div v-if="loadingBuyRequests" class="loading-requests">
+            <div class="skeleton-request" v-for="n in 2" :key="n"></div>
+          </div>
+          <div v-else>
+            <div v-if="myBuyRequests.length === 0" class="empty-requests">暂无求购信息</div>
+            <div v-else>
+              <div v-for="req in myBuyRequests" :key="req.id" class="request-item">
+                <div class="request-title">{{ req.title }}</div>
+                <div class="request-footer">
+                  <span class="request-price">¥{{ req.budget }}</span>
+                  <span class="request-user-name">{{ req.user ? req.user.username : '未知' }}</span>
+                  <button class="delete-btn" @click="handleDeleteBuyRequest(req.id)">删除</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
     
@@ -580,11 +603,12 @@ const fetchRealSellingItems = async () => {
   }
 };
 
-// 标签页数据
-const tabs = ref([
-  { id: 'selling', label: '在售', count: 0 },
-  { id: 'sold', label: '已售', count: 0 },
-  { id: 'favorites', label: '收藏', count: 0 }
+// 标签页数据，动态统计数量
+const tabs = computed(() => [
+  { id: 'selling', label: '在售', count: sellingItems.value.length },
+  { id: 'sold', label: '已售', count: soldItems.value.length },
+  { id: 'favorites', label: '收藏', count: favoriteItems.value.length },
+  { id: 'buy_requests', label: '求购', count: myBuyRequests.value.length }
 ])
 
 // 用户信息
@@ -690,7 +714,7 @@ const sortedSoldItems = computed(() => {
   }
 })
 
-// 监听标签切换
+// 监听标签切换，切到求购时拉取数据
 watch(activeTab, (newTab) => {
   if (newTab === 'selling' && sellingItems.value.length === 0) {
     fetchSellingItems()
@@ -698,6 +722,8 @@ watch(activeTab, (newTab) => {
     fetchSoldItems()
   } else if (newTab === 'favorites' && favoriteItems.value.length === 0) {
     fetchFavoriteItems()
+  } else if (newTab === 'buy_requests' && myBuyRequests.value.length === 0) {
+    fetchMyBuyRequests()
   }
 })
 
@@ -734,7 +760,8 @@ const changeTab = (tabId) => {
   // 如果数据为空则加载
   if ((tabId === 'selling' && sellingItems.value.length === 0) ||
       (tabId === 'sold' && soldItems.value.length === 0) ||
-      (tabId === 'favorites' && favoriteItems.value.length === 0)) {
+      (tabId === 'favorites' && favoriteItems.value.length === 0) ||
+      (tabId === 'buy_requests' && myBuyRequests.value.length === 0)) {
     fetchTabData(tabId)
   }
 }
@@ -747,6 +774,8 @@ const fetchTabData = (tabId) => {
     fetchSoldItems()
   } else if (tabId === 'favorites') {
     fetchFavoriteItems()
+  } else if (tabId === 'buy_requests') {
+    fetchMyBuyRequests()
   }
 }
 
@@ -1206,6 +1235,33 @@ watch(
   }
 )
 
+const myBuyRequests = ref([])
+const loadingBuyRequests = ref(false)
+
+const fetchMyBuyRequests = async () => {
+  loadingBuyRequests.value = true;
+  try {
+    const res = await api.getMyBuyRequests();
+    myBuyRequests.value = res.data;
+  } finally {
+    loadingBuyRequests.value = false;
+  }
+}
+
+const handleDeleteBuyRequest = async (id) => {
+  if (!confirm('确定要删除该求购信息吗？')) return;
+  await api.deleteBuyRequest(id);
+  fetchMyBuyRequests();
+}
+
+const goToPublishBuyRequest = () => {
+  router.push('/publish-buy-request');
+}
+
+onMounted(() => {
+  fetchMyBuyRequests();
+})
+
 </script>
 
 <style scoped>
@@ -1660,5 +1716,96 @@ watch(
 
 .btn-success:hover {
   background-color: #229954;
+}
+
+.profile-buy-requests.card {
+  margin-bottom: 24px;
+  padding: 18px 10px 10px 10px;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.10);
+  background: #fff;
+}
+.buying-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.post-request-btn {
+  padding: 4px 12px;
+  background-color: #42b983;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background-color 0.2s;
+}
+.post-request-btn:hover {
+  background-color: #3aa776;
+}
+.request-item {
+  border: none;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.request-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+  line-height: 1.4;
+}
+.request-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+}
+.request-price {
+  font-size: 1.2rem;
+  color: #f56c6c;
+  font-weight: bold;
+}
+.request-user-name {
+  font-size: 0.9rem;
+  color: #666;
+}
+.delete-btn {
+  background: #e74c3c;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-left: 8px;
+  transition: background 0.2s;
+}
+.delete-btn:hover {
+  background: #c0392b;
+}
+.loading-requests {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.skeleton-request {
+  height: 60px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  animation: skeleton-loading 1.5s infinite;
+}
+.empty-requests {
+  text-align: center;
+  padding: 12px;
+  color: #999;
+  font-size: 0.9rem;
 }
 </style>

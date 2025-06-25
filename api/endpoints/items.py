@@ -15,11 +15,12 @@ from core.spark_ai import spark_ai_service
 router = APIRouter()
 
 # 公共端点 - 获取所有商品（无需认证）
-@router.get("/", response_model=List[ItemInDB])
+@router.get("", response_model=List[ItemInDB])
 def get_all_items(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=100),
     order_by: str = Query("created_at_desc", description="排序方式: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎)"),
+    category: Optional[int] = Query(None, description="商品分类ID"),
     db: Session = Depends(get_db)
 ):
     """获取所有在售商品列表，支持分页和排序（只显示状态为online的商品）"""
@@ -27,7 +28,8 @@ def get_all_items(
         Item.status == "online",  # 只显示上架的商品
         Item.sold == False        # 不显示已售出的商品
     )
-    
+    if category is not None:
+        query = query.filter(Item.category == category)
     # 根据排序参数进行排序
     if order_by == "created_at_desc":
         query = query.order_by(Item.created_at.desc())
@@ -40,7 +42,6 @@ def get_all_items(
     else:
         # 默认按最新发布排序
         query = query.order_by(Item.created_at.desc())
-    
     return query.offset(skip).limit(limit).all()
 
 # 公共端点 - 搜索商品（无需认证）- 必须在/{item_id}之前定义
@@ -169,6 +170,7 @@ def read_item(item_id: int, db: Session = Depends(get_db)):
     return item
 
 # 需要认证的端点
+@router.post("", response_model=ItemInDB)
 @router.post("/", response_model=ItemInDB)
 async def create_item(
     title: str = Form(...),

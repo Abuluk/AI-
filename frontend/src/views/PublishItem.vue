@@ -57,7 +57,7 @@
               @change="clearAiBadge('category')"
               :data-ai-filled="aiFilledFields.category"
             >
-              <option value="">请选择分类</option>
+              <option :value="null">请选择分类</option>
               <option v-for="category in categories" :key="category.id" :value="category.id">
                 {{ category.name }}
               </option>
@@ -167,7 +167,7 @@ export default {
         title: '',
         description: '',
         price: '',
-        category: '',
+        category: null,
         location: '',
         condition: '',
         images: []
@@ -219,50 +219,50 @@ export default {
     
     // 表单提交方法
     async submitForm() {
-  try {
-    const formData = new FormData();
-    formData.append('title', this.form.title);
-    formData.append('description', this.form.description);
-    formData.append('price', this.form.price);
-    formData.append('category', this.form.category);
-    formData.append('location', this.form.location);
-    formData.append('condition', this.form.condition);
-    
-    // 添加图片文件
-    this.form.images.forEach((img, index) => {
-      if (img.file) {
-        formData.append('images', img.file, `image_${index}.jpg`);
-      }
-    });
+      try {
+        const formData = new FormData();
+        formData.append('title', this.form.title);
+        formData.append('description', this.form.description);
+        formData.append('price', this.form.price);
+        formData.append('category', Number(this.form.category));
+        formData.append('location', this.form.location);
+        formData.append('condition', this.form.condition);
+        
+        // 添加图片文件
+        this.form.images.forEach((img, index) => {
+          if (img.file) {
+            formData.append('images', img.file, `image_${index}.jpg`);
+          }
+        });
 
-    // 调用API创建商品
-    const response = await api.createItem(formData);
-    const newItem = response.data;
-    
-    // 更新用户状态
-    const authStore = useAuthStore();
-    if (authStore.user) {
-      authStore.user.items_count += 1;
-    }
-    // 单独处理用户信息刷新，不影响主流程
-    try {
-      await authStore.fetchCurrentUser();
-    } catch (fetchError) {
-      console.error('刷新用户信息失败:', fetchError);
-    }
-    // 无论用户信息刷新是否成功，都跳转到个人主页
-    this.$router.push({ path: '/profile' });
-    // 显示成功提示
-    alert('发布成功！');
-  } catch (error) {
-    console.error('发布失败:', error);
-    let errorMessage = '发布失败，请重试';
-    if (error.response?.data?.detail) {
-      errorMessage = error.response.data.detail;
-    }
-    alert(errorMessage);
-  }
-},
+        // 调用API创建商品
+        const response = await api.createItem(formData);
+        const newItem = response.data;
+        
+        // 更新用户状态
+        const authStore = useAuthStore();
+        if (authStore.user) {
+          authStore.user.items_count += 1;
+        }
+        // 单独处理用户信息刷新，不影响主流程
+        try {
+          await authStore.fetchCurrentUser();
+        } catch (fetchError) {
+          console.error('刷新用户信息失败:', fetchError);
+        }
+        // 无论用户信息刷新是否成功，都跳转到个人主页
+        this.$router.push({ path: '/profile' });
+        // 显示成功提示
+        alert('发布成功！');
+      } catch (error) {
+        console.error('发布失败:', error);
+        let errorMessage = '发布失败，请重试';
+        if (error.response?.data?.detail) {
+          errorMessage = error.response.data.detail;
+        }
+        alert(errorMessage);
+      }
+    },
     
     // 触发文件选择
     triggerFileInput() {

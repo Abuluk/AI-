@@ -32,6 +32,10 @@
             <h3>商品描述</h3>
             <p>{{ product.description }}</p>
           </div>
+          <!-- 新增：商品状态展示 -->
+          <div class="detail-condition" v-if="product.condition">
+            <strong>商品状态：</strong>{{ getConditionText(product.condition) }}
+          </div>
           
           <div class="seller-info">
             <h3>卖家信息</h3>
@@ -360,6 +364,15 @@ export default {
       const h = String(date.getHours()).padStart(2, '0');
       const min = String(date.getMinutes()).padStart(2, '0');
       return `${y}-${m}-${d} ${h}:${min}`;
+    },
+    getConditionText(condition) {
+      const conditionMap = {
+        'new': '全新',
+        'like_new': '几乎全新',
+        'good': '轻微使用痕迹',
+        'fair': '使用痕迹明显'
+      };
+      return conditionMap[condition] || condition || '未知状态';
     }
   }
 }

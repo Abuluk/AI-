@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
 from sqlalchemy.orm import Session
 from db.session import get_db
 from core.security import get_current_active_user
-from db.models import User
+from db.models import User, BuyRequest
 from schemas.user import UserInDB, UserUpdate
 from crud.crud_user import update_user
 import os
 from fastapi import Request
+from schemas.buy_request import BuyRequest as BuyRequestSchema
+from typing import List
 
 router = APIRouter()
 
@@ -76,3 +78,10 @@ def update_profile(
             detail="用户不存在"
         )
     return updated_user
+
+@router.get("/my_buy_requests", response_model=List[BuyRequestSchema])
+def my_buy_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    return db.query(BuyRequest).filter(BuyRequest.user_id == current_user.id).order_by(BuyRequest.created_at.desc()).all()

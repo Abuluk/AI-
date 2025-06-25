@@ -359,6 +359,16 @@ const apiService = {
     return api.get(`/buy_requests/${id}`);
   },
 
+  // 新增：获取当前用户的求购信息
+  async getMyBuyRequests(params = {}) {
+    return api.get('/buy_requests/my_own', { params });
+  },
+
+  // 新增：删除求购信息
+  async deleteBuyRequest(id) {
+    return api.delete(`/buy_requests/${id}`);
+  },
+
   // AI自动补全商品信息（图片识别，支持多图片）
   async aiAutoCompleteItemByImage(files) {
     const formData = new FormData();

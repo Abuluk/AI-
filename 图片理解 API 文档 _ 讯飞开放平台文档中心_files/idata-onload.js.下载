@@ -1,9 +1,0 @@
-window.onload = function () {
-  let appId = 'abb467774d'; // 开放平台
-  console.log('URLSearchParams', appId);
-  IFlyCollector.init({
-    appId,
-    host: window.location.host,
-    debug: window.location.protocol !== 'https:',
-  });
-};

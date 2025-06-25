@@ -53,13 +53,26 @@
         
         <div class="section-header">
           <h2 class="section-title">推荐商品</h2>
-          <div class="sort-options">
-            <select v-model="sortOption">
-              <option value="default">综合排序</option>
-              <option value="price_asc">价格从低到高</option>
-              <option value="price_desc">价格从高到低</option>
-              <option value="newest">最新发布</option>
+          <div class="filter-options">
+            <input
+              v-model="selectedLocation"
+              placeholder="输入地区（如上海、北京）"
+              class="location-input"
+              @keyup.enter="onLocationInput"
+              @blur="onLocationInput"
+            />
+            <select v-model="selectedCategory">
+              <option value="">全部分类</option>
+              <option v-for="cat in CATEGORY_MAP" :key="cat.id" :value="cat.id">{{ cat.name }}</option>
             </select>
+            <div class="sort-options">
+              <select v-model="sortOption">
+                <option value="default">综合排序</option>
+                <option value="price_asc">价格从低到高</option>
+                <option value="price_desc">价格从高到低</option>
+                <option value="newest">最新发布</option>
+              </select>
+            </div>
           </div>
         </div>
         
@@ -141,6 +154,18 @@ import { useAuthStore } from '@/store/auth'
 import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue';
 import api from '@/services/api';
 
+// 分类映射表
+const CATEGORY_MAP = [
+  { id: 1, name: '手机数码' },
+  { id: 2, name: '电脑办公' },
+  { id: 3, name: '家用电器' },
+  { id: 4, name: '服装鞋包' },
+  { id: 5, name: '美妆护肤' },
+  { id: 6, name: '图书文娱' },
+  { id: 7, name: '运动户外' },
+  { id: 8, name: '家居家装' }
+];
+
 export default {
   name: 'HomeView',
   components: {
@@ -163,7 +188,8 @@ export default {
     return {
       authStore,
       formatDateTime,
-      user
+      user,
+      CATEGORY_MAP
     };
   },
   data() {
@@ -186,7 +212,9 @@ export default {
         analysis: null,
         market_insights: null,
         message: null
-      }
+      },
+      selectedLocation: '',
+      selectedCategory: ''
     }
   },
   computed: {
@@ -240,9 +268,24 @@ export default {
         this.hasMore = true;
         this.fetchSellingItems();
       }
+    },
+    selectedLocation() {
+      this.pagination.page = 1;
+      this.hasMore = true;
+      this.fetchSellingItems();
+    },
+    selectedCategory() {
+      this.pagination.page = 1;
+      this.hasMore = true;
+      this.fetchSellingItems();
     }
   },
   methods: {
+    onLocationInput() {
+      this.pagination.page = 1;
+      this.hasMore = true;
+      this.fetchSellingItems();
+    },
     async fetchSellingItems(isLoadMore = false) {
       if (this.loading) return;
       this.loading = true;
@@ -252,14 +295,27 @@ export default {
         const params = {
           skip: (this.pagination.page - 1) * this.pagination.limit,
           limit: this.pagination.limit,
-          order_by: this.getOrderByParam()
+          order_by: this.getOrderByParam(),
+          location: this.selectedLocation,
+          category: this.selectedCategory ? Number(this.selectedCategory) : undefined
         };
         if (q) {
           response = await api.searchItems(q, params);
         } else {
           response = await api.getItems(params);
         }
-        const items = response.data;
+        let items = response.data;
+        // 地区模糊匹配（忽略大小写）
+        if (this.selectedLocation) {
+          const loc = this.selectedLocation.trim().toLowerCase();
+          items = items.filter(item =>
+            item.location && item.location.toLowerCase().includes(loc)
+          );
+        }
+        // 分类严格匹配数字ID
+        if (this.selectedCategory) {
+          items = items.filter(item => Number(item.category) === Number(this.selectedCategory));
+        }
         if (isLoadMore) {
           this.products = [...this.products, ...items];
         } else {
@@ -475,6 +531,20 @@ export default {
 .section-title {
   font-size: 1.4rem;
   font-weight: 600;
+}
+
+.filter-options {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.filter-options select {
+  padding: 8px 12px;
+  border-radius: 5px;
+  border: 1px solid #ddd;
+  background-color: white;
+  cursor: pointer;
 }
 
 .sort-options select {
@@ -888,5 +958,14 @@ export default {
   .deal-items {
     max-height: 300px;
   }
+}
+
+.location-input {
+  padding: 8px 12px;
+  border-radius: 5px;
+  border: 1px solid #ddd;
+  background-color: white;
+  cursor: text;
+  width: 120px;
 }
 </style>

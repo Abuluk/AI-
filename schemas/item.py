@@ -6,7 +6,7 @@ class ItemBase(BaseModel):
     title: str
     description: Optional[str] = None
     price: float
-    category: Optional[str] = None
+    category: Optional[int] = None
     condition: Optional[str] = "unknown"
     location: str
 
@@ -21,7 +21,7 @@ class ItemInDB(ItemBase):
     title: str
     description: str
     price: float
-    category: Optional[str] = None
+    category: Optional[int] = None
     condition: Optional[str] = "unknown"
     location: str
     # 添加可选字段和默认值

@@ -1,7 +1,0 @@
-function gtag_report_conversion(url) {
-  var callback = function () {
-  if (typeof(url) != 'undefined') { window.location = url; }
-  };
-  gtag('event', 'conversion', { 'send_to': 'AW-668682394/yjWvCPS_4MIBEJqR7b4C', 'event_callback': callback });
-  return false;
-}
