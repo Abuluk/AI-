@@ -380,6 +380,21 @@ const apiService = {
       }
     });
   },
+
+  // 新增：保存活动页banner配置
+  async saveActivityBanners(banners) {
+    return api.post('/admin/site_config/activity_banner', { value: banners })
+  },
+
+  // 新增：获取前台活动页banner
+  async getActivityBanners() {
+    return api.get('/site_config/activity_banner');
+  },
+
+  // 新增：获取后台活动页banner
+  async getAdminActivityBanners() {
+    return api.get('/admin/site_config/activity_banner');
+  },
 }
 
 export default apiService;

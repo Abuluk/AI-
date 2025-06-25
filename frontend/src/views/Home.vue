@@ -5,17 +5,36 @@
       <div class="logo">好物精选</div>
       <div class="user-area">
         <div v-if="authStore.user" class="user-info">
-          
-          <!-- 个人主页入口 -->
           <div class="profile-link" @click="goToProfile">
             <img :src="authStore.user.avatar" alt="用户头像" class="user-avatar">
             <span class="user-name">{{ authStore.user.username }}</span>
           </div>
-          
           <button @click="handleLogout" class="logout-btn">退出</button>
         </div>
         <button v-else @click="goToLogin" class="login-btn">登录/注册</button>
       </div>
+    </div>
+    <!-- banner区紧跟在导航栏下方 -->
+    <div class="activity-banner-carousel">
+      <template v-if="activityBanners.length">
+        <div class="carousel-wrapper">
+          <div class="carousel-slide" v-for="(banner, idx) in activityBanners" :key="idx" v-show="currentBanner === idx">
+            <a :href="banner.link" target="_blank" style="width:100%;height:100%;display:block;">
+              <img :src="banner.img" alt="活动图" class="activity-img" />
+            </a>
+          </div>
+          <div class="carousel-controls" v-if="activityBanners.length > 1">
+            <button @click="prevBanner">‹</button>
+            <button @click="nextBanner">›</button>
+          </div>
+          <div class="carousel-dots" v-if="activityBanners.length > 1">
+            <span v-for="(banner, idx) in activityBanners" :key="idx" :class="{active: currentBanner === idx}" @click="goToBanner(idx)"></span>
+          </div>
+        </div>
+      </template>
+      <template v-else>
+        <div style="width:100%;height:60px;"></div>
+      </template>
     </div>
     
     <div class="main-layout">
@@ -214,7 +233,10 @@ export default {
         message: null
       },
       selectedLocation: '',
-      selectedCategory: ''
+      selectedCategory: '',
+      activityBanners: [],
+      currentBanner: 0,
+      bannerTimer: null,
     }
   },
   computed: {
@@ -248,10 +270,12 @@ export default {
     this.fetchSellingItems();
     this.fetchBuyingRequests();
     this.fetchCheapDeals();
+    this.fetchActivityBanners();
     window.addEventListener('scroll', this.handleScroll);
   },
   beforeUnmount() {
     window.removeEventListener('scroll', this.handleScroll);
+    if (this.bannerTimer) clearInterval(this.bannerTimer);
   },
   watch: {
     '$route.query.q': {
@@ -422,7 +446,36 @@ export default {
         'fair': '使用痕迹明显'
       };
       return conditionMap[condition] || condition || '未知状态';
-    }
+    },
+    async fetchActivityBanners() {
+      try {
+        const res = await api.getActivityBanners();
+        console.log('活动页banner接口返回', res);
+        this.activityBanners = res.data.value || [];
+        this.currentBanner = 0;
+        if (this.activityBanners.length > 1) {
+          this.startBannerAutoPlay();
+        }
+      } catch (e) {
+        console.error('获取活动页banner失败', e);
+        this.activityBanners = [];
+      }
+    },
+    startBannerAutoPlay() {
+      if (this.bannerTimer) clearInterval(this.bannerTimer);
+      this.bannerTimer = setInterval(() => {
+        this.nextBanner();
+      }, 10000);
+    },
+    nextBanner() {
+      this.currentBanner = (this.currentBanner + 1) % this.activityBanners.length;
+    },
+    prevBanner() {
+      this.currentBanner = (this.currentBanner - 1 + this.activityBanners.length) % this.activityBanners.length;
+    },
+    goToBanner(idx) {
+      this.currentBanner = idx;
+    },
   }
 }
 </script>
@@ -967,5 +1020,93 @@ export default {
   background-color: white;
   cursor: text;
   width: 120px;
+}
+
+.activity-banner-carousel {
+  width: 100%;
+  max-width: 1200px;
+  height: 120px;
+  min-height: 120px;
+  margin: 24px auto;
+  overflow: hidden;
+  background: transparent;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.carousel-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+.carousel-slide {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 1;
+  transition: opacity 0.5s;
+}
+.activity-img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  display: block;
+}
+.carousel-controls {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+  pointer-events: none;
+}
+.carousel-controls button {
+  background: transparent !important;
+  border: none;
+  color: #fff;
+  font-size: 28px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 11;
+  transition: background 0.2s;
+  opacity: 1;
+}
+.carousel-controls button:hover {
+  background: transparent !important;
+}
+.carousel-dots {
+  position: absolute;
+  bottom: 16px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+}
+.carousel-dots span {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin: 0 4px;
+  background: #ddd;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.carousel-dots .active {
+  background: #409eff;
 }
 </style>

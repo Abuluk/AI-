@@ -3,14 +3,15 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from db.session import get_db
 from crud import crud_item
-from schemas.item import ItemCreate, ItemInDB
+from schemas.item import ItemCreate, ItemInDB, SiteConfigSchema
 from core.security import get_current_user
-from db.models import User
+from db.models import User, SiteConfig
 import os
 import uuid
 from db.models import Item
 from sqlalchemy import or_
 from core.spark_ai import spark_ai_service
+import json
 
 router = APIRouter()
 
@@ -390,3 +391,10 @@ async def ai_auto_complete_item_by_image_ws(
         return {"success": False, "message": "未收到图片"}
     result = await spark_ai_service.auto_complete_item_by_image_ws(image_bytes_list)
     return result
+
+@router.get("/site_config/activity_banner", response_model=SiteConfigSchema)
+def get_activity_banner(db: Session = Depends(get_db)):
+    config = db.query(SiteConfig).filter(SiteConfig.key == "activity_banner").first()
+    if not config or not config.value:
+        return SiteConfigSchema(key="activity_banner", value=None)
+    return SiteConfigSchema(key="activity_banner", value=json.loads(config.value))

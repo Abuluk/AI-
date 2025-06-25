@@ -35,3 +35,9 @@ class ItemInDB(ItemBase):
     
     class Config:
         from_attributes = True
+
+class SiteConfigSchema(BaseModel):
+    key: str
+    value: Optional[List[dict]] = None  # [{img:..., link:...}]
+    class Config:
+        from_attributes = True

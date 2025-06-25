@@ -7,7 +7,9 @@ from .endpoints import (
     auth,
     profile,
     admin,
-    buy_requests  # 新增导入
+    buy_requests,  # 新增导入
+    favorites,  # 新增导入
+    site_config  # 新增导入site_config
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
@@ -25,13 +27,18 @@ api_router.include_router(
     tags=["商品"]
 )
 
-from .endpoints import favorites  # 新增导入
-
 api_router.include_router(
     favorites.router,
     prefix="/favorites",
     tags=["收藏"],
     dependencies=[Depends(oauth2_scheme)]
+)
+
+# 注册site_config路由，无需认证
+api_router.include_router(
+    site_config.router,
+    prefix="/site_config",
+    tags=["站点配置"]
 )
 
 # 受保护路由 - 需要认证

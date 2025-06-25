@@ -374,6 +374,29 @@
         </div>
       </div>
     </div>
+
+    <!-- 活动页管理 -->
+    <div v-if="activeTab === 'activity'" class="tab-content">
+      <h2>活动页管理</h2>
+      <div v-if="activityError" class="error">{{ activityError }}</div>
+      <div v-if="loadingActivity">加载中...</div>
+      <div v-else>
+        <div class="banner-list">
+          <div v-for="(banner, idx) in activityBanners" :key="idx" class="banner-item">
+            <img :src="banner.img" alt="banner" style="max-width:120px;max-height:60px;">
+            <input v-model="banner.img" placeholder="图片URL" style="width:200px;">
+            <input v-model="banner.link" placeholder="跳转链接" style="width:200px;">
+            <button @click="removeBanner(idx)">删除</button>
+          </div>
+        </div>
+        <div class="add-banner">
+          <input v-model="newBanner.img" placeholder="新图片URL" style="width:200px;">
+          <input v-model="newBanner.link" placeholder="新跳转链接" style="width:200px;">
+          <button @click="addBanner">添加</button>
+        </div>
+        <button @click="saveActivityBanners" style="margin-top:10px;">保存全部</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -436,7 +459,8 @@ const currentUserId = computed(() => user.value.id)
 const tabs = [
   { id: 'users', label: '用户管理', icon: 'fas fa-users' },
   { id: 'items', label: '商品管理', icon: 'fas fa-box' },
-  { id: 'messages', label: '消息管理', icon: 'fas fa-bullhorn' }
+  { id: 'messages', label: '消息管理', icon: 'fas fa-bullhorn' },
+  { id: 'activity', label: '活动页管理', icon: 'fas fa-bullhorn' },
 ]
 
 // 方法
@@ -578,6 +602,8 @@ const changeTab = (tabId) => {
     loadItems()
   } else if (tabId === 'messages') {
     loadSystemMessages()
+  } else if (tabId === 'activity') {
+    loadActivityBanners()
   }
 }
 
@@ -708,7 +734,55 @@ const getTargetUsersText = (targetUsers) => {
 onMounted(() => {
   loadStats()
   loadUsers()
+  loadActivityBanners()
 })
+
+// 活动页管理相关
+const activityBanners = ref([])
+const loadingActivity = ref(false)
+const activityError = ref('')
+const newBanner = ref({ img: '', link: '' })
+
+const loadActivityBanners = async () => {
+  loadingActivity.value = true
+  activityError.value = ''
+  try {
+    const res = await api.getAdminActivityBanners()
+    console.log('管理员端活动页banner接口返回', res)
+    activityBanners.value = res.data.value || []
+  } catch (e) {
+    console.error('管理员端获取活动页banner失败', e)
+    activityError.value = '获取活动页配置失败'
+  } finally {
+    loadingActivity.value = false
+  }
+}
+
+const saveActivityBanners = async () => {
+  loadingActivity.value = true
+  activityError.value = ''
+  try {
+    await api.saveActivityBanners(activityBanners.value)
+    alert('保存成功')
+  } catch (e) {
+    activityError.value = '保存失败'
+  } finally {
+    loadingActivity.value = false
+  }
+}
+
+const addBanner = () => {
+  if (!newBanner.value.img || !newBanner.value.link) {
+    alert('请填写图片和链接')
+    return
+  }
+  activityBanners.value.push({ ...newBanner.value })
+  newBanner.value = { img: '', link: '' }
+}
+
+const removeBanner = (idx) => {
+  activityBanners.value.splice(idx, 1)
+}
 </script>
 
 <style scoped>
@@ -1153,5 +1227,23 @@ th {
   .form-group {
     margin-bottom: 15px;
   }
+}
+
+/* 活动页管理样式 */
+.banner-list {
+  margin-bottom: 20px;
+}
+
+.banner-item {
+  margin-bottom: 10px;
+}
+
+.add-banner {
+  margin-bottom: 10px;
+}
+
+.error {
+  color: red;
+  margin-bottom: 10px;
 }
 </style> 

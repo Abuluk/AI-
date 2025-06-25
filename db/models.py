@@ -93,3 +93,9 @@ class BuyRequest(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     user = relationship('User', back_populates='buy_requests')
+
+class SiteConfig(Base):
+    __tablename__ = 'site_config'
+    id = Column(Integer, primary_key=True)
+    key = Column(String(100), unique=True, nullable=False)
+    value = Column(Text, nullable=True)

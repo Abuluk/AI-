@@ -1,16 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, Form, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from db.session import get_db
 from core.security import get_current_user, create_access_token, authenticate_user, ACCESS_TOKEN_EXPIRE_MINUTES
-from db.models import User, Item, Favorite
+from db.models import User, Item, Favorite, SiteConfig
 from schemas.user import UserInDB
-from schemas.item import ItemInDB
+from schemas.item import ItemInDB, SiteConfigSchema
 from typing import List, Optional
 from datetime import datetime, timedelta
 from crud import crud_message
 import schemas.message
 from schemas.token import Token
+import json
 
 router = APIRouter()
 
@@ -338,4 +339,31 @@ def get_system_messages(
     current_admin: User = Depends(get_current_admin)
 ):
     """获取所有系统消息"""
-    return crud_message.get_system_messages(db=db, skip=skip, limit=limit) 
+    return crud_message.get_system_messages(db=db, skip=skip, limit=limit)
+
+@router.post("/site_config/activity_banner", response_model=SiteConfigSchema)
+def set_activity_banner(
+    value: list = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    config = db.query(SiteConfig).filter(SiteConfig.key == "activity_banner").first()
+    value_str = json.dumps(value, ensure_ascii=False)
+    if not config:
+        config = SiteConfig(key="activity_banner", value=value_str)
+        db.add(config)
+    else:
+        config.value = value_str
+    db.commit()
+    db.refresh(config)
+    return SiteConfigSchema(key="activity_banner", value=value)
+
+@router.get("/site_config/activity_banner", response_model=SiteConfigSchema)
+def get_activity_banner_admin(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    config = db.query(SiteConfig).filter(SiteConfig.key == "activity_banner").first()
+    if not config or not config.value:
+        return SiteConfigSchema(key="activity_banner", value=None)
+    return SiteConfigSchema(key="activity_banner", value=json.loads(config.value)) 
