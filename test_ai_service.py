@@ -1,74 +1,174 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-直接测试AI服务
+测试AI自动补全功能
 """
 
+import requests
+import json
 import os
-from dotenv import load_dotenv
+from pathlib import Path
 
-# 加载环境变量
-load_dotenv()
-
-def test_ai_service():
-    print("=== 直接测试AI服务 ===")
+def test_ai_auto_complete():
+    """测试AI自动补全功能"""
     
-    # 1. 检查环境变量
-    app_id = os.getenv("XUNFEI_APP_ID")
-    api_key = os.getenv("XUNFEI_API_KEY")
-    api_secret = os.getenv("XUNFEI_API_SECRET")
-    spark_url = os.getenv("XUNFEI_SPARK_URL")
+    # API端点
+    url = "http://localhost:8000/api/v1/items/ai-auto-complete"
     
-    print(f"APP_ID: {app_id}")
-    print(f"API_KEY: {api_key}")
-    print(f"API_SECRET: {api_secret}")
-    print(f"SPARK_URL: {spark_url}")
+    # 查找测试图片
+    test_images = []
+    static_dir = Path("static/images")
     
-    # 2. 检查配置完整性
-    if not all([app_id, api_key, api_secret]):
-        print("❌ 配置不完整")
+    if static_dir.exists():
+        # 查找前4张图片用于测试
+        for img_file in static_dir.glob("*.jpg"):
+            if len(test_images) < 4:
+                test_images.append(img_file)
+            else:
+                break
+        
+        for img_file in static_dir.glob("*.png"):
+            if len(test_images) < 4:
+                test_images.append(img_file)
+            else:
+                break
+    
+    if not test_images:
+        print("❌ 未找到测试图片，请确保static/images目录中有图片文件")
         return
     
-    # 3. 测试导入AI服务
+    print(f"📸 找到 {len(test_images)} 张测试图片")
+    
+    # 准备文件数据
+    files = []
+    for i, img_path in enumerate(test_images):
+        files.append(('files', (img_path.name, open(img_path, 'rb'), 'image/jpeg')))
+        print(f"  图片 {i+1}: {img_path.name}")
+    
     try:
-        from core.spark_ai import spark_ai_service
-        print("✅ AI服务导入成功")
+        print("\n🚀 发送AI自动补全请求...")
         
-        # 4. 测试AI服务实例
-        print(f"AI服务实例: {spark_ai_service}")
+        # 发送请求
+        response = requests.post(url, files=files, timeout=60)
         
-        # 5. 测试配置获取
-        config = spark_ai_service._get_config()
-        print(f"动态配置: {config}")
+        print(f"📊 响应状态码: {response.status_code}")
+        print(f"📄 响应头: {dict(response.headers)}")
         
-        # 6. 测试配置检查
-        if all([config['app_id'], config['api_key'], config['api_secret']]):
-            print("✅ AI服务配置完整")
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ 请求成功!")
+            print(f"📋 响应内容: {json.dumps(result, ensure_ascii=False, indent=2)}")
             
-            # 7. 测试AI分析功能
-            test_items = [
-                {
-                    "title": "二手 iPhone 13",
-                    "price": 3500,
-                    "condition": "good"
-                },
-                {
-                    "title": "全新 AirPods Pro",
-                    "price": 1200,
-                    "condition": "new"
-                }
-            ]
-            
-            print("\n=== 测试AI分析功能 ===")
-            result = spark_ai_service.analyze_price_competition(test_items)
-            print(f"AI分析结果: {result}")
-            
+            if result.get('success'):
+                data = result.get('data', {})
+                print("\n🎯 AI识别结果:")
+                print(f"  标题: {data.get('title', 'N/A')}")
+                print(f"  描述: {data.get('description', 'N/A')}")
+                print(f"  分类: {data.get('category', 'N/A')}")
+                print(f"  状态: {data.get('condition', 'N/A')}")
+                print(f"  价格建议: {data.get('price_suggestion', 'N/A')}")
+            else:
+                print(f"❌ AI识别失败: {result.get('message', '未知错误')}")
         else:
-            print("❌ AI服务配置不完整")
+            print(f"❌ 请求失败: {response.status_code}")
+            print(f"📄 错误响应: {response.text}")
             
-    except ImportError as e:
-        print(f"❌ 导入AI服务失败: {e}")
+    except requests.exceptions.Timeout:
+        print("❌ 请求超时")
+    except requests.exceptions.ConnectionError:
+        print("❌ 连接失败，请确保后端服务正在运行")
     except Exception as e:
-        print(f"❌ 其他错误: {e}")
+        print(f"❌ 请求异常: {e}")
+    finally:
+        # 关闭文件
+        for _, (_, file_obj, _) in files:
+            file_obj.close()
+
+def test_ai_auto_complete_ws():
+    """测试websockets版本的AI自动补全功能"""
+    
+    # API端点
+    url = "http://localhost:8000/api/v1/items/ai-auto-complete-ws"
+    
+    # 查找测试图片
+    test_images = []
+    static_dir = Path("static/images")
+    
+    if static_dir.exists():
+        # 查找前4张图片用于测试
+        for img_file in static_dir.glob("*.jpg"):
+            if len(test_images) < 4:
+                test_images.append(img_file)
+            else:
+                break
+        
+        for img_file in static_dir.glob("*.png"):
+            if len(test_images) < 4:
+                test_images.append(img_file)
+            else:
+                break
+    
+    if not test_images:
+        print("❌ 未找到测试图片，请确保static/images目录中有图片文件")
+        return
+    
+    print(f"📸 找到 {len(test_images)} 张测试图片")
+    
+    # 准备文件数据
+    files = []
+    for i, img_path in enumerate(test_images):
+        files.append(('files', (img_path.name, open(img_path, 'rb'), 'image/jpeg')))
+        print(f"  图片 {i+1}: {img_path.name}")
+    
+    try:
+        print("\n🚀 发送websockets版本AI自动补全请求...")
+        
+        # 发送请求
+        response = requests.post(url, files=files, timeout=60)
+        
+        print(f"📊 响应状态码: {response.status_code}")
+        print(f"📄 响应头: {dict(response.headers)}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ 请求成功!")
+            print(f"📋 响应内容: {json.dumps(result, ensure_ascii=False, indent=2)}")
+            
+            if result.get('success'):
+                data = result.get('data', {})
+                print("\n🎯 AI识别结果:")
+                print(f"  标题: {data.get('title', 'N/A')}")
+                print(f"  描述: {data.get('description', 'N/A')}")
+                print(f"  分类: {data.get('category', 'N/A')}")
+                print(f"  状态: {data.get('condition', 'N/A')}")
+                print(f"  价格建议: {data.get('price_suggestion', 'N/A')}")
+            else:
+                print(f"❌ AI识别失败: {result.get('message', '未知错误')}")
+        else:
+            print(f"❌ 请求失败: {response.status_code}")
+            print(f"📄 错误响应: {response.text}")
+            
+    except requests.exceptions.Timeout:
+        print("❌ 请求超时")
+    except requests.exceptions.ConnectionError:
+        print("❌ 连接失败，请确保后端服务正在运行")
+    except Exception as e:
+        print(f"❌ 请求异常: {e}")
+    finally:
+        # 关闭文件
+        for _, (_, file_obj, _) in files:
+            file_obj.close()
 
 if __name__ == "__main__":
-    test_ai_service() 
+    print("🧪 测试AI自动补全功能")
+    print("=" * 50)
+    
+    print("\n1️⃣ 测试标准版本:")
+    test_ai_auto_complete()
+    
+    print("\n" + "=" * 50)
+    print("\n2️⃣ 测试websockets版本:")
+    test_ai_auto_complete_ws()
+    
+    print("\n" + "=" * 50)
+    print("✅ 测试完成!") 

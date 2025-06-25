@@ -358,6 +358,18 @@ const apiService = {
   async getBuyRequest(id) {
     return api.get(`/buy_requests/${id}`);
   },
+
+  // AI自动补全商品信息（图片识别，支持多图片）
+  async aiAutoCompleteItemByImage(files) {
+    const formData = new FormData();
+    files.forEach(file => formData.append('files', file));
+    // 直接用axios.post，确保可用
+    return axios.post('http://localhost:8000/api/v1/items/ai-auto-complete', formData, {
+      headers: {
+        Authorization: localStorage.getItem('access_token') ? `Bearer ${localStorage.getItem('access_token')}` : undefined
+      }
+    });
+  },
 }
 
 export default apiService;

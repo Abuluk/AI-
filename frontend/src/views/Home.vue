@@ -100,8 +100,9 @@
         <div class="cheap-deals-list">
           <div v-if="loadingCheapDeals" class="loading-deals">
             <div class="skeleton-deal" v-for="n in 3" :key="n"></div>
+            <div class="loading-text">AI智能推荐加载中…</div>
           </div>
-          <div v-else-if="cheapDeals.length === 0" class="empty-deals">
+          <div v-else-if="cheapDeals.length === 0 && !aiAnalysis.success && !loadingCheapDeals" class="empty-deals">
             暂无推荐商品
           </div>
           <div v-else class="deal-items">
@@ -336,33 +337,14 @@ export default {
         }
       } catch (error) {
         console.error('Error loading AI cheap deals:', error);
-        // 如果API调用失败，使用本地模拟数据
+        // 如果API调用失败，不再显示本地模拟数据，只显示错误提示
         this.aiAnalysis = {
           success: false,
           analysis: null,
           market_insights: null,
-          message: "AI服务连接失败，显示基础推荐"
+          message: "AI服务连接失败，暂无法获取推荐"
         };
-        this.cheapDeals = [
-          {
-            id: 1,
-            title: "二手 iPad Air 4",
-            price: 2000,
-            condition: "good",
-            user: {
-              username: "李四"
-            }
-          },
-          {
-            id: 2,
-            title: "99新 AirPods Pro",
-            price: 800,
-            condition: "like_new",
-            user: {
-              username: "王五"
-            }
-          }
-        ];
+        this.cheapDeals = [];
       } finally {
         this.loadingCheapDeals = false;
       }
@@ -855,6 +837,7 @@ export default {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  align-items: center;
 }
 
 .skeleton-deal {
@@ -862,6 +845,14 @@ export default {
   background: #f0f0f0;
   border-radius: 4px;
   animation: skeleton-loading 1.5s infinite;
+}
+
+.loading-text {
+  margin-top: 10px;
+  color: #42b983;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 1px;
 }
 
 .empty-deals {

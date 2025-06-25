@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form, BackgroundTasks
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from db.session import get_db
 from crud import crud_item
@@ -348,3 +348,43 @@ def mark_item_sold(
     db.commit()
     db.refresh(item)
     return {"message": "商品已标记为已售", "item": item}
+
+# AI自动补全商品信息（图片识别）
+@router.post("/ai-auto-complete")
+async def ai_auto_complete_item_by_image(
+    files: Optional[List[UploadFile]] = File(None),
+    file: Optional[UploadFile] = File(None)
+):
+    """
+    上传图片，AI自动补全商品信息，支持单文件和多文件
+    """
+    try:
+        image_bytes_list = []
+        if files:
+            image_bytes_list = [await f.read() for f in files]
+        elif file:
+            image_bytes_list = [await file.read()]
+        else:
+            return {"success": False, "message": "未收到图片"}
+        result = spark_ai_service.auto_complete_item_by_image(image_bytes_list)
+        return result
+    except Exception as e:
+        return {"success": False, "message": f"AI自动补全失败: {str(e)}"}
+
+@router.post("/ai-auto-complete-ws")
+async def ai_auto_complete_item_by_image_ws(
+    files: Optional[List[UploadFile]] = File(None),
+    file: Optional[UploadFile] = File(None)
+):
+    """
+    使用websockets库异步方式调用讯飞图片理解API，测试兼容性
+    """
+    image_bytes_list = []
+    if files:
+        image_bytes_list = [await f.read() for f in files]
+    elif file:
+        image_bytes_list = [await file.read()]
+    else:
+        return {"success": False, "message": "未收到图片"}
+    result = await spark_ai_service.auto_complete_item_by_image_ws(image_bytes_list)
+    return result
