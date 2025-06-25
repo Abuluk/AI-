@@ -198,31 +198,46 @@ const apiService = {
   },
   
   // 消息操作
-  async getConversations() {
-    return api.get('/messages')
-  },
-  
-  async getMessages(conversationId) {
-    return api.get(`/messages/${conversationId}`)
-  },
-  
-  async sendMessage(messageData) {
-    return api.post('/messages', messageData)
-  },
-
-  // 添加获取未读消息数量方法
-  async getUnreadCount() {
-    return api.get('/messages/unread-count')
-  },
-
-  // 添加获取对话列表方法
+  // 获取对话列表
   async getConversationsList() {
     return api.get('/messages/conversations')
   },
 
-  // 添加获取特定商品对话方法
-  async getConversationMessages(itemId, otherUserId) {
-    return api.get(`/messages/conversation/${itemId}/${otherUserId}`)
+  // 获取未读消息数量
+  async getUnreadCount() {
+    return api.get('/messages/unread-count')
+  },
+
+  /**
+   * 获取对话消息（支持商品和求购）
+   * @param {Object} params { type: 'item'|'buy_request', id, other_user_id }
+   */
+  async getConversationMessages({ type = 'item', id, other_user_id }) {
+    // type: 'item' 或 'buy_request'
+    return api.get(`/messages/conversation/${type}/${id}/${other_user_id}`)
+  },
+
+  /**
+   * 发送消息（支持商品和求购）
+   * @param {Object} messageData { content, other_user_id, type, id }
+   */
+  async sendMessage({ content, other_user_id, type = 'item', id }) {
+    // type: 'item' 或 'buy_request'
+    const data = {
+      content,
+      other_user_id,
+      item_id: type === 'item' ? id : undefined,
+      buy_request_id: type === 'buy_request' ? id : undefined
+    }
+    return api.post('/messages', data)
+  },
+
+  /**
+   * 删除对话（支持商品和求购）
+   * @param {Object} params { type: 'item'|'buy_request', id, other_user_id }
+   */
+  async deleteConversation({ type = 'item', id, other_user_id }) {
+    return api.delete(`/messages/conversation/${type}/${id}/${other_user_id}`)
   },
 
   // 搜索商品方法
@@ -341,10 +356,6 @@ const apiService = {
   },
 
   getUsersByIds: (userIds) => api.post('/users/by_ids', { user_ids: userIds }),
-
-  async deleteConversation(itemId, otherUserId) {
-    return api.delete(`/messages/conversation/${itemId}/${otherUserId}`)
-  },
 
   // 求购相关
   async createBuyRequest(data) {

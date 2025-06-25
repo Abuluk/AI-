@@ -3,7 +3,7 @@ from sqlalchemy import and_, or_, func, desc, case, union_all
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from db.models import Message, User, Item
+from db.models import Message, User, Item, BuyRequest
 from schemas.message import MessageCreate, MessageUpdate, SystemMessageCreate
 
 def get_message(db: Session, message_id: int):
@@ -14,6 +14,7 @@ def create_message(db: Session, message: MessageCreate, user_id: int):
         content=message.content,
         user_id=user_id,
         item_id=message.item_id,
+        buy_request_id=message.buy_request_id,
         target_users=message.target_user,
         is_read=False,
         is_system=False
@@ -59,105 +60,149 @@ def get_user_messages(db: Session, user_id: int, skip: int = 0, limit: int = 50)
     # 查询所有消息并按时间排序
     return db.query(Message).filter(Message.id.in_(all_ids)).order_by(desc(Message.created_at)).offset(skip).limit(limit).all()
 
-def get_conversation_messages(db: Session, user_id: int, item_id: int, other_user_id: int) -> List[Message]:
-    """获取特定商品、特定对话伙伴之间的所有消息（item_id + user_id + target_user 关联一个消息框）"""
-    item = db.query(Item).filter(Item.id == item_id).first()
-    if not item:
+def get_conversation_messages(db: Session, user_id: int, other_user_id: int, type: str = "item", id: int = None) -> List[Message]:
+    if type == "item":
+        return db.query(Message).filter(
+            Message.item_id == id,
+            Message.is_system == False,
+            or_(
+                and_(Message.user_id == user_id, Message.target_users == str(other_user_id)),
+                and_(Message.user_id == other_user_id, Message.target_users == str(user_id)),
+                and_(Message.user_id.in_([user_id, other_user_id]), Message.target_users == None)
+            )
+        ).order_by(Message.created_at).all()
+    elif type == "buy_request":
+        return db.query(Message).filter(
+            Message.buy_request_id == id,
+            Message.is_system == False,
+            or_(
+                and_(Message.user_id == user_id, Message.target_users == str(other_user_id)),
+                and_(Message.user_id == other_user_id, Message.target_users == str(user_id)),
+                and_(Message.user_id.in_([user_id, other_user_id]), Message.target_users == None)
+            )
+        ).order_by(Message.created_at).all()
+    else:
         return []
-    return db.query(Message).filter(
-        Message.item_id == item_id,
-        Message.is_system == False,
-        or_(
-            # 新消息：target_users为对方ID
-            and_(Message.user_id == user_id, Message.target_users == str(other_user_id)),
-            and_(Message.user_id == other_user_id, Message.target_users == str(user_id)),
-            # 兼容历史消息：target_users为NULL
-            and_(Message.user_id.in_([user_id, other_user_id]), Message.target_users == None)
-        )
-    ).order_by(Message.created_at).all()
 
 def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
     """
-    获取用户的对话列表，以"对话伙伴"为中心进行聚合。
-    使用更简单、更健壮的逻辑来避免SQL复杂性带来的bug。
-    增加了对None值的过滤，确保other_user_id始终有效。
+    获取用户的对话列表，支持商品(item)和求购(buy_request)两种类型。
     """
-
-    # 1. 获取所有与用户相关的对话对 (item_id, other_user_id)
-    # 子查询1: 用户是发送者，对话伙伴是商品所有者
-    sent_messages = db.query(
+    output = []
+    # ----------- 商品对话 -----------
+    # 1. 我发起的（我不是 owner）
+    sent_items = db.query(
         Message.item_id,
         Item.owner_id.label('other_user_id')
     ).join(Item, Message.item_id == Item.id).filter(
         Message.user_id == user_id,
         Message.is_system == False,
-        Item.owner_id.isnot(None),  # 确保商品所有者存在
-        Item.owner_id != user_id      # 排除与自己的对话
+        Item.owner_id.isnot(None),
+        Item.owner_id != user_id,
+        Message.item_id.isnot(None)
     ).distinct()
-
-    # 子查询2: 用户是商品所有者，对话伙伴是消息发送者
-    received_messages = db.query(
+    # 2. 别人发给我的（我是 owner）
+    received_items = db.query(
         Message.item_id,
         Message.user_id.label('other_user_id')
     ).join(Item, Message.item_id == Item.id).filter(
         Item.owner_id == user_id,
         Message.is_system == False,
-        Message.user_id.isnot(None), # 确保消息发送者存在
-        Message.user_id != user_id   # 排除与自己的对话
+        Message.user_id.isnot(None),
+        Message.user_id != user_id,
+        Message.item_id.isnot(None)
     ).distinct()
-
-    # 合并并去重所有对话对
-    all_conversations_query = sent_messages.union(received_messages)
-    
-    # 直接从数据库获取干净的、唯一的(item_id, other_user_id)列表
-    conversation_keys = all_conversations_query.all()
-
-    if not conversation_keys:
-        return []
-
-    # 2. 为每个唯一的对话填充详细信息
-    output = []
-    for item_id, other_user_id in conversation_keys:
-        # a. 获取对话伙伴的用户信息
+    all_item_convs = sent_items.union(received_items).all()
+    for item_id, other_user_id in all_item_convs:
+        if not item_id or not other_user_id:
+            continue
         other_user = db.query(User).filter(User.id == other_user_id).first()
         if not other_user:
             continue
-
-        # b. 获取商品信息
         item = db.query(Item).filter(Item.id == item_id).first()
         item_title = item.title if item else ''
-
-        # b. 找到这个对话的最后一条消息
         last_message = db.query(Message).filter(
             Message.item_id == item_id,
             Message.user_id.in_([user_id, other_user_id])
         ).order_by(Message.created_at.desc()).first()
-
         if not last_message:
             continue
-            
-        # c. 计算当前用户在此对话中的未读消息数
         unread_count = db.query(func.count(Message.id)).filter(
             Message.item_id == item_id,
             Message.is_read == False,
-            Message.user_id == other_user_id  # 未读消息是由对方发送的
+            Message.user_id == other_user_id
         ).scalar() or 0
-
-        # d. 组装对话摘要
         output.append({
+            'type': 'item',
             'item_id': item_id,
+            'buy_request_id': None,
             'other_user_id': other_user.id,
             'other_user_name': other_user.username,
             'other_user_avatar': other_user.avatar,
             'item_title': item_title,
+            'buy_request_title': None,
             'last_message_content': last_message.content,
             'last_message_time': last_message.created_at,
             'unread_count': unread_count
         })
-
-    # 3. 按最后消息时间排序
+    # ----------- 求购对话 -----------
+    # 1. 我发起的（我不是发布者）
+    sent_brs = db.query(
+        Message.buy_request_id,
+        BuyRequest.user_id.label('other_user_id')
+    ).join(BuyRequest, Message.buy_request_id == BuyRequest.id).filter(
+        Message.user_id == user_id,
+        Message.is_system == False,
+        BuyRequest.user_id.isnot(None),
+        BuyRequest.user_id != user_id,
+        Message.buy_request_id.isnot(None)
+    ).distinct()
+    # 2. 别人发给我的（我是发布者）
+    received_brs = db.query(
+        Message.buy_request_id,
+        Message.user_id.label('other_user_id')
+    ).join(BuyRequest, Message.buy_request_id == BuyRequest.id).filter(
+        BuyRequest.user_id == user_id,
+        Message.is_system == False,
+        Message.user_id.isnot(None),
+        Message.user_id != user_id,
+        Message.buy_request_id.isnot(None)
+    ).distinct()
+    all_br_convs = sent_brs.union(received_brs).all()
+    for buy_request_id, other_user_id in all_br_convs:
+        if not buy_request_id or not other_user_id:
+            continue
+        other_user = db.query(User).filter(User.id == other_user_id).first()
+        if not other_user:
+            continue
+        br = db.query(BuyRequest).filter(BuyRequest.id == buy_request_id).first()
+        br_title = br.title if br else ''
+        last_message = db.query(Message).filter(
+            Message.buy_request_id == buy_request_id,
+            Message.user_id.in_([user_id, other_user_id])
+        ).order_by(Message.created_at.desc()).first()
+        if not last_message:
+            continue
+        unread_count = db.query(func.count(Message.id)).filter(
+            Message.buy_request_id == buy_request_id,
+            Message.is_read == False,
+            Message.user_id == other_user_id
+        ).scalar() or 0
+        output.append({
+            'type': 'buy_request',
+            'item_id': None,
+            'buy_request_id': buy_request_id,
+            'other_user_id': other_user.id,
+            'other_user_name': other_user.username,
+            'other_user_avatar': other_user.avatar,
+            'item_title': None,
+            'buy_request_title': br_title,
+            'last_message_content': last_message.content,
+            'last_message_time': last_message.created_at,
+            'unread_count': unread_count
+        })
+    # 按最后消息时间排序
     output.sort(key=lambda x: x['last_message_time'], reverse=True)
-
     return output
 
 def get_unread_count(db: Session, user_id: int) -> int:
@@ -253,8 +298,8 @@ class MessageCRUD:
     def get_user_messages(self, db: Session, user_id: int, skip: int = 0, limit: int = 50):
         return get_user_messages(db, user_id, skip, limit)
     
-    def get_conversation_messages(self, db: Session, user_id: int, item_id: int, other_user_id: int):
-        return get_conversation_messages(db, user_id, item_id, other_user_id)
+    def get_conversation_messages(self, db: Session, user_id: int, other_user_id: int, type: str = "item", id: int = None):
+        return get_conversation_messages(db, user_id, other_user_id, type, id)
     
     def get_user_conversations(self, db: Session, user_id: int):
         return get_user_conversations(db, user_id)

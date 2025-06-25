@@ -58,6 +58,7 @@ class Message(Base):
     content = Column(Text, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=True)
+    buy_request_id = Column(Integer, ForeignKey("buy_requests.id"), nullable=True)  # 新增
     created_at = Column(DateTime, server_default=func.now())  # 使用数据库函数
     is_read = Column(Boolean, default=False)  # 添加已读状态
     is_system = Column(Boolean, default=False)  # 添加系统消息标识
@@ -66,6 +67,7 @@ class Message(Base):
     
     user = relationship("User", back_populates="messages")
     item = relationship("Item", back_populates="messages")
+    buy_request = relationship("BuyRequest")  # 新增
 
 # 在Favorite模型中添加唯一约束
 class Favorite(Base):

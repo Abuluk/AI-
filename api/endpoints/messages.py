@@ -65,18 +65,17 @@ def read_unread_count(
     count = get_unread_count(db, user_id=current_user.id)
     return {"unread_count": count}
 
-@router.get("/conversation/{item_id}/{other_user_id}", response_model=List[MessageResponse])
+@router.get("/conversation/{type}/{id}/{other_user_id}", response_model=List[MessageResponse])
 def read_conversation_messages(
-    item_id: int,
+    type: str,
+    id: int,
     other_user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """获取特定商品、特定对话伙伴之间的所有消息"""
     messages = get_conversation_messages(
-        db, user_id=current_user.id, item_id=item_id, other_user_id=other_user_id
+        db, user_id=current_user.id, other_user_id=other_user_id, type=type, id=id
     )
-    # 标记消息为已读
     for msg in messages:
         if msg.user_id != current_user.id and not msg.is_read:
             mark_as_read(db, message_id=msg.id)
@@ -89,6 +88,8 @@ def create_new_message(
     current_user: User = Depends(get_current_active_user)
 ):
     """创建新消息"""
+    if not message.item_id and not message.buy_request_id:
+        raise HTTPException(status_code=400, detail="item_id 和 buy_request_id 必须至少有一个")
     return create_message(db, message=message, user_id=current_user.id)
 
 @router.patch("/{message_id}/read", response_model=MessageResponse)
@@ -126,9 +127,10 @@ def remove_message(
     delete_message(db, message_id=message_id)
     return {"message": "消息已删除"}
 
-@router.delete("/conversation/{item_id}/{other_user_id}")
+@router.delete("/conversation/{type}/{id}/{other_user_id}")
 def delete_conversation(
-    item_id: int,
+    type: str,
+    id: int,
     other_user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
@@ -136,14 +138,20 @@ def delete_conversation(
     """
     删除某商品下与某用户的所有消息（仅限当前用户与对方的消息）
     """
-    db.query(Message).filter(
-        Message.item_id == item_id,
+    q = db.query(Message).filter(
         Message.is_system == False,
         or_(
             and_(Message.user_id == current_user.id, Message.target_users == str(other_user_id)),
             and_(Message.user_id == other_user_id, Message.target_users == str(current_user.id)),
             and_(Message.user_id.in_([current_user.id, other_user_id]), Message.target_users == None)
         )
-    ).delete(synchronize_session=False)
+    )
+    if type == "item":
+        q = q.filter(Message.item_id == id)
+    elif type == "buy_request":
+        q = q.filter(Message.buy_request_id == id)
+    else:
+        raise HTTPException(status_code=400, detail="type参数错误")
+    q.delete(synchronize_session=False)
     db.commit()
     return {"message": "对话已删除"}

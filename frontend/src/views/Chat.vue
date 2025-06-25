@@ -5,14 +5,23 @@
         <i class="fas fa-arrow-left"></i>
       </router-link>
       <div class="product-info-header">
-        <img :src="getItemImage(item?.images)" class="product-avatar">
+        <img :src="getItemImage(item?.images)" class="product-avatar" v-if="chatType === 'item'">
+        <img :src="'/static/images/default_avatar.png'" class="product-avatar" v-else>
         <div class="product-info">
-          <div class="product-title">{{ item?.title || '加载中...' }}</div>
-          <div class="product-price">¥{{ item?.price || 0 }}</div>
+          <div class="product-title">
+            {{ chatType === 'item' ? (item?.title || '加载中...') : (item?.title || '加载中...') }}
+          </div>
+          <div class="product-price">
+            <template v-if="chatType === 'item'">¥{{ item?.price || 0 }}</template>
+            <template v-else>预算：¥{{ item?.budget || 0 }}</template>
+          </div>
         </div>
       </div>
       <div class="header-actions">
-        <router-link :to="`/item/${itemId}`" class="action-btn" title="查看商品">
+        <router-link v-if="chatType === 'item'" :to="`/item/${itemId}`" class="action-btn" title="查看商品">
+          <i class="fas fa-external-link-alt"></i>
+        </router-link>
+        <router-link v-else :to="`/buy-request/${itemId}`" class="action-btn" title="查看求购">
           <i class="fas fa-external-link-alt"></i>
         </router-link>
       </div>
@@ -94,6 +103,10 @@ export default {
     other_user_id: {
       type: [String, Number],
       required: true
+    },
+    type: {
+      type: String,
+      required: false
     }
   },
   setup(props) {
@@ -101,10 +114,10 @@ export default {
     const authStore = useAuthStore()
     const route = useRoute()
 
+    const chatType = computed(() => props.type || route.params.type || 'item')
     const itemId = computed(() => props.id)
     const otherUserId = computed(() => props.other_user_id)
     const currentUserId = computed(() => authStore.user?.id)
-    const type = computed(() => route.params.type)
 
     const messages = ref([])
     const item = ref(null)
@@ -135,7 +148,7 @@ export default {
     // 获取商品或求购信息
     const loadItem = async () => {
       try {
-        if (type.value === 'buy_request') {
+        if (chatType.value === 'buy_request') {
           const response = await api.getBuyRequest(itemId.value)
           item.value = response.data
         } else {
@@ -143,8 +156,8 @@ export default {
           item.value = response.data
         }
       } catch (error) {
-        console.error('加载商品信息失败:', error)
-        alert(type.value === 'buy_request' ? '求购信息不存在或已被删除' : '商品不存在或已被删除')
+        console.error('加载信息失败:', error)
+        alert(chatType.value === 'buy_request' ? '求购信息不存在或已被删除' : '商品不存在或已被删除')
         router.push('/messages')
       }
     }
@@ -171,12 +184,11 @@ export default {
       }
       loading.value = true
       try {
-        const response = await api.getConversationMessages(itemId.value, otherUserId.value)
+        const response = await api.getConversationMessages({ type: chatType.value, id: itemId.value, other_user_id: otherUserId.value })
         messages.value = response.data
         scrollToBottom()
       } catch (error) {
         console.error('加载消息失败:', error)
-        // 不再使用模拟数据，直接清空消息
         messages.value = []
       } finally {
         loading.value = false
@@ -191,8 +203,9 @@ export default {
       try {
         const response = await api.sendMessage({
           content: messageContent,
-          item_id: parseInt(itemId.value),
-          target_user: otherUserId.value
+          other_user_id: otherUserId.value,
+          type: chatType.value,
+          id: itemId.value
         })
         messages.value.push(response.data)
         scrollToBottom()
@@ -250,7 +263,7 @@ export default {
     const handleDeleteConversation = async () => {
       if (confirm('确定要删除该对话吗？此操作不可恢复！')) {
         try {
-          await api.deleteConversation(itemId.value, otherUserId.value)
+          await api.deleteConversation({ type: chatType.value, id: itemId.value, other_user_id: otherUserId.value })
           alert('对话已删除')
           router.push('/messages')
         } catch (e) {
@@ -288,7 +301,8 @@ export default {
       getUserAvatar,
       handleAvatarError,
       usersInfo,
-      handleDeleteConversation
+      handleDeleteConversation,
+      chatType
     }
   }
 }

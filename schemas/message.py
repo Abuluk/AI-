@@ -5,6 +5,7 @@ from datetime import datetime
 class MessageBase(BaseModel):
     content: str
     item_id: Optional[int] = None
+    buy_request_id: Optional[int] = None
 
 class MessageCreate(MessageBase):
     target_user: Optional[str] = None
@@ -32,14 +33,17 @@ class MessageResponse(MessageBase):
         from_attributes = True
 
 class Conversation(BaseModel):
-    item_id: int
+    item_id: Optional[int] = None
+    buy_request_id: Optional[int] = None
     item_title: Optional[str] = None
+    buy_request_title: Optional[str] = None
     other_user_id: int
     other_user_name: str
     other_user_avatar: Optional[str] = None
     last_message_content: str
     last_message_time: datetime
     unread_count: int
+    type: str  # 新增，前端已用
     
     class Config:
         from_attributes = True

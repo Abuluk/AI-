@@ -58,7 +58,8 @@
             <div class="conversation-header">
               <span class="item-title">
                 {{ conv.other_user_name }}
-                <span v-if="conv.item_title" style="margin-left: 16px; color: #888; font-size: 0.98em;">（{{ conv.item_title }}）</span>
+                <span v-if="conv.type === 'item' && conv.item_title" style="margin-left: 16px; color: #888; font-size: 0.98em;">（{{ conv.item_title }}）</span>
+                <span v-else-if="conv.type === 'buy_request' && conv.buy_request_title" style="margin-left: 16px; color: #888; font-size: 0.98em;">（{{ conv.buy_request_title }}）</span>
               </span>
               <span class="time">{{ formatDateTime(conv.last_message_time) }}</span>
             </div>
@@ -149,11 +150,19 @@ const getUserAvatar = (avatar) => {
 };
 
 const selectConversation = (conv) => {
+  // 判断类型，优先用 conv.type，否则根据 id 字段推断
+  let type = conv.type;
+  if (!type) {
+    if (conv.buy_request_id) type = 'buy_request';
+    else type = 'item';
+  }
+  const id = type === 'buy_request' ? conv.buy_request_id : conv.item_id;
   router.push({ 
     name: 'Chat', 
     params: { 
-      id: conv.item_id, 
-      other_user_id: conv.other_user_id 
+      id, 
+      other_user_id: conv.other_user_id,
+      type
     } 
   });
 };
