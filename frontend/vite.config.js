@@ -13,7 +13,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/static': {
-        target: 'http://localhost:8000',
+        target: 'http://8.138.47.159:8000',
         changeOrigin: true,
         secure: false
       }
