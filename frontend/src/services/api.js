@@ -406,6 +406,11 @@ const apiService = {
   async getAdminActivityBanners() {
     return api.get('/admin/site_config/activity_banner');
   },
+
+  // 新增：删除系统消息
+  async deleteSystemMessage(id) {
+    return api.delete(`/admin/messages/${id}`)
+  },
 }
 
 export default apiService;

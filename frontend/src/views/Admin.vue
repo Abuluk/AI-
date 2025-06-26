@@ -129,7 +129,7 @@
             <tr v-for="user in users" :key="user.id">
               <td>{{ user.id }}</td>
               <td>
-                <img :src="user.avatar" :alt="user.username" class="user-avatar">
+                <img :src="getUserAvatar(user)" :alt="user.username" class="user-avatar">
               </td>
               <td>{{ user.username || '未设置' }}</td>
               <td>{{ user.email }}</td>
@@ -614,9 +614,13 @@ const formatTime = (time) => {
 }
 
 const getFirstImage = (item) => {
-  if (!item.images) return 'default_product.png'
+  if (!item.images) return '/static/images/default_product.png'
   const images = item.images.split(',')
-  return images[0] || 'default_product.png'
+  const img = images[0]
+  if (!img) return '/static/images/default_product.png'
+  if (img.startsWith('http')) return img
+  if (img.startsWith('/static/')) return img
+  return `/static/images/${img}`
 }
 
 const logout = () => {
@@ -710,9 +714,8 @@ const deleteMessage = async (message) => {
   if (!confirm('确定要删除这条系统消息吗？')) {
     return
   }
-  
   try {
-    await api.delete(`/messages/${message.id}`)
+    await api.deleteSystemMessage(message.id)
     alert('删除成功')
     loadSystemMessages()
   } catch (error) {
@@ -782,6 +785,19 @@ const addBanner = () => {
 
 const removeBanner = (idx) => {
   activityBanners.value.splice(idx, 1)
+}
+
+const getUserAvatar = (user) => {
+  if (!user.avatar) {
+    return '/static/images/default_avatar.png'
+  }
+  if (user.avatar.startsWith('http')) {
+    return user.avatar
+  }
+  if (user.avatar.startsWith('/static/')) {
+    return user.avatar
+  }
+  return `/static/images/${user.avatar}`
 }
 </script>
 

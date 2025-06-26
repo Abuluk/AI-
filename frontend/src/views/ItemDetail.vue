@@ -72,12 +72,8 @@
                     <span>所在地：{{ seller.location }}</span>
                   </div>
                   <div v-if="seller.contact" class="contact-item">
-                    <i class="fas fa-phone"></i>
+                    <i class="fas fa-envelope"></i>
                     <span>联系方式：{{ seller.contact }}</span>
-                  </div>
-                  <div v-if="seller.phone" class="contact-item">
-                    <i class="fas fa-mobile-alt"></i>
-                    <span>手机：{{ seller.phone }}</span>
                   </div>
                 </div>
                 

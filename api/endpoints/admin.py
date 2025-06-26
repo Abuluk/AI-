@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from db.session import get_db
 from core.security import get_current_user, create_access_token, authenticate_user, ACCESS_TOKEN_EXPIRE_MINUTES
-from db.models import User, Item, Favorite, SiteConfig
+from db.models import User, Item, Favorite, SiteConfig, Message
 from schemas.user import UserInDB
 from schemas.item import ItemInDB, SiteConfigSchema
 from typing import List, Optional
@@ -340,6 +340,20 @@ def get_system_messages(
 ):
     """获取所有系统消息"""
     return crud_message.get_system_messages(db=db, skip=skip, limit=limit)
+
+@router.delete("/messages/{id}")
+def delete_system_message(
+    id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """删除系统消息（仅 Message 表，is_system=True）"""
+    message = db.query(Message).filter(Message.id == id, Message.is_system == True).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="消息不存在")
+    db.delete(message)
+    db.commit()
+    return {"message": "系统消息已删除"}
 
 @router.post("/site_config/activity_banner", response_model=SiteConfigSchema)
 def set_activity_banner(
