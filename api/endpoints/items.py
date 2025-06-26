@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form, BackgroundTasks
 from typing import List, Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from db.session import get_db
 from crud import crud_item
 from schemas.item import ItemCreate, ItemInDB, SiteConfigSchema
@@ -12,6 +12,7 @@ from db.models import Item
 from sqlalchemy import or_
 from core.spark_ai import spark_ai_service
 import json
+from fastapi.encoders import jsonable_encoder
 
 router = APIRouter()
 
@@ -25,7 +26,7 @@ def get_all_items(
     db: Session = Depends(get_db)
 ):
     """获取所有在售商品列表，支持分页和排序（只显示状态为online的商品）"""
-    query = db.query(Item).filter(
+    query = db.query(Item).options(joinedload(Item.owner)).filter(
         Item.status == "online",  # 只显示上架的商品
         Item.sold == False        # 不显示已售出的商品
     )
@@ -41,9 +42,22 @@ def get_all_items(
     elif order_by == "views_desc":
         query = query.order_by(Item.views.desc())
     else:
-        # 默认按最新发布排序
         query = query.order_by(Item.created_at.desc())
-    return query.offset(skip).limit(limit).all()
+    items = query.offset(skip).limit(limit).all()
+    # 手动序列化 owner 字段
+    result = []
+    for item in items:
+        item_dict = jsonable_encoder(item)
+        if item.owner:
+            item_dict["owner"] = {
+                "id": item.owner.id,
+                "username": item.owner.username,
+                "avatar": item.owner.avatar
+            }
+        else:
+            item_dict["owner"] = None
+        result.append(item_dict)
+    return result
 
 # 公共端点 - 搜索商品（无需认证）- 必须在/{item_id}之前定义
 @router.get("/search", response_model=List[ItemInDB])
@@ -55,23 +69,19 @@ def search_items(
     db: Session = Depends(get_db)
 ):
     if not q:
-        # 如果没有搜索关键词，返回所有在售商品
-        query = db.query(Item).filter(
-            Item.status == "online",  # 只显示上架的商品
-            Item.sold == False        # 不显示已售出的商品
+        query = db.query(Item).options(joinedload(Item.owner)).filter(
+            Item.status == "online",
+            Item.sold == False
         )
     else:
-        # 搜索在售商品
-        query = db.query(Item).filter(
+        query = db.query(Item).options(joinedload(Item.owner)).filter(
             or_(
                 Item.title.ilike(f"%{q}%"),
                 Item.description.ilike(f"%{q}%")
             ),
-            Item.status == "online",  # 只显示上架的商品
-            Item.sold == False        # 不显示已售出的商品
+            Item.status == "online",
+            Item.sold == False
         )
-    
-    # 根据排序参数进行排序
     if order_by == "created_at_desc":
         query = query.order_by(Item.created_at.desc())
     elif order_by == "price_asc":
@@ -81,10 +91,21 @@ def search_items(
     elif order_by == "views_desc":
         query = query.order_by(Item.views.desc())
     else:
-        # 默认按最新发布排序
         query = query.order_by(Item.created_at.desc())
-    
-    return query.offset(skip).limit(limit).all()
+    items = query.offset(skip).limit(limit).all()
+    result = []
+    for item in items:
+        item_dict = jsonable_encoder(item)
+        if item.owner:
+            item_dict["owner"] = {
+                "id": item.owner.id,
+                "username": item.owner.username,
+                "avatar": item.owner.avatar
+            }
+        else:
+            item_dict["owner"] = None
+        result.append(item_dict)
+    return result
 
 # 公共端点 - 获取AI分析的低价好物推荐
 @router.get("/ai-cheap-deals")

@@ -2,6 +2,13 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import List, Optional
 
+class UserBase(BaseModel):
+    id: int
+    username: str
+    avatar: Optional[str] = None
+    class Config:
+        from_attributes = True
+
 class ItemBase(BaseModel):
     title: str
     description: Optional[str] = None
@@ -32,6 +39,7 @@ class ItemInDB(ItemBase):
     owner_id: Optional[int] = None  # 添加所有者ID字段
     views: Optional[int] = 0  # 添加浏览量字段
     favorited_count: Optional[int] = 0  # 添加收藏计数字段
+    owner: Optional[UserBase] = None  # 新增：嵌套用户信息
     
     class Config:
         from_attributes = True

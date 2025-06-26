@@ -9,7 +9,8 @@ from .endpoints import (
     admin,
     buy_requests,  # 新增导入
     favorites,  # 新增导入
-    site_config  # 新增导入site_config
+    site_config,  # 新增导入site_config
+    test_items  # 新增导入test_items
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
@@ -68,4 +69,11 @@ api_router.include_router(
     buy_requests.router,
     prefix="/buy_requests",
     tags=["求购信息"]
+)
+
+# 注册测试接口，无需认证
+api_router.include_router(
+    test_items.router,
+    prefix="",
+    tags=["测试"]
 )

@@ -316,6 +316,9 @@ export default {
       }
     },
     async purchaseItem() {
+      this.$message && this.$message.info
+        ? this.$message.info('请联系卖家购买')
+        : alert('请联系卖家购买');
     },
     startChat() {
       if (this.isOwner) {

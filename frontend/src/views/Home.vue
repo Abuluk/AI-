@@ -116,50 +116,73 @@
 
       <!-- 右侧低价推荐栏 -->
       <div class="cheap-deals-sidebar">
+        <div style="text-align:center;margin-bottom:16px;" v-if="!aiEnabled">
+          <button @click="enableAIRecommend" class="login-btn">启动AI推荐</button>
+        </div>
         <div class="cheap-deals-header">
           <h3>AI智能推荐</h3>
           <div class="ai-status" :class="{ 'ai-active': aiAnalysis.success }">
-            <span v-if="aiAnalysis.success" class="ai-indicator">🤖 AI分析</span>
+            <span v-if="aiEnabled && aiAnalysis.success" class="ai-indicator">🤖 AI分析</span>
             <span v-else class="ai-indicator">📊 基础推荐</span>
           </div>
         </div>
-        
         <!-- AI分析结果展示 -->
-        <div v-if="aiAnalysis.success && aiAnalysis.analysis" class="ai-analysis">
+        <div v-if="aiEnabled && aiAnalysis.success && aiAnalysis.analysis" class="ai-analysis">
           <div class="analysis-text">{{ aiAnalysis.analysis }}</div>
         </div>
-        
         <div class="cheap-deals-list">
-          <div v-if="loadingCheapDeals" class="loading-deals">
-            <div class="skeleton-deal" v-for="n in 3" :key="n"></div>
-            <div class="loading-text">AI智能推荐加载中…</div>
-          </div>
-          <div v-else-if="cheapDeals.length === 0 && !aiAnalysis.success && !loadingCheapDeals" class="empty-deals">
-            暂无推荐商品
-          </div>
-          <div v-else class="deal-items">
-            <div v-for="deal in cheapDeals" :key="deal.id" class="deal-item" @click="goToItemDetail(deal.id)">
-              <div class="deal-title">{{ deal.title }}</div>
-              <div class="deal-price-section">
-                <span class="deal-price">¥{{ deal.price }}</span>
-                <span v-if="deal.ai_reason" class="ai-reason">{{ deal.ai_reason }}</span>
-              </div>
-              <div class="deal-footer">
-                <span class="deal-user-name">{{ deal.user ? deal.user.username : '未知用户' }}</span>
-                <span class="deal-condition">{{ getConditionText(deal.condition) }}</span>
+          <!-- AI未启用时显示最低价商品 -->
+          <template v-if="!aiEnabled">
+            <div class="deal-items">
+              <div v-for="deal in lowestDeals" :key="deal.id" class="deal-item" @click="goToItemDetail(deal.id)">
+                <div class="deal-title">{{ deal.title }}</div>
+                <div class="deal-price-section">
+                  <span class="deal-price">¥{{ deal.price }}</span>
+                </div>
+                <div class="deal-footer">
+                  <span class="deal-user-name">
+                    {{ deal.owner && deal.owner.username ? deal.owner.username : '未知用户' }}
+                  </span>
+                  <span class="deal-condition">{{ getConditionText(deal.condition) }}</span>
+                </div>
               </div>
             </div>
-          </div>
+          </template>
+          <!-- AI启用后显示AI推荐商品 -->
+          <template v-else>
+            <div v-if="loadingCheapDeals" class="loading-deals">
+              <div class="skeleton-deal" v-for="n in 3" :key="n"></div>
+              <div class="loading-text">AI智能推荐加载中…</div>
+            </div>
+            <div v-else-if="cheapDeals.length === 0 && !aiAnalysis.success && !loadingCheapDeals" class="empty-deals">
+              暂无推荐商品
+            </div>
+            <div v-else class="deal-items">
+              <div v-for="deal in cheapDeals" :key="deal.id" class="deal-item" @click="goToItemDetail(deal.id)">
+                <div class="deal-title">{{ deal.title }}</div>
+                <div class="deal-price-section">
+                  <span class="deal-price">¥{{ deal.price }}</span>
+                  <span v-if="deal.ai_reason" class="ai-reason">{{ deal.ai_reason }}</span>
+                </div>
+                <div class="deal-footer">
+                  <span class="deal-user-name">
+                    {{ deal.owner && deal.owner.username ? deal.owner.username : '未知用户' }}
+                  </span>
+                  <span class="deal-condition">{{ getConditionText(deal.condition) }}</span>
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
         
         <!-- 市场洞察 -->
-        <div v-if="aiAnalysis.success && aiAnalysis.market_insights" class="market-insights">
+        <div v-if="aiEnabled && aiAnalysis.success && aiAnalysis.market_insights" class="market-insights">
           <h4>市场洞察</h4>
           <p>{{ aiAnalysis.market_insights }}</p>
         </div>
         
         <!-- AI服务状态提示 -->
-        <div v-if="!aiAnalysis.success && aiAnalysis.message" class="ai-status-message">
+        <div v-if="aiEnabled && !aiAnalysis.success && aiAnalysis.message" class="ai-status-message">
           <p>{{ aiAnalysis.message }}</p>
         </div>
       </div>
@@ -232,6 +255,8 @@ export default {
         market_insights: null,
         message: null
       },
+      aiEnabled: false,
+      lowestDeals: [],
       selectedLocation: '',
       selectedCategory: '',
       activityBanners: [],
@@ -269,7 +294,7 @@ export default {
   mounted() {
     this.fetchSellingItems();
     this.fetchBuyingRequests();
-    this.fetchCheapDeals();
+    this.fetchLowestDeals();
     this.fetchActivityBanners();
     window.addEventListener('scroll', this.handleScroll);
   },
@@ -390,6 +415,24 @@ export default {
       } finally {
         this.loadingRequests = false;
       }
+    },
+    async fetchLowestDeals() {
+      // 获取最低价商品，取前10个
+      try {
+        const params = {
+          skip: 0,
+          limit: 10,
+          order_by: 'price_asc',
+        };
+        const response = await api.getItems(params);
+        this.lowestDeals = response.data || [];
+      } catch (e) {
+        this.lowestDeals = [];
+      }
+    },
+    enableAIRecommend() {
+      this.aiEnabled = true;
+      this.fetchCheapDeals();
     },
     async fetchCheapDeals() {
       this.loadingCheapDeals = true;
