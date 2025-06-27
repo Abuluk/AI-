@@ -51,3 +51,11 @@ class UserPublic(BaseModel):
 
 class UserIds(BaseModel):
     user_ids: List[int]
+
+class RequestPasswordReset(BaseModel):
+    account: EmailStr
+
+class DoResetPassword(BaseModel):
+    account: EmailStr
+    code: str
+    new_password: str

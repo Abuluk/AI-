@@ -411,6 +411,14 @@ const apiService = {
   async deleteSystemMessage(id) {
     return api.delete(`/admin/messages/${id}`)
   },
+
+  requestPasswordReset(data) {
+    return axios.post('/api/v1/users/request-password-reset', data);
+  },
+
+  resetPassword(data) {
+    return axios.post('/api/v1/users/reset-password', data);
+  },
 }
 
 export default apiService;

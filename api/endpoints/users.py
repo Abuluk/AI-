@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from db.session import get_db
 from core.security import get_current_active_user, get_current_user
@@ -16,8 +16,38 @@ from crud.crud_user import (
     get_users_by_ids
 )
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, EmailStr
+import random, string, time
+import smtplib
+from email.mime.text import MIMEText
 
 router = APIRouter()
+
+# 简单内存验证码存储，生产建议用redis
+reset_codes = {}
+
+class RequestPasswordReset(BaseModel):
+    account: EmailStr
+
+class DoResetPassword(BaseModel):
+    account: EmailStr
+    code: str
+    new_password: str
+
+def send_email_code(to_email, code):
+    # 这里请替换为你自己的邮箱配置
+    smtp_server = 'smtp.qq.com'
+    smtp_port = 465
+    smtp_user = '2720691438@qq.com'
+    smtp_pass = 'zzpvejnmtsvbdghi'
+    msg = MIMEText(f'您的验证码是：{code}，5分钟内有效。', 'plain', 'utf-8')
+    msg['Subject'] = '找回密码验证码'
+    msg['From'] = smtp_user
+    msg['To'] = to_email
+    s = smtplib.SMTP_SSL(smtp_server, smtp_port)
+    s.login(smtp_user, smtp_pass)
+    s.sendmail(smtp_user, [to_email], msg.as_string())
+    s.quit()
 
 @router.get("/me", response_model=UserInDB)
 def read_user_me(
@@ -175,3 +205,27 @@ def get_users_info_by_ids(
     """
     users = get_users_by_ids(db, user_ids=payload.user_ids)
     return users
+
+@router.post('/request-password-reset')
+def request_password_reset(data: RequestPasswordReset, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == data.account).first()
+    if not user:
+        raise HTTPException(status_code=404, detail='用户不存在')
+    code = ''.join(random.choices(string.digits, k=6))
+    reset_codes[data.account] = (code, time.time())
+    background_tasks.add_task(send_email_code, data.account, code)
+    return {'msg': '验证码已发送'}
+
+@router.post('/reset-password')
+def reset_password(data: DoResetPassword, db: Session = Depends(get_db)):
+    code_tuple = reset_codes.get(data.account)
+    if not code_tuple or code_tuple[0] != data.code or time.time() - code_tuple[1] > 300:
+        raise HTTPException(status_code=400, detail='验证码错误或已过期')
+    user = db.query(User).filter(User.email == data.account).first()
+    if not user:
+        raise HTTPException(status_code=404, detail='用户不存在')
+    from core.pwd_util import get_password_hash
+    user.hashed_password = get_password_hash(data.new_password)
+    db.commit()
+    reset_codes.pop(data.account, None)
+    return {'msg': '密码重置成功'}

@@ -16,6 +16,11 @@ export default defineConfig({
         target: 'http://8.138.47.159:8000',
         changeOrigin: true,
         secure: false
+      },
+      '/api': {
+        target: 'http://8.138.47.159:8000',
+        changeOrigin: true,
+        secure: false
       }
     }
   }
