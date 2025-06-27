@@ -264,6 +264,65 @@
       </div>
     </div>
 
+    <!-- 求购信息管理 -->
+    <div v-if="activeTab === 'buy_requests'" class="tab-content">
+      <div class="section-header">
+        <h2>求购信息管理</h2>
+        <div class="filters">
+          <input 
+            v-model="buyRequestFilters.search" 
+            placeholder="搜索求购标题/描述"
+            class="search-input"
+          >
+        </div>
+      </div>
+
+      <div v-if="loading.buy_requests" class="loading-state">
+        <div class="skeleton-row" v-for="n in 5" :key="n"></div>
+      </div>
+
+      <div v-else class="buy-requests-table">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>标题</th>
+              <th>描述</th>
+              <th>预算</th>
+              <th>发布者</th>
+              <th>发布时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="buyRequest in buyRequests" :key="buyRequest.id">
+              <td>{{ buyRequest.id }}</td>
+              <td>{{ buyRequest.title }}</td>
+              <td class="description-cell">{{ buyRequest.description || '无描述' }}</td>
+              <td>¥{{ buyRequest.budget || '未设置' }}</td>
+              <td>
+                <div class="user-info">
+                  <img :src="getUserAvatar(buyRequest.user)" :alt="buyRequest.user?.username" class="user-avatar">
+                  <span>{{ buyRequest.user?.username || '未知用户' }}</span>
+                </div>
+              </td>
+              <td>{{ formatTime(buyRequest.created_at) }}</td>
+              <td>
+                <div class="action-buttons">
+                  <button 
+                    @click="deleteBuyRequest(buyRequest)"
+                    class="btn btn-sm btn-danger"
+                  >
+                    删除
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- 消息管理 -->
     <div v-if="activeTab === 'messages'" class="tab-content">
       <div class="section-header">
@@ -414,13 +473,15 @@ const activeTab = ref('users')
 const loading = reactive({
   users: false,
   items: false,
-  messages: false
+  messages: false,
+  buy_requests: false
 })
 
 const stats = ref({})
 const users = ref([])
 const items = ref([])
 const systemMessages = ref([])
+const buyRequests = ref([])
 
 // 添加缺失的分页变量
 const systemMessagesPage = ref(1)
@@ -442,6 +503,10 @@ const messageFilters = reactive({
   target_users: ''
 })
 
+const buyRequestFilters = reactive({
+  search: ''
+})
+
 // 系统消息相关
 const showSystemMessageModal = ref(false)
 const publishing = ref(false)
@@ -459,6 +524,7 @@ const currentUserId = computed(() => user.value.id)
 const tabs = [
   { id: 'users', label: '用户管理', icon: 'fas fa-users' },
   { id: 'items', label: '商品管理', icon: 'fas fa-box' },
+  { id: 'buy_requests', label: '求购管理', icon: 'fas fa-shopping-cart' },
   { id: 'messages', label: '消息管理', icon: 'fas fa-bullhorn' },
   { id: 'activity', label: '活动页管理', icon: 'fas fa-bullhorn' },
 ]
@@ -602,6 +668,8 @@ const changeTab = (tabId) => {
     loadItems()
   } else if (tabId === 'messages') {
     loadSystemMessages()
+  } else if (tabId === 'buy_requests') {
+    loadBuyRequests()
   } else if (tabId === 'activity') {
     loadActivityBanners()
   }
@@ -799,6 +867,44 @@ const getUserAvatar = (user) => {
   }
   return `/static/images/${user.avatar}`
 }
+
+const loadBuyRequests = async () => {
+  loading.buy_requests = true
+  try {
+    const params = {}
+    if (buyRequestFilters.search) params.search = buyRequestFilters.search
+    
+    const response = await api.getAdminBuyRequests(params)
+    buyRequests.value = response.data
+  } catch (error) {
+    console.error('获取求购信息列表失败:', error)
+    alert('获取求购信息列表失败')
+  } finally {
+    loading.buy_requests = false
+  }
+}
+
+const deleteBuyRequest = async (buyRequest) => {
+  if (!confirm(`确定要删除求购信息 "${buyRequest.title}" 吗？此操作不可恢复！`)) {
+    return
+  }
+  
+  try {
+    await api.deleteAdminBuyRequest(buyRequest.id)
+    buyRequests.value = buyRequests.value.filter(br => br.id !== buyRequest.id)
+    alert('求购信息已删除')
+  } catch (error) {
+    console.error('删除求购信息失败:', error)
+    alert('删除失败')
+  }
+}
+
+// 监听求购信息过滤器变化
+watch(buyRequestFilters, () => {
+  if (activeTab.value === 'buy_requests') {
+    loadBuyRequests();
+  }
+}, { deep: true });
 </script>
 
 <style scoped>
@@ -1261,5 +1367,26 @@ th {
 .error {
   color: red;
   margin-bottom: 10px;
+}
+
+/* 求购信息管理样式 */
+.description-cell {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-info .user-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 </style> 

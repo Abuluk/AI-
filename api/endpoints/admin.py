@@ -1,14 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Form, Body
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from db.session import get_db
 from core.security import get_current_user, create_access_token, authenticate_user, ACCESS_TOKEN_EXPIRE_MINUTES
-from db.models import User, Item, Favorite, SiteConfig, Message
+from db.models import User, Item, Favorite, SiteConfig, Message, BuyRequest
 from schemas.user import UserInDB
 from schemas.item import ItemInDB, SiteConfigSchema
+from schemas.buy_request import BuyRequest as BuyRequestSchema
 from typing import List, Optional
 from datetime import datetime, timedelta
-from crud import crud_message
+from crud import crud_message, crud_buy_request
 import schemas.message
 from schemas.token import Token
 import json
@@ -380,4 +381,28 @@ def get_activity_banner_admin(
     config = db.query(SiteConfig).filter(SiteConfig.key == "activity_banner").first()
     if not config or not config.value:
         return SiteConfigSchema(key="activity_banner", value=None)
-    return SiteConfigSchema(key="activity_banner", value=json.loads(config.value)) 
+    return SiteConfigSchema(key="activity_banner", value=json.loads(config.value))
+
+@router.get("/buy_requests", response_model=List[BuyRequestSchema])
+def get_all_buy_requests(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """获取所有求购信息列表"""
+    return crud_buy_request.get_all_buy_requests_admin(db, skip=skip, limit=limit, search=search)
+
+@router.delete("/buy_requests/{buy_request_id}")
+def delete_buy_request(
+    buy_request_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """删除求购信息"""
+    success = crud_buy_request.delete_buy_request_admin(db, buy_request_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="求购信息不存在")
+    
+    return {"message": "求购信息已删除"} 

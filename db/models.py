@@ -67,7 +67,7 @@ class Message(Base):
     
     user = relationship("User", back_populates="messages")
     item = relationship("Item", back_populates="messages")
-    buy_request = relationship("BuyRequest")  # 新增
+    buy_request = relationship("BuyRequest", back_populates="messages")
 
 # 在Favorite模型中添加唯一约束
 class Favorite(Base):
@@ -95,6 +95,7 @@ class BuyRequest(Base):
     created_at = Column(DateTime, server_default=func.now())
 
     user = relationship('User', back_populates='buy_requests')
+    messages = relationship("Message", back_populates="buy_request", cascade="all, delete-orphan")
 
 class SiteConfig(Base):
     __tablename__ = 'site_config'

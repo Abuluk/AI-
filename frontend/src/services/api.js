@@ -3,7 +3,7 @@ import { ref } from 'vue'
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: 'http://8.138.47.159:8000/api/v1',
+  baseURL: 'http://localhost:8000/api/v1',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
@@ -385,7 +385,7 @@ const apiService = {
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
     // 直接用axios.post，确保可用
-    return axios.post('http://8.138.47.159:8000/api/v1/items/ai-auto-complete', formData, {
+    return axios.post('http://localhost:8000/api/v1/items/ai-auto-complete', formData, {
       headers: {
         Authorization: localStorage.getItem('access_token') ? `Bearer ${localStorage.getItem('access_token')}` : undefined
       }
@@ -410,6 +410,15 @@ const apiService = {
   // 新增：删除系统消息
   async deleteSystemMessage(id) {
     return api.delete(`/admin/messages/${id}`)
+  },
+
+  // 管理员求购信息管理
+  async getAdminBuyRequests(params = {}) {
+    return retryRequest(() => api.get('/admin/buy_requests', { params }))
+  },
+
+  async deleteAdminBuyRequest(buyRequestId) {
+    return retryRequest(() => api.delete(`/admin/buy_requests/${buyRequestId}`))
   },
 
   requestPasswordReset(data) {

@@ -73,7 +73,7 @@ npm run dev
 
 ## API文档
 
-启动后端服务后，访问 `http://8.138.47.159:8000/docs` 查看完整的API文档。
+启动后端服务后，访问 `http://localhost:8000/docs` 查看完整的API文档。
 
 ## 更新日志
 
