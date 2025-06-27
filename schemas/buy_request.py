@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from schemas.user import UserPublic
 
@@ -7,6 +7,7 @@ class BuyRequestBase(BaseModel):
     title: str
     description: Optional[str] = None
     budget: Optional[float] = None
+    images: Optional[List[str]] = None
 
 class BuyRequestCreate(BuyRequestBase):
     pass
@@ -17,4 +18,4 @@ class BuyRequest(BuyRequestBase):
     created_at: datetime
     user: Optional[UserPublic] = None
     class Config:
-        from_attributes = True 
+        orm_mode = True 

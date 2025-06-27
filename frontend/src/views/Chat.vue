@@ -140,7 +140,7 @@ export default {
       if (path.startsWith('http')) {
         return path;
       }
-      const baseUrl = 'http://localhost:8000';
+      const baseUrl = 'http://8.138.47.159:8000';
       const cleanedPath = path.startsWith('/') ? path.substring(1) : path;
       return `${baseUrl}/${cleanedPath.replace(/\\/g, '/')}`;
     }
@@ -257,7 +257,7 @@ export default {
         return;
       }
       event.target.onerror = null;
-      event.target.src = 'http://localhost:8000/static/images/default_avatar.png';
+      event.target.src = 'http://8.138.47.159:8000/static/images/default_avatar.png';
     }
     
     const handleDeleteConversation = async () => {

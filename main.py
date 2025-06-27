@@ -31,11 +31,10 @@ app = start_application()
 # 添加CORS中间件
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # 或指定你的前端地址如 ["http://localhost:5173"]
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Content-Type", "Content-Disposition"]
 )
 
 @app.get("/")

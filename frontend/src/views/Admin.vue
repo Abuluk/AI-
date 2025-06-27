@@ -687,8 +687,8 @@ const getFirstImage = (item) => {
   const img = images[0]
   if (!img) return '/static/images/default_product.png'
   if (img.startsWith('http')) return img
-  if (img.startsWith('/static/')) return img
-  return `/static/images/${img}`
+  if (img.startsWith('/static/images/')) return img
+  return `/static/images/${img.replace(/^static[\\\/]images[\\\/]/, '')}`
 }
 
 const logout = () => {
@@ -856,16 +856,16 @@ const removeBanner = (idx) => {
 }
 
 const getUserAvatar = (user) => {
-  if (!user.avatar) {
+  if (!user || !user.avatar) {
     return '/static/images/default_avatar.png'
   }
   if (user.avatar.startsWith('http')) {
     return user.avatar
   }
-  if (user.avatar.startsWith('/static/')) {
+  if (user.avatar.startsWith('/static/images/')) {
     return user.avatar
   }
-  return `/static/images/${user.avatar}`
+  return `/static/images/${user.avatar.replace(/^static[\\\/]images[\\\/]/, '')}`
 }
 
 const loadBuyRequests = async () => {
@@ -1388,5 +1388,54 @@ th {
   height: 24px;
   border-radius: 50%;
   object-fit: cover;
+}
+
+.detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.detail-main {
+  display: flex;
+  flex-direction: row;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.detail-info {
+  flex: 2;
+  min-width: 0;
+}
+
+.detail-images {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
+  min-width: 320px;
+}
+
+.buy-request-image {
+  width: 320px;
+  height: 320px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid #eee;
+  margin-bottom: 10px;
+}
+
+.seller-info-card {
+  width: 100%;
+  background: #fafbfc;
+  border-radius: 10px;
+  padding: 32px 24px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+  margin-top: 0;
 }
 </style> 

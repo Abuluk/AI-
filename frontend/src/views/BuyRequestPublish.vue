@@ -14,6 +14,15 @@
         <label>预算(元)</label>
         <input v-model="form.budget" type="number" min="0" step="0.01" placeholder="请输入预算" />
       </div>
+      <div class="form-group">
+        <label>上传图片</label>
+        <input type="file" multiple accept="image/*" @change="handleImageChange" />
+        <div class="image-preview-list">
+          <div v-for="(img, idx) in imagePreviews" :key="idx" class="image-preview">
+            <img :src="img" />
+          </div>
+        </div>
+      </div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" @click="cancel">取消</button>
         <button type="submit" class="btn btn-primary">发布</button>
@@ -31,15 +40,37 @@ export default {
       form: {
         title: '',
         description: '',
-        budget: ''
+        budget: '',
+        images: []
       },
-      msg: ''
+      msg: '',
+      imageFiles: [],
+      imagePreviews: []
     }
   },
   methods: {
+    async handleImageChange(e) {
+      const files = Array.from(e.target.files)
+      this.imageFiles = files
+      this.imagePreviews = files.map(file => URL.createObjectURL(file))
+    },
+    async uploadImages() {
+      const uploaded = []
+      for (const file of this.imageFiles) {
+        const formData = new FormData()
+        formData.append('file', file)
+        const res = await api.uploadBuyRequestImage(formData)
+        uploaded.push(res.data.url)
+      }
+      return uploaded
+    },
     async submitBuyRequest() {
       try {
-        await api.createBuyRequest(this.form)
+        let images = []
+        if (this.imageFiles.length > 0) {
+          images = await this.uploadImages()
+        }
+        await api.createBuyRequest({ ...this.form, images })
         this.msg = '发布成功！即将跳转...'
         setTimeout(() => {
           this.$router.push('/')
@@ -119,5 +150,17 @@ export default {
   margin-top: 16px;
   color: #27ae60;
   text-align: center;
+}
+.image-preview-list {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+.image-preview img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #eee;
 }
 </style> 

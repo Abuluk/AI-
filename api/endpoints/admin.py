@@ -104,7 +104,6 @@ def get_all_users(
 ):
     """获取所有用户列表"""
     query = db.query(User)
-    
     # 搜索过滤
     if search:
         query = query.filter(
@@ -112,19 +111,43 @@ def get_all_users(
             User.email.ilike(f"%{search}%") |
             User.phone.ilike(f"%{search}%")
         )
-    
     # 状态过滤
     if is_active is not None:
         query = query.filter(User.is_active == is_active)
-    
     # 管理员过滤
     if is_admin is not None:
         query = query.filter(User.is_admin == is_admin)
-    
     # 按创建时间倒序
     query = query.order_by(User.created_at.desc())
-    
-    return query.offset(skip).limit(limit).all()
+    users = query.offset(skip).limit(limit).all()
+    result = []
+    for user in users:
+        items_count = db.query(func.count(Item.id)).filter(Item.owner_id == user.id).scalar()
+        avatar = user.avatar or ''
+        if avatar:
+            if avatar.startswith('http') or avatar.startswith('https'):
+                pass  # 保持原样
+            else:
+                avatar = avatar.replace('/static/images/', '').replace('static/images/', '')
+        result.append({
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "avatar": avatar,
+            "bio": user.bio,
+            "location": user.location,
+            "contact": user.contact,
+            "phone": user.phone,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at,
+            "last_login": user.last_login,
+            "is_active": user.is_active,
+            "is_admin": user.is_admin,
+            "followers": user.followers,
+            "following": user.following,
+            "items_count": items_count
+        })
+    return result
 
 @router.get("/users/{user_id}", response_model=UserInDB)
 def get_user_detail(
@@ -139,6 +162,9 @@ def get_user_detail(
     
     # 计算用户的商品数量
     items_count = db.query(func.count(Item.id)).filter(Item.owner_id == user_id).scalar()
+    
+    if user.avatar:
+        user.avatar = user.avatar.replace('/static/images/', '').replace('static/images/', '')
     
     return {
         "id": user.id,
@@ -179,6 +205,9 @@ def update_user_status(
     db.commit()
     db.refresh(user)
     
+    if user.avatar:
+        user.avatar = user.avatar.replace('/static/images/', '').replace('static/images/', '')
+    
     return {"message": f"用户已{'激活' if is_active else '禁用'}", "user": user}
 
 @router.patch("/users/{user_id}/admin")
@@ -200,6 +229,9 @@ def update_user_admin_status(
     user.is_admin = is_admin
     db.commit()
     db.refresh(user)
+    
+    if user.avatar:
+        user.avatar = user.avatar.replace('/static/images/', '').replace('static/images/', '')
     
     return {"message": f"用户已{'设为管理员' if is_admin else '取消管理员权限'}", "user": user}
 
@@ -267,7 +299,14 @@ def get_all_items(
     # 按创建时间倒序
     query = query.order_by(Item.created_at.desc())
     
-    return query.offset(skip).limit(limit).all()
+    items = query.offset(skip).limit(limit).all()
+    for item in items:
+        if item.images:
+            item.images = ','.join([
+                img.replace('/static/images/', '').replace('static/images/', '') if not img.startswith('http') else img
+                for img in item.images.split(',')
+            ])
+    return items
 
 @router.get("/items/{item_id}", response_model=ItemInDB)
 def get_item_detail(
@@ -392,7 +431,13 @@ def get_all_buy_requests(
     current_admin: User = Depends(get_current_admin)
 ):
     """获取所有求购信息列表"""
-    return crud_buy_request.get_all_buy_requests_admin(db, skip=skip, limit=limit, search=search)
+    brs = crud_buy_request.get_all_buy_requests_admin(db, skip=skip, limit=limit, search=search)
+    for br in brs:
+        if br.images and isinstance(br.images, str):
+            br.images = br.images.split(",")
+        elif not br.images:
+            br.images = []
+    return brs
 
 @router.delete("/buy_requests/{buy_request_id}")
 def delete_buy_request(

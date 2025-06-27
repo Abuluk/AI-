@@ -92,6 +92,7 @@ class BuyRequest(Base):
     title = Column(String(100), nullable=False)
     description = Column(Text)
     budget = Column(DECIMAL(10, 2))
+    images = Column(String(500))  # 新增，存储图片路径，多个用逗号分隔
     created_at = Column(DateTime, server_default=func.now())
 
     user = relationship('User', back_populates='buy_requests')

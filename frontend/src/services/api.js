@@ -3,7 +3,7 @@ import { ref } from 'vue'
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api/v1',
+  baseURL: 'http://8.138.47.159:8000/api/v1',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
@@ -385,7 +385,7 @@ const apiService = {
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
     // 直接用axios.post，确保可用
-    return axios.post('http://localhost:8000/api/v1/items/ai-auto-complete', formData, {
+    return axios.post('http://8.138.47.159:8000/api/v1/items/ai-auto-complete', formData, {
       headers: {
         Authorization: localStorage.getItem('access_token') ? `Bearer ${localStorage.getItem('access_token')}` : undefined
       }
@@ -427,6 +427,12 @@ const apiService = {
 
   resetPassword(data) {
     return axios.post('/api/v1/users/reset-password', data);
+  },
+
+  uploadBuyRequestImage(formData) {
+    return api.post('/buy_requests/upload_image', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
   },
 }
 

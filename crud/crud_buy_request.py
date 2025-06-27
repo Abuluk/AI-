@@ -4,17 +4,39 @@ from sqlalchemy.orm import joinedload
 from schemas.buy_request import BuyRequestCreate
 
 def create_buy_request(db: Session, buy_request: BuyRequestCreate, user_id: int):
-    db_obj = BuyRequest(**buy_request.dict(), user_id=user_id)
+    images = ",".join(buy_request.images) if getattr(buy_request, 'images', None) else None
+    db_obj = BuyRequest(
+        title=buy_request.title,
+        description=buy_request.description,
+        budget=buy_request.budget,
+        user_id=user_id,
+        images=images
+    )
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
+    if db_obj.images:
+        db_obj.images = db_obj.images.split(",")
+    else:
+        db_obj.images = []
     return db_obj
 
 def get_buy_requests(db: Session, skip=0, limit=10):
-    return db.query(BuyRequest).options(joinedload(BuyRequest.user)).order_by(BuyRequest.created_at.desc()).offset(skip).limit(limit).all()
+    brs = db.query(BuyRequest).options(joinedload(BuyRequest.user)).order_by(BuyRequest.created_at.desc()).offset(skip).limit(limit).all()
+    for br in brs:
+        if br.images:
+            br.images = br.images.split(",")
+        else:
+            br.images = []
+    return brs
 
 def get_buy_request(db: Session, id: int):
-    return db.query(BuyRequest).options(joinedload(BuyRequest.user)).filter(BuyRequest.id == id).first()
+    br = db.query(BuyRequest).options(joinedload(BuyRequest.user)).filter(BuyRequest.id == id).first()
+    if br and br.images:
+        br.images = br.images.split(",")
+    elif br:
+        br.images = []
+    return br
 
 def get_all_buy_requests_admin(db: Session, skip=0, limit=20, search=None):
     """管理员获取所有求购信息"""

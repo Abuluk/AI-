@@ -3,18 +3,24 @@
     <div v-if="loading" class="loading">加载中...</div>
     <div v-else-if="error" class="error">{{ error }}</div>
     <div v-else-if="buyRequest" class="detail-card">
-      <h1 class="title">{{ buyRequest.title }}</h1>
-      <div class="meta">
-        <span class="budget">预算：¥{{ buyRequest.budget }}</span>
-        <span class="user">
-          <img v-if="buyRequest.user && buyRequest.user.avatar_url" :src="buyRequest.user.avatar_url" alt="头像" class="avatar">
-          {{ buyRequest.user ? buyRequest.user.username : '未知用户' }}
-        </span>
+      <div class="detail-main">
+        <div class="detail-info">
+          <h1 class="title">{{ buyRequest.title }}</h1>
+          <div class="meta">
+            <span class="budget">预算：¥{{ buyRequest.budget }}</span>
+            <span class="user">
+              <img v-if="buyRequest.user && buyRequest.user.avatar_url" :src="buyRequest.user.avatar_url" alt="头像" class="avatar">
+              {{ buyRequest.user ? buyRequest.user.username : '未知用户' }}
+            </span>
+          </div>
+          <div class="desc">{{ buyRequest.description }}</div>
+          <div class="created">发布时间：{{ formatDateTime(buyRequest.created_at) }}</div>
+        </div>
+        <div class="detail-images" v-if="buyRequest.images && buyRequest.images.length">
+          <img v-for="(img, idx) in buyRequest.images" :key="idx" :src="img" class="buy-request-image" />
+        </div>
       </div>
-      <div class="desc">{{ buyRequest.description }}</div>
-      <div class="created">发布时间：{{ formatDateTime(buyRequest.created_at) }}</div>
-
-      <div class="seller-info">
+      <div class="seller-info-card">
         <h3>发布者信息</h3>
         <div class="seller-card" v-if="publisher">
           <div class="seller-header">
@@ -47,12 +53,8 @@
                 <span>所在地：{{ publisher.location }}</span>
               </div>
               <div v-if="publisher.contact" class="contact-item">
-                <i class="fas fa-phone"></i>
+                <i class="fas fa-envelope"></i>
                 <span>联系方式：{{ publisher.contact }}</span>
-              </div>
-              <div v-if="publisher.phone" class="contact-item">
-                <i class="fas fa-mobile-alt"></i>
-                <span>手机：{{ publisher.phone }}</span>
               </div>
             </div>
             <div class="seller-activity">
@@ -155,17 +157,42 @@ export default {
 
 <style scoped>
 .buy-request-detail {
-  max-width: 600px;
+  max-width: 900px;
   margin: 40px auto;
   background: #fff;
   border-radius: 10px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.08);
   padding: 32px 24px;
-}
-.detail-card {
+  min-height: 80vh;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  justify-content: flex-start;
+}
+.detail-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  min-height: 60vh;
+}
+.detail-main {
+  display: flex;
+  flex-direction: row;
+  gap: 40px;
+  align-items: flex-start;
+  min-height: 400px;
+}
+.detail-info {
+  flex: 2;
+  min-width: 0;
+}
+.detail-images {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
+  min-width: 400px;
 }
 .title {
   font-size: 1.6rem;
@@ -208,12 +235,18 @@ export default {
   color: #888;
   margin: 40px 0;
 }
-.seller-info {
-  margin-top: 32px;
+.seller-info-card {
+  width: 100%;
   background: #fafbfc;
   border-radius: 10px;
-  padding: 24px 18px;
+  padding: 32px 24px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: stretch;
+  margin-top: 0;
+  min-height: 300px;
 }
 .seller-card {
   display: flex;
@@ -281,5 +314,13 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+.buy-request-image {
+  width: 400px;
+  height: 400px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid #eee;
+  margin-bottom: 10px;
 }
 </style> 
