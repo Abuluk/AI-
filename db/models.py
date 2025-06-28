@@ -46,6 +46,7 @@ class Item(Base):
     sold = Column(Boolean, default=False)
     views = Column(Integer, default=0)  # 添加浏览量字段
     favorited_count = Column(Integer, default=0)  # 添加收藏计数
+    like_count = Column(Integer, default=0)  # 新增点赞数
     
     favorited_by = relationship("Favorite", back_populates="item")
     owner = relationship("User", back_populates="items")
@@ -64,6 +65,8 @@ class Message(Base):
     is_system = Column(Boolean, default=False)  # 添加系统消息标识
     title = Column(String(200), nullable=True)  # 系统消息标题
     target_users = Column(String(500), nullable=True)  # 目标用户（系统消息）
+    deleted_by_sender = Column(Boolean, default=False)  # 发送方删除
+    deleted_by_receiver = Column(Boolean, default=False)  # 接收方删除
     
     user = relationship("User", back_populates="messages")
     item = relationship("Item", back_populates="messages")
@@ -94,12 +97,55 @@ class BuyRequest(Base):
     budget = Column(DECIMAL(10, 2))
     images = Column(String(500))  # 新增，存储图片路径，多个用逗号分隔
     created_at = Column(DateTime, server_default=func.now())
+    like_count = Column(Integer, default=0)  # 新增点赞数
 
     user = relationship('User', back_populates='buy_requests')
-    messages = relationship("Message", back_populates="buy_request", cascade="all, delete-orphan")
+    messages = relationship("Message", back_populates="buy_request")
 
 class SiteConfig(Base):
     __tablename__ = 'site_config'
     id = Column(Integer, primary_key=True)
     key = Column(String(100), unique=True, nullable=False)
     value = Column(Text, nullable=True)
+
+class Comment(Base):
+    __tablename__ = 'comments'
+    id = Column(Integer, primary_key=True, index=True)
+    content = Column(String, nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    item_id = Column(Integer, ForeignKey('items.id'), nullable=True)
+    buy_request_id = Column(Integer, ForeignKey('buy_requests.id'), nullable=True)
+    parent_id = Column(Integer, ForeignKey('comments.id'), nullable=True)
+    reply_to_user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    like_count = Column(Integer, default=0)  # 新增点赞数
+
+    user = relationship('User', foreign_keys=[user_id], lazy='joined')
+    item = relationship('Item', foreign_keys=[item_id])
+    buy_request = relationship('BuyRequest', foreign_keys=[buy_request_id])
+    parent = relationship('Comment', remote_side=[id], backref='children')
+    reply_to_user = relationship('User', foreign_keys=[reply_to_user_id])
+
+class CommentLike(Base):
+    __tablename__ = 'comment_likes'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    comment_id = Column(Integer, ForeignKey('comments.id'))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint('user_id', 'comment_id', name='_user_comment_uc'),)
+
+class ItemLike(Base):
+    __tablename__ = 'item_likes'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    item_id = Column(Integer, ForeignKey('items.id'))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint('user_id', 'item_id', name='_user_item_uc'),)
+
+class BuyRequestLike(Base):
+    __tablename__ = 'buy_request_likes'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    buy_request_id = Column(Integer, ForeignKey('buy_requests.id'))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint('user_id', 'buy_request_id', name='_user_buyreq_uc'),)

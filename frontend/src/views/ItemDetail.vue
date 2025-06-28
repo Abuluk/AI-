@@ -91,12 +91,15 @@
     </div>
     <!-- 操作按钮区域 -->
     <div class="action-buttons">
+      <!-- 点赞按钮 -->
+      <button class="btn btn-outline like-btn" :class="{ liked: product.liked_by_me }" @click="toggleLike" :disabled="likeLoading">
+        <i class="fas fa-thumbs-up"></i> {{ product.liked_by_me ? '已点赞' : '点赞' }} ({{ product.like_count || 0 }})
+      </button>
       <!-- 收藏按钮 -->
       <button class="btn btn-outline" @click="toggleFavorite">
         <i :class="['fas', isFavorited ? 'fa-heart text-danger' : 'fa-heart']"></i> 
             {{ isFavorited ? '已收藏' : '收藏' }}
       </button>
-            
       <!-- 购买按钮（仅显示给非所有者） -->
       <button 
         class="btn btn-primary" 
@@ -105,7 +108,6 @@
           >
             <i class="fas fa-shopping-cart"></i> 立即购买
       </button>
-            
       <!-- 下架按钮（仅显示给所有者） -->
       <button 
         v-if="isOwner && !product.sold && product.status !== 'offline'"
@@ -114,7 +116,6 @@
             >
           <i class="fas fa-ban"></i> 下架商品
       </button>
-            
       <!-- 重新上架按钮（仅显示给所有者） -->
       <button 
         v-if="isOwner && product.status === 'offline'"
@@ -125,6 +126,8 @@
       </button>
     </div>
 
+    <!-- 评论区 -->
+    <CommentSection :itemId="product.id" :currentUser="user" :isOwner="isOwner" />
     <div class="related-products card">
       <h2>推荐商品</h2>
       <div class="products-grid">
@@ -140,13 +143,15 @@
 
 <script>
 import ProductCard from '@/components/ProductCard.vue'
+import CommentSection from '@/components/CommentSection.vue'
 import api from '@/services/api'
 import { mapState } from 'pinia'
 import { useAuthStore } from '@/store/auth'
 
 export default {
   components: {
-    ProductCard
+    ProductCard,
+    CommentSection
   },
   props: {
     id: {
@@ -185,7 +190,8 @@ export default {
       },
       relatedProducts: [],
       isFavorited: false,
-      isOwner: false
+      isOwner: false,
+      likeLoading: false,
     }
   },
   async mounted() {
@@ -372,7 +378,38 @@ export default {
         'fair': '使用痕迹明显'
       };
       return conditionMap[condition] || condition || '未知状态';
-    }
+    },
+    async toggleLike() {
+      if (!this.user) {
+        console.log('用户未登录，无法点赞');
+        return;
+      }
+      
+      console.log('开始点赞操作，商品ID:', this.product.id, '当前点赞状态:', this.product.liked_by_me);
+      this.likeLoading = true;
+      
+      try {
+        if (!this.product.liked_by_me) {
+          console.log('发送点赞请求...');
+          const res = await api.likeItem(this.product.id);
+          console.log('点赞成功，返回数据:', res.data);
+          this.product.like_count = res.data.like_count;
+          this.product.liked_by_me = true;
+        } else {
+          console.log('发送取消点赞请求...');
+          const res = await api.unlikeItem(this.product.id);
+          console.log('取消点赞成功，返回数据:', res.data);
+          this.product.like_count = res.data.like_count;
+          this.product.liked_by_me = false;
+        }
+      } catch (error) {
+        console.error('点赞操作失败:', error);
+        // 可以在这里添加用户提示
+        alert('点赞操作失败，请稍后重试');
+      } finally {
+        this.likeLoading = false;
+      }
+    },
   }
 }
 </script>
@@ -651,5 +688,17 @@ export default {
 .status-sold {
   background-color: #fff3cd;
   color: #856404;
+}
+
+.like-btn {
+  margin-right: 10px;
+  color: #888;
+  border-color: #e67e22;
+  transition: color 0.2s, border-color 0.2s;
+}
+.like-btn.liked {
+  color: #e67e22;
+  border-color: #e67e22;
+  font-weight: bold;
 }
 </style>

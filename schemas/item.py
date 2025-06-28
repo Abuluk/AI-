@@ -16,6 +16,7 @@ class ItemBase(BaseModel):
     category: Optional[int] = None
     condition: Optional[str] = "unknown"
     location: str
+    like_count: int = 0  # 新增点赞数
 
 class ItemCreate(ItemBase):
     pass
@@ -39,6 +40,7 @@ class ItemInDB(ItemBase):
     owner_id: Optional[int] = None  # 添加所有者ID字段
     views: Optional[int] = 0  # 添加浏览量字段
     favorited_count: Optional[int] = 0  # 添加收藏计数字段
+    liked_by_me: Optional[bool] = False  # 添加当前用户是否已点赞字段
     owner: Optional[UserBase] = None  # 新增：嵌套用户信息
     
     class Config:

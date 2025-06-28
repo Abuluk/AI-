@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
@@ -17,6 +17,8 @@ from crud.crud_message import (
     delete_message,
     get_user_messages
 )
+import os
+from datetime import datetime
 
 router = APIRouter()
 
@@ -35,12 +37,13 @@ def read_user_conversations(
 def read_public_system_messages(
     skip: int = 0,
     limit: int = 20,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
-    获取公开的系统消息列表。
+    获取系统消息列表，包括发送给所有用户的和发送给当前用户的。
     """
-    messages = get_public_system_messages(db, skip=skip, limit=limit)
+    messages = get_public_system_messages(db, skip=skip, limit=limit, user_id=current_user.id)
     return messages
 
 @router.get("/system/{message_id}", response_model=MessageResponse)
@@ -117,14 +120,27 @@ def remove_message(
     current_user: User = Depends(get_current_active_user)
 ):
     """删除消息（只能删除自己的消息或管理员删除任何消息）"""
-    message = get_system_message(db, message_id=message_id) # Reuse get_system_message
+    message = get_system_message(db, message_id=message_id)
     if not message:
         raise HTTPException(status_code=404, detail="消息不存在")
 
-    if message.user_id != current_user.id and not current_user.is_admin:
+    # 管理员可直接物理删除
+    is_admin = current_user.is_admin
+    # 发送方或接收方可软删除
+    is_sender = message.user_id == current_user.id
+    is_receiver = False
+    if message.item_id:
+        item = db.query(Message).get(message.id).item
+        if item and item.owner_id == current_user.id:
+            is_receiver = True
+    elif message.buy_request_id:
+        br = db.query(Message).get(message.id).buy_request
+        if br and br.user_id == current_user.id:
+            is_receiver = True
+    if not (is_sender or is_receiver or is_admin):
         raise HTTPException(status_code=403, detail="无权限删除此消息")
-        
-    delete_message(db, message_id=message_id)
+
+    delete_message(db, message_id=message_id, current_user_id=current_user.id, is_admin=is_admin)
     return {"message": "消息已删除"}
 
 @router.delete("/conversation/{type}/{id}/{other_user_id}")
@@ -136,8 +152,9 @@ def delete_conversation(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    删除某商品下与某用户的所有消息（仅限当前用户与对方的消息）
+    删除某商品下与某用户的所有消息（仅限当前用户与对方的消息），采用软删除
     """
+    # 查询所有相关消息
     q = db.query(Message).filter(
         Message.is_system == False,
         or_(
@@ -152,6 +169,35 @@ def delete_conversation(
         q = q.filter(Message.buy_request_id == id)
     else:
         raise HTTPException(status_code=400, detail="type参数错误")
-    q.delete(synchronize_session=False)
-    db.commit()
+    messages = q.all()
+    for msg in messages:
+        delete_message(db, message_id=msg.id, current_user_id=current_user.id, is_admin=False)
     return {"message": "对话已删除"}
+
+@router.get("/likes")
+def get_like_messages(db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    # 查询所有与我相关的点赞系统消息
+    messages = db.query(Message).filter(
+        Message.is_system == True,
+        Message.target_users == str(current_user.id),
+        Message.title.in_(["商品被点赞", "求购被点赞", "评论被点赞"])
+    ).order_by(Message.created_at.desc()).all()
+    return [
+        {
+            "id": m.id,
+            "title": m.title,
+            "content": m.content,
+            "created_at": m.created_at
+        } for m in messages
+    ]
+
+@router.post("/upload-image")
+async def upload_chat_image(file: UploadFile = File(...)):
+    save_dir = os.path.join(os.getcwd(), "static", "images")
+    os.makedirs(save_dir, exist_ok=True)
+    file_ext = os.path.splitext(file.filename)[-1]
+    save_name = f"chat_{int(datetime.now().timestamp())}{file_ext}"
+    save_path = os.path.join(save_dir, save_name)
+    with open(save_path, "wb") as f:
+        f.write(await file.read())
+    return {"url": f"/static/images/{save_name}"}

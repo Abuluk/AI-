@@ -10,6 +10,7 @@ from .endpoints import (
     buy_requests,  # 新增导入
     favorites,  # 新增导入
     site_config,  # 新增导入site_config
+    comments,  # 新增导入comments
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
@@ -68,4 +69,11 @@ api_router.include_router(
     buy_requests.router,
     prefix="/buy_requests",
     tags=["求购信息"]
+)
+
+# 评论路由 - GET请求无需认证，POST/DELETE等需要认证
+api_router.include_router(
+    comments.router,
+    prefix="/comments",
+    tags=["评论"]
 )

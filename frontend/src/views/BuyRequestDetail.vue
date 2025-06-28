@@ -68,16 +68,20 @@
       </div>
     </div>
     <div v-else class="empty">未找到该求购信息</div>
+    <!-- 评论区 -->
+    <CommentSection :buyRequestId="buyRequest && buyRequest.id" :currentUser="currentUser" :isOwner="isSelf" />
   </div>
 </template>
 
 <script>
 import api from '@/services/api'
+import CommentSection from '@/components/CommentSection.vue'
 import { useAuthStore } from '@/store/auth'
 import { computed } from 'vue'
 
 export default {
   name: 'BuyRequestDetail',
+  components: { CommentSection },
   data() {
     return {
       buyRequest: null,

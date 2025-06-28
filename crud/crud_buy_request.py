@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
-from db.models import BuyRequest, Message
+from db.models import BuyRequest, Message, BuyRequestLike, User
 from sqlalchemy.orm import joinedload
 from schemas.buy_request import BuyRequestCreate
+from crud.crud_message import create_system_message
 
 def create_buy_request(db: Session, buy_request: BuyRequestCreate, user_id: int):
     images = ",".join(buy_request.images) if getattr(buy_request, 'images', None) else None
@@ -63,4 +64,34 @@ def delete_buy_request_admin(db: Session, buy_request_id: int):
     except Exception as e:
         db.rollback()
         print(f"删除求购信息失败: {e}")
-        return False 
+        return False
+
+def like_buy_request(db: Session, buy_request_id: int, user_id: int) -> int:
+    exists = db.query(BuyRequestLike).filter_by(buy_request_id=buy_request_id, user_id=user_id).first()
+    if exists:
+        return -1
+    db.add(BuyRequestLike(buy_request_id=buy_request_id, user_id=user_id))
+    br = db.query(BuyRequest).filter_by(id=buy_request_id).first()
+    if br:
+        br.like_count += 1
+        # 生成系统消息
+        owner_id = br.user_id
+        user = db.query(User).filter_by(id=user_id).first()
+        if owner_id and user and owner_id != user_id:
+            content = f"用户{user.username}点赞了你的求购《{br.title}》"
+            from schemas.message import SystemMessageCreate
+            msg = SystemMessageCreate(content=content, title="求购被点赞", target_users=str(owner_id), buy_request_id=buy_request_id)
+            create_system_message(db, msg, admin_id=user_id)
+    db.commit()
+    return br.like_count if br else 0
+
+def unlike_buy_request(db: Session, buy_request_id: int, user_id: int) -> int:
+    like = db.query(BuyRequestLike).filter_by(buy_request_id=buy_request_id, user_id=user_id).first()
+    if not like:
+        return -1
+    db.delete(like)
+    br = db.query(BuyRequest).filter_by(id=buy_request_id).first()
+    if br and br.like_count > 0:
+        br.like_count -= 1
+    db.commit()
+    return br.like_count if br else 0 

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 from db.session import get_db
 from crud import crud_item
 from schemas.item import ItemCreate, ItemInDB, SiteConfigSchema
-from core.security import get_current_user
+from core.security import get_current_user, get_current_active_user
 from db.models import User, SiteConfig
 import os
 import uuid
@@ -13,6 +13,8 @@ from sqlalchemy import or_
 from core.spark_ai import spark_ai_service
 import json
 from fastapi.encoders import jsonable_encoder
+from crud.crud_item import like_item, unlike_item
+from db.models import ItemLike
 
 router = APIRouter()
 
@@ -185,11 +187,37 @@ def get_ai_cheap_deals(
 
 # 公共端点 - 获取单个商品（无需认证）
 @router.get("/{item_id}", response_model=ItemInDB)
-def read_item(item_id: int, db: Session = Depends(get_db)):
-    item = crud_item.get_item(db, item_id)
+def read_item(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    item = db.query(Item).filter(Item.id == item_id).first()
     if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
-    return item
+        raise HTTPException(status_code=404, detail="商品不存在")
+    
+    # 检查当前用户是否已点赞
+    liked_by_me = False
+    if current_user:
+        liked_by_me = db.query(ItemLike).filter_by(item_id=item_id, user_id=current_user.id).first() is not None
+    
+    # 构建返回数据，包含点赞信息
+    item_data = {
+        "id": item.id,
+        "title": item.title,
+        "description": item.description,
+        "price": item.price,
+        "category": item.category,
+        "location": item.location,
+        "condition": item.condition,
+        "images": item.images,
+        "status": item.status,
+        "sold": item.sold,
+        "created_at": item.created_at,
+        "views": item.views,
+        "like_count": item.like_count or 0,
+        "liked_by_me": liked_by_me,
+        "owner_id": item.owner_id,
+        "favorited_count": item.favorited_count or 0
+    }
+    
+    return item_data
 
 # 需要认证的端点
 @router.post("", response_model=ItemInDB)
@@ -419,3 +447,17 @@ def get_activity_banner(db: Session = Depends(get_db)):
     if not config or not config.value:
         return SiteConfigSchema(key="activity_banner", value=None)
     return SiteConfigSchema(key="activity_banner", value=json.loads(config.value))
+
+@router.post("/{item_id}/like")
+def like_item_api(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    count = like_item(db, item_id, current_user.id)
+    if count == -1:
+        raise HTTPException(status_code=400, detail="已点赞")
+    return {"like_count": count}
+
+@router.post("/{item_id}/unlike")
+def unlike_item_api(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    count = unlike_item(db, item_id, current_user.id)
+    if count == -1:
+        raise HTTPException(status_code=400, detail="未点赞")
+    return {"like_count": count}

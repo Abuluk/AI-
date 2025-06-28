@@ -335,6 +335,23 @@ def update_item_status(
     if status not in ["online", "offline"]:
         raise HTTPException(status_code=400, detail="状态值无效")
     
+    # 如果是要下架商品，发送系统消息给商品所有者
+    if status == "offline" and item.status == "online":
+        # 创建系统消息
+        system_message = schemas.message.SystemMessageCreate(
+            title="商品下架通知",
+            content=f"您的商品《{item.title}》因不合规内容已被管理员下架。如有疑问，请联系客服。",
+            target_users=str(item.owner_id),  # 发送给商品所有者
+            item_id=item_id  # 关联到具体商品
+        )
+        
+        # 发送系统消息
+        try:
+            crud_message.create_system_message(db=db, message_in=system_message, admin_id=current_admin.id)
+        except Exception as e:
+            # 记录错误但不影响商品状态更新
+            print(f"发送系统消息失败: {e}")
+    
     item.status = status
     db.commit()
     db.refresh(item)
@@ -446,6 +463,33 @@ def delete_buy_request(
     current_admin: User = Depends(get_current_admin)
 ):
     """删除求购信息"""
+    # 先获取求购信息，以便发送系统消息
+    buy_request = db.query(BuyRequest).filter(BuyRequest.id == buy_request_id).first()
+    if not buy_request:
+        raise HTTPException(status_code=404, detail="求购信息不存在")
+    
+    # 发送系统消息给求购信息发布者
+    system_message = schemas.message.SystemMessageCreate(
+        title="求购信息删除通知",
+        content=f"您的求购信息《{buy_request.title}》因不合规内容已被管理员删除。如有疑问，请联系客服。",
+        target_users=str(buy_request.user_id),  # 发送给求购信息发布者
+        buy_request_id=buy_request_id  # 关联到具体求购信息
+    )
+    
+    # 发送系统消息
+    try:
+        crud_message.create_system_message(db=db, message_in=system_message, admin_id=current_admin.id)
+    except Exception as e:
+        # 记录错误但不影响求购信息删除
+        print(f"发送系统消息失败: {e}")
+    
+    # 删除与该求购信息相关的普通消息（非系统消息）
+    db.query(Message).filter(
+        Message.buy_request_id == buy_request_id,
+        Message.is_system == False
+    ).delete()
+    
+    # 删除求购信息
     success = crud_buy_request.delete_buy_request_admin(db, buy_request_id)
     if not success:
         raise HTTPException(status_code=404, detail="求购信息不存在")

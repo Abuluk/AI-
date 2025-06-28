@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 class MessageBase(BaseModel):
@@ -19,6 +19,7 @@ class SystemMessageCreate(BaseModel):
     title: Optional[str] = None
     target_users: Optional[str] = None  # "all", "buyers", "sellers", 或用户ID列表
     item_id: Optional[int] = None  # 系统消息可以关联到特定商品，也可以为空
+    buy_request_id: Optional[int] = None  # 系统消息可以关联到特定求购信息，也可以为空
 
 class MessageResponse(MessageBase):
     id: int
@@ -60,3 +61,31 @@ class ConversationSummary(BaseModel):
     
     class Config:
         from_attributes = True
+
+class CommentCreate(BaseModel):
+    content: str
+    item_id: Optional[int] = None
+    buy_request_id: Optional[int] = None
+    parent_id: Optional[int] = None
+    reply_to_user_id: Optional[int] = None
+
+class CommentResponse(BaseModel):
+    id: int
+    content: str
+    user_id: int
+    item_id: Optional[int] = None
+    buy_request_id: Optional[int] = None
+    parent_id: Optional[int] = None
+    reply_to_user_id: Optional[int] = None
+    created_at: datetime
+    user_name: Optional[str] = None
+    user_avatar: Optional[str] = None
+    reply_to_user_name: Optional[str] = None
+    children: Optional[List['CommentResponse']] = None
+    like_count: int = 0  # 新增点赞数
+    liked_by_me: bool = False  # 当前用户是否已点赞
+
+    class Config:
+        from_attributes = True
+
+CommentResponse.update_forward_refs()

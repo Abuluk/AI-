@@ -7,6 +7,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import os
+import sys
+import traceback
 from dotenv import load_dotenv
 from api.api_v1 import api_router
 from api.endpoints import items, users
@@ -27,6 +29,16 @@ def start_application():
     return app
 
 app = start_application()
+
+# 添加全局异常中间件
+@app.middleware("http")
+async def catch_exceptions_middleware(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        print("全局异常捕获：", e)
+        traceback.print_exc(file=sys.stdout)
+        raise e
 
 # 添加CORS中间件
 app.add_middleware(

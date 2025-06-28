@@ -37,22 +37,65 @@ def update_message(db: Session, message_id: int, message_update: MessageUpdate):
     db.refresh(db_message)
     return db_message
 
-def delete_message(db: Session, message_id: int):
+def delete_message(db: Session, message_id: int, current_user_id: int, is_admin: bool = False):
     db_message = get_message(db, message_id)
     if not db_message:
         return None
-    db.delete(db_message)
+    # 管理员直接物理删除
+    if is_admin:
+        db.delete(db_message)
+        db.commit()
+        print(f"[物理删除] 管理员直接删除 message_id={message_id}")
+        return db_message
+    # 判断当前用户是发送方还是接收方
+    is_sender = db_message.user_id == current_user_id
+    is_receiver = False
+    item_owner_id = None
+    br_owner_id = None
+    if db_message.item_id:
+        item = db.query(Item).filter(Item.id == db_message.item_id).first()
+        if item:
+            item_owner_id = item.owner_id
+            if item.owner_id == current_user_id:
+                is_receiver = True
+    elif db_message.buy_request_id:
+        br = db.query(BuyRequest).filter(BuyRequest.id == db_message.buy_request_id).first()
+        if br:
+            br_owner_id = br.user_id
+            if br.user_id == current_user_id:
+                is_receiver = True
+    print(f"[调试] 当前用户:{current_user_id}, 消息发送方:{db_message.user_id}, 商品owner:{item_owner_id}, 求购owner:{br_owner_id}, is_sender:{is_sender}, is_receiver:{is_receiver}")
+    # 只允许发送方或接收方删除
+    if not (is_sender or is_receiver):
+        print(f"[调试] 当前用户无权删除 message_id={message_id}")
+        return None
+    # 只允许一方设置软删除标记，优先发送方
+    if is_sender and not is_receiver:
+        db_message.deleted_by_sender = True
+        print(f"[软删除] 设置 deleted_by_sender=True, message_id={message_id}")
+    elif is_receiver and not is_sender:
+        db_message.deleted_by_receiver = True
+        print(f"[软删除] 设置 deleted_by_receiver=True, message_id={message_id}")
+    elif is_sender and is_receiver:
+        # 极端情况，理论上不应出现
+        db_message.deleted_by_sender = True
+        print(f"[警告] 当前用户既是发送方又是接收方，只设置 deleted_by_sender=True, message_id={message_id}")
+    # 如果双方都已删除，物理删除
+    if db_message.deleted_by_sender and db_message.deleted_by_receiver:
+        db.delete(db_message)
+        print(f"[物理删除] 双方都已删除，物理删除 message_id={message_id}")
     db.commit()
     return db_message
 
 def get_user_messages(db: Session, user_id: int, skip: int = 0, limit: int = 50) -> List[Message]:
-    """获取用户的所有消息（包括自己发出的和别人发给自己商品的）"""
+    """获取用户的所有消息（包括自己发出的和别人发给自己商品的），过滤掉已删除的"""
     # 用户发出的消息
-    sent = db.query(Message.id).filter(Message.user_id == user_id).all()
+    sent = db.query(Message.id).filter(Message.user_id == user_id, Message.deleted_by_sender == False).all()
     # 别人发给自己商品的消息
     received = db.query(Message.id).join(Item, Message.item_id == Item.id).filter(
         Item.owner_id == user_id,
-        Message.user_id != user_id
+        Message.user_id != user_id,
+        Message.deleted_by_receiver == False
     ).all()
     all_ids = [row.id for row in sent] + [row.id for row in received]
     if not all_ids:
@@ -62,31 +105,94 @@ def get_user_messages(db: Session, user_id: int, skip: int = 0, limit: int = 50)
 
 def get_conversation_messages(db: Session, user_id: int, other_user_id: int, type: str = "item", id: int = None) -> List[Message]:
     if type == "item":
-        return db.query(Message).filter(
+        # 我发出的消息（未被我删除）
+        sent_messages = db.query(Message).filter(
             Message.item_id == id,
             Message.is_system == False,
+            Message.user_id == user_id,
+            Message.target_users == str(other_user_id),
+            Message.deleted_by_sender == False
+        )
+        # 别人发给我的消息（未被我删除）
+        received_messages = db.query(Message).filter(
+            Message.item_id == id,
+            Message.is_system == False,
+            Message.user_id == other_user_id,
+            Message.target_users == str(user_id),
+            Message.deleted_by_receiver == False
+        )
+        # 群聊消息（未被我删除）
+        group_messages = db.query(Message).filter(
+            Message.item_id == id,
+            Message.is_system == False,
+            Message.user_id.in_([user_id, other_user_id]),
+            Message.target_users == None,
             or_(
-                and_(Message.user_id == user_id, Message.target_users == str(other_user_id)),
-                and_(Message.user_id == other_user_id, Message.target_users == str(user_id)),
-                and_(Message.user_id.in_([user_id, other_user_id]), Message.target_users == None)
+                and_(Message.user_id == user_id, Message.deleted_by_sender == False),
+                and_(Message.user_id == other_user_id, Message.deleted_by_receiver == False)
             )
-        ).order_by(Message.created_at).all()
+        )
+        # 获取与该商品相关的系统消息（发送给当前用户或所有用户的）
+        system_messages = db.query(Message).filter(
+            Message.item_id == id,
+            Message.is_system == True,
+            or_(
+                Message.target_users == str(user_id),  # 发送给当前用户的系统消息
+                Message.target_users == "all"  # 发送给所有用户的系统消息
+            ),
+            ~Message.title.in_(["商品被点赞", "求购被点赞", "评论被点赞"])  # 过滤掉点赞类系统消息
+        )
+        # 合并并排序
+        all_messages = sent_messages.union(received_messages, group_messages, system_messages).order_by(Message.created_at).all()
+        return all_messages
     elif type == "buy_request":
-        return db.query(Message).filter(
+        # 我发出的消息（未被我删除）
+        sent_messages = db.query(Message).filter(
             Message.buy_request_id == id,
             Message.is_system == False,
+            Message.user_id == user_id,
+            Message.target_users == str(other_user_id),
+            Message.deleted_by_sender == False
+        )
+        # 别人发给我的消息（未被我删除）
+        received_messages = db.query(Message).filter(
+            Message.buy_request_id == id,
+            Message.is_system == False,
+            Message.user_id == other_user_id,
+            Message.target_users == str(user_id),
+            Message.deleted_by_receiver == False
+        )
+        # 群聊消息（未被我删除）
+        group_messages = db.query(Message).filter(
+            Message.buy_request_id == id,
+            Message.is_system == False,
+            Message.user_id.in_([user_id, other_user_id]),
+            Message.target_users == None,
             or_(
-                and_(Message.user_id == user_id, Message.target_users == str(other_user_id)),
-                and_(Message.user_id == other_user_id, Message.target_users == str(user_id)),
-                and_(Message.user_id.in_([user_id, other_user_id]), Message.target_users == None)
+                and_(Message.user_id == user_id, Message.deleted_by_sender == False),
+                and_(Message.user_id == other_user_id, Message.deleted_by_receiver == False)
             )
-        ).order_by(Message.created_at).all()
+        )
+        # 获取与该求购相关的系统消息（发送给当前用户或所有用户的）
+        system_messages = db.query(Message).filter(
+            Message.buy_request_id == id,
+            Message.is_system == True,
+            or_(
+                Message.target_users == str(user_id),  # 发送给当前用户的系统消息
+                Message.target_users == "all"  # 发送给所有用户的系统消息
+            ),
+            ~Message.title.in_(["商品被点赞", "求购被点赞", "评论被点赞"])  # 过滤掉点赞类系统消息
+        )
+        # 合并并排序
+        all_messages = sent_messages.union(received_messages, group_messages, system_messages).order_by(Message.created_at).all()
+        return all_messages
     else:
         return []
 
 def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
     """
     获取用户的对话列表，支持商品(item)和求购(buy_request)两种类型。
+    过滤掉当前用户已删除的消息。
     """
     output = []
     # ----------- 商品对话 -----------
@@ -99,7 +205,8 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
         Message.is_system == False,
         Item.owner_id.isnot(None),
         Item.owner_id != user_id,
-        Message.item_id.isnot(None)
+        Message.item_id.isnot(None),
+        Message.deleted_by_sender == False
     ).distinct()
     # 2. 别人发给我的（我是 owner）
     received_items = db.query(
@@ -110,7 +217,8 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
         Message.is_system == False,
         Message.user_id.isnot(None),
         Message.user_id != user_id,
-        Message.item_id.isnot(None)
+        Message.item_id.isnot(None),
+        Message.deleted_by_receiver == False
     ).distinct()
     all_item_convs = sent_items.union(received_items).all()
     for item_id, other_user_id in all_item_convs:
@@ -123,7 +231,12 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
         item_title = item.title if item else ''
         last_message = db.query(Message).filter(
             Message.item_id == item_id,
-            Message.user_id.in_([user_id, other_user_id])
+            Message.user_id.in_([user_id, other_user_id]),
+            # 过滤掉当前用户已删除的消息
+            or_(
+                and_(Message.user_id == user_id, Message.deleted_by_sender == False),
+                and_(Message.user_id != user_id, Message.deleted_by_receiver == False)
+            )
         ).order_by(Message.created_at.desc()).first()
         if not last_message:
             continue
@@ -155,7 +268,8 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
         Message.is_system == False,
         BuyRequest.user_id.isnot(None),
         BuyRequest.user_id != user_id,
-        Message.buy_request_id.isnot(None)
+        Message.buy_request_id.isnot(None),
+        Message.deleted_by_sender == False
     ).distinct()
     # 2. 别人发给我的（我是发布者）
     received_brs = db.query(
@@ -166,7 +280,8 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
         Message.is_system == False,
         Message.user_id.isnot(None),
         Message.user_id != user_id,
-        Message.buy_request_id.isnot(None)
+        Message.buy_request_id.isnot(None),
+        Message.deleted_by_receiver == False
     ).distinct()
     all_br_convs = sent_brs.union(received_brs).all()
     for buy_request_id, other_user_id in all_br_convs:
@@ -179,7 +294,12 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
         br_title = br.title if br else ''
         last_message = db.query(Message).filter(
             Message.buy_request_id == buy_request_id,
-            Message.user_id.in_([user_id, other_user_id])
+            Message.user_id.in_([user_id, other_user_id]),
+            # 过滤掉当前用户已删除的消息
+            or_(
+                and_(Message.user_id == user_id, Message.deleted_by_sender == False),
+                and_(Message.user_id != user_id, Message.deleted_by_receiver == False)
+            )
         ).order_by(Message.created_at.desc()).first()
         if not last_message:
             continue
@@ -244,6 +364,7 @@ def create_system_message(db: Session, message_in: SystemMessageCreate, admin_id
         content=message_in.content,
         user_id=admin_id,  # 发送者是管理员
         item_id=message_in.item_id,  # 可以为None
+        buy_request_id=message_in.buy_request_id,  # 可以为None
         created_at=datetime.utcnow(),
         is_read=False,  # 对接收者来说是未读的
         is_system=True,
@@ -260,11 +381,20 @@ def get_system_messages(db: Session, skip: int = 0, limit: int = 100) -> List[Me
         desc(Message.created_at)
     ).offset(skip).limit(limit).all()
 
-def get_public_system_messages(db: Session, skip: int = 0, limit: int = 20) -> List[Message]:
-    """获取所有公开的系统消息"""
-    return db.query(Message).filter(Message.is_system == True).order_by(
-        desc(Message.created_at)
-    ).offset(skip).limit(limit).all()
+def get_public_system_messages(db: Session, skip: int = 0, limit: int = 20, user_id: int = None) -> List[Message]:
+    """获取系统消息，包括发送给所有用户的和发送给特定用户的"""
+    query = db.query(Message).filter(Message.is_system == True)
+    
+    if user_id:
+        # 获取发送给所有用户的和发送给特定用户的系统消息
+        query = query.filter(
+            or_(
+                Message.target_users == "all",
+                Message.target_users == str(user_id)
+            )
+        )
+    
+    return query.order_by(desc(Message.created_at)).offset(skip).limit(limit).all()
 
 def get_system_message(db: Session, message_id: int) -> Optional[Message]:
     """获取单条系统消息"""
@@ -293,7 +423,7 @@ class MessageCRUD:
             return update_message(db, id, obj_in)
     
     def remove(self, db: Session, id: int):
-        return delete_message(db, id)
+        return delete_message(db, id, 0, False)
     
     def get_user_messages(self, db: Session, user_id: int, skip: int = 0, limit: int = 50):
         return get_user_messages(db, user_id, skip, limit)

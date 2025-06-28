@@ -52,7 +52,16 @@
               <i class="fas fa-bullhorn"></i>
               <span>{{ message.title || '系统消息' }}</span>
             </div>
-            <div class="message-text">{{ message.content }}</div>
+            <div v-else-if="isImageMessage(message.content)" class="message-image">
+              <img :src="getImageUrl(message.content)" style="max-width:180px;max-height:180px;border-radius:8px;" />
+            </div>
+            <div v-else-if="isLizhiEmoji(message.content) || isOnlyEmoji(message.content)" class="message-lizhi">
+              <template v-for="part in parseLizhiContent(message.content)" :key="part.key">
+                <img v-if="part.type === 'lizhi'" :src="lizhiUrl" alt="荔枝" style="width:32px;vertical-align:middle;" />
+                <span v-else>{{ part.text }}</span>
+              </template>
+            </div>
+            <div v-else class="message-text">{{ message.content }}</div>
             <div class="message-time">{{ formatDateTime(message.created_at) }}</div>
           </div>
         </div>
@@ -68,6 +77,11 @@
         <button class="input-btn" @click="showEmojiPicker = !showEmojiPicker">
           <i class="fas fa-smile"></i>
         </button>
+        <button class="input-btn" @click="triggerImageUpload">
+          <i class="fas fa-image"></i>
+        </button>
+        <input type="file" ref="imageInput" accept="image/*" style="display:none" @change="handleImageChange">
+        <img v-if="imagePreview" :src="imagePreview" class="preview-image" />
         <input 
           type="text" 
           v-model="newMessage" 
@@ -77,11 +91,15 @@
         >
         <button 
           class="input-btn send-btn"
-          :disabled="!canSendMessage || !newMessage.trim()"
+          :disabled="!canSendMessage || (!newMessage.trim() && !imageFile)"
           @click="sendMessage"
         >
           <i class="fas fa-paper-plane"></i>
         </button>
+        <div v-if="showEmojiPicker" class="emoji-picker">
+          <span v-for="emoji in emojiList" :key="emoji" class="emoji-item" @click="insertEmoji(emoji)">{{ emoji }}</span>
+          <img :src="lizhiUrl" alt="荔枝" class="emoji-item" style="width:28px;vertical-align:middle;cursor:pointer" @click="insertEmoji('[[lizhi]]')">
+        </div>
       </div>
     </div>
     <button @click="handleDeleteConversation" class="delete-btn">删除对话</button>
@@ -127,6 +145,12 @@ export default {
     const sending = ref(false)
     const messagesContainer = ref(null)
     const showEmojiPicker = ref(false)
+    const imageInput = ref(null)
+    const imageFile = ref(null)
+    const imagePreview = ref('')
+    const emojiList = [
+      '😀','😂','😍','😎','😭','😡','👍','🎉','❤️','🥳','🤔','😅','😏','😳','😱','😴','😇','😜','😋','😢'
+    ]
     
     const canSendMessage = computed(() => {
       return authStore.isAuthenticated && item.value && !sending.value
@@ -140,7 +164,7 @@ export default {
       if (path.startsWith('http')) {
         return path;
       }
-      const baseUrl = 'http://8.138.47.159:8000';
+      const baseUrl = 'http://localhost:8000';
       const cleanedPath = path.startsWith('/') ? path.substring(1) : path;
       return `${baseUrl}/${cleanedPath.replace(/\\/g, '/')}`;
     }
@@ -195,9 +219,50 @@ export default {
       }
     }
     
+    const triggerImageUpload = () => {
+      imageInput.value && imageInput.value.click()
+    }
+    const handleImageChange = (e) => {
+      const file = e.target.files[0]
+      if (file) {
+        imageFile.value = file
+        imagePreview.value = URL.createObjectURL(file)
+      }
+    }
+    const insertEmoji = (emoji) => {
+      if (emoji === '[[lizhi]]') {
+        newMessage.value += '[[lizhi]]'
+      } else {
+        newMessage.value += emoji
+      }
+      showEmojiPicker.value = false
+    }
+    const isImageMessage = (content) => {
+      return typeof content === 'string' && (
+        content.startsWith('/static/images/') ||
+        (content.startsWith('http') && (
+          content.endsWith('.jpg') || content.endsWith('.png') || content.endsWith('.jpeg') || content.endsWith('.gif')))
+      )
+    }
+    const isLizhiEmoji = (content) => {
+      return typeof content === 'string' && content.includes('[[lizhi]]')
+    }
+    const isOnlyEmoji = (content) => {
+      // 只包含emoji或空格
+      return typeof content === 'string' && /^[\p{Emoji}\s]+$/u.test(content)
+    }
     const sendMessage = async () => {
-      if (!newMessage.value.trim() || !canSendMessage.value) return
-      const messageContent = newMessage.value.trim()
+      if ((!newMessage.value.trim() && !imageFile.value) || !canSendMessage.value) return
+      let messageContent = newMessage.value.trim()
+      if (imageFile.value) {
+        const formData = new FormData()
+        formData.append('file', imageFile.value)
+        const res = await api.uploadChatImage(formData)
+        messageContent = res.data.url
+        imageFile.value = null
+        imagePreview.value = ''
+        imageInput.value.value = ''
+      }
       newMessage.value = ''
       sending.value = true
       try {
@@ -212,7 +277,7 @@ export default {
       } catch (error) {
         console.error('发送消息失败:', error)
         alert('发送失败，请重试')
-        newMessage.value = messageContent // 恢复消息内容
+        newMessage.value = messageContent
       } finally {
         sending.value = false
       }
@@ -257,7 +322,7 @@ export default {
         return;
       }
       event.target.onerror = null;
-      event.target.src = 'http://8.138.47.159:8000/static/images/default_avatar.png';
+      event.target.src = 'http://localhost:8000/static/images/default_avatar.png';
     }
     
     const handleDeleteConversation = async () => {
@@ -270,6 +335,37 @@ export default {
           alert('删除失败，请重试')
         }
       }
+    }
+    
+    const lizhiUrl = window.location.origin + '/static/images/lizhi.png'
+    
+    const getImageUrl = (content) => {
+      if (content.startsWith('/static/')) {
+        return window.location.origin + content
+      }
+      return content
+    }
+    
+    const parseLizhiContent = (content) => {
+      // 将内容按[[lizhi]]分割，保留顺序，支持emoji
+      const parts = []
+      let idx = 0
+      const arr = content.split('[[lizhi]]')
+      arr.forEach((txt, i) => {
+        if (txt) {
+          // 拆分emoji和文本，逐字符处理
+          for (const char of Array.from(txt)) {
+            // 判断是否emoji（利用unicode范围）
+            if (/\p{Emoji}/u.test(char)) {
+              parts.push({ type: 'text', text: char, key: idx++ })
+            } else {
+              parts.push({ type: 'text', text: char, key: idx++ })
+            }
+          }
+        }
+        if (i < arr.length - 1) parts.push({ type: 'lizhi', key: idx++ })
+      })
+      return parts
     }
     
     onMounted(async () => {
@@ -302,7 +398,20 @@ export default {
       handleAvatarError,
       usersInfo,
       handleDeleteConversation,
-      chatType
+      chatType,
+      imageInput,
+      imageFile,
+      imagePreview,
+      emojiList,
+      triggerImageUpload,
+      handleImageChange,
+      insertEmoji,
+      isImageMessage,
+      isLizhiEmoji,
+      isOnlyEmoji,
+      lizhiUrl,
+      getImageUrl,
+      parseLizhiContent
     }
   }
 }
@@ -398,8 +507,8 @@ export default {
 }
 
 .message.sent .message-content {
-  background-color: var(--primary);
-  color: white;
+  background-color: #fff !important;
+  color: #333;
   border-radius: 18px 18px 0 18px;
 }
 
@@ -644,5 +753,34 @@ export default {
   cursor: pointer;
   padding: 10px;
   margin-top: 10px;
+}
+
+.preview-image {
+  max-width: 80px;
+  max-height: 80px;
+  border-radius: 8px;
+  margin: 0 8px;
+  vertical-align: middle;
+}
+
+.emoji-picker {
+  position: absolute;
+  bottom: 60px;
+  left: 20px;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  padding: 8px 12px;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.emoji-item {
+  font-size: 22px;
+  cursor: pointer;
+  margin: 2px;
 }
 </style>

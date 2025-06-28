@@ -3,7 +3,7 @@ import { ref } from 'vue'
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: 'http://8.138.47.159:8000/api/v1',
+  baseURL: 'http://localhost:8000/api/v1',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
@@ -197,6 +197,16 @@ const apiService = {
     return api.patch(`/items/${itemId}/views`)
   },
   
+  // 添加商品点赞方法
+  async likeItem(itemId) {
+    return api.post(`/items/${itemId}/like`)
+  },
+  
+  // 添加商品取消点赞方法
+  async unlikeItem(itemId) {
+    return api.post(`/items/${itemId}/unlike`)
+  },
+  
   // 消息操作
   // 获取对话列表
   async getConversationsList() {
@@ -290,7 +300,14 @@ const apiService = {
 
   // 添加获取公共系统消息方法
   async getPublicSystemMessages() {
-    return retryRequest(() => api.get('/messages/system/public'))
+    return retryRequest(async () => {
+      const res = await api.get('/messages/system/public');
+      // 过滤掉点赞相关的系统消息
+      if (Array.isArray(res.data)) {
+        res.data = res.data.filter(msg => !(msg.title && msg.title.includes('被点赞')));
+      }
+      return res;
+    });
   },
   
   async getSystemMessage(messageId) {
@@ -385,7 +402,7 @@ const apiService = {
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
     // 直接用axios.post，确保可用
-    return axios.post('http://8.138.47.159:8000/api/v1/items/ai-auto-complete', formData, {
+    return axios.post('http://localhost:8000/api/v1/items/ai-auto-complete', formData, {
       headers: {
         Authorization: localStorage.getItem('access_token') ? `Bearer ${localStorage.getItem('access_token')}` : undefined
       }
@@ -432,6 +449,41 @@ const apiService = {
   uploadBuyRequestImage(formData) {
     return api.post('/buy_requests/upload_image', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  },
+
+  // 评论相关
+  async getComments(params = {}) {
+    return api.get('/comments', { params })
+  },
+  async getMyRelatedComments() {
+    return api.get('/comments/my_related')
+  },
+  async createComment(data) {
+    return api.post('/comments', data)
+  },
+  async deleteComment(commentId) {
+    return api.delete(`/comments/${commentId}`)
+  },
+  async getCommentTree(params = {}) {
+    return api.get('/comments/tree', { params })
+  },
+  async likeComment(commentId) {
+    return api.post(`/comments/${commentId}/like`)
+  },
+  async unlikeComment(commentId) {
+    return api.post(`/comments/${commentId}/unlike`)
+  },
+  async getLikeMessages() {
+    return api.get('/messages/likes')
+  },
+
+  // 聊天图片上传
+  async uploadChatImage(formData) {
+    return api.post('/messages/upload-image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
     })
   },
 }

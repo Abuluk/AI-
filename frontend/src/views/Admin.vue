@@ -635,10 +635,23 @@ const deleteUser = async (user) => {
 }
 
 const updateItemStatus = async (item, status) => {
+  // 如果是下架商品，显示确认对话框
+  if (status === 'offline') {
+    const confirmed = confirm(`确定要下架商品"${item.title}"吗？\n\n下架后系统将自动发送通知消息给商品所有者，告知商品因不合规内容被下架。`)
+    if (!confirmed) {
+      return
+    }
+  }
+  
   try {
     await api.updateAdminItemStatus(item.id, status)
     item.status = status
-    alert('操作成功')
+    
+    if (status === 'offline') {
+      alert('商品已下架，系统消息已发送给商品所有者')
+    } else {
+      alert('操作成功')
+    }
   } catch (error) {
     console.error('更新商品状态失败:', error)
     alert('操作失败')
@@ -885,14 +898,15 @@ const loadBuyRequests = async () => {
 }
 
 const deleteBuyRequest = async (buyRequest) => {
-  if (!confirm(`确定要删除求购信息 "${buyRequest.title}" 吗？此操作不可恢复！`)) {
+  const confirmed = confirm(`确定要删除求购信息"${buyRequest.title}"吗？\n\n删除后系统将自动发送通知消息给求购信息发布者，告知求购信息因不合规内容被删除。`)
+  if (!confirmed) {
     return
   }
   
   try {
     await api.deleteAdminBuyRequest(buyRequest.id)
     buyRequests.value = buyRequests.value.filter(br => br.id !== buyRequest.id)
-    alert('求购信息已删除')
+    alert('求购信息已删除，系统消息已发送给发布者')
   } catch (error) {
     console.error('删除求购信息失败:', error)
     alert('删除失败')

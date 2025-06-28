@@ -3,80 +3,118 @@
     <div class="header">
       <h2><i class="fas fa-comments"></i> 消息中心</h2>
     </div>
+    <div class="tabs">
+      <button :class="{active: activeTab === 'all'}" @click="activeTab = 'all'">消息</button>
+      <button :class="{active: activeTab === 'comment'}" @click="activeTab = 'comment'">评论互动</button>
+      <button :class="{active: activeTab === 'like'}" @click="activeTab = 'like'">点赞消息</button>
+    </div>
+    <div v-if="activeTab === 'all'">
+      <!-- 系统通知 -->
+      <div class="system-notifications card">
+        <div class="card-header">
+          <h3><i class="fas fa-bullhorn"></i> 系统通知</h3>
+          <router-link to="/system-messages" class="see-all">查看全部</router-link>
+        </div>
+        <div v-if="loading.system" class="loading-state">
+          <div class="skeleton-row small"></div>
+        </div>
+        <ul v-else-if="systemMessages.length > 0" class="notification-list">
+          <li v-for="msg in systemMessages.slice(0, 3)" :key="msg.id">
+            <router-link :to="`/system-messages/${msg.id}`" class="notification-link">
+              <span class="notification-title">{{ msg.title || '系统消息' }}</span>
+              <span class="notification-content">{{ msg.content }}</span>
+              <span class="notification-time">{{ formatDateTime(msg.created_at) }}</span>
+            </router-link>
+          </li>
+        </ul>
+        <div v-else class="empty-state small">
+          <p>暂无系统通知</p>
+        </div>
+      </div>
 
-    <!-- 系统通知 -->
-    <div class="system-notifications card">
-      <div class="card-header">
-        <h3><i class="fas fa-bullhorn"></i> 系统通知</h3>
-        <router-link to="/system-messages" class="see-all">查看全部</router-link>
-      </div>
-      <div v-if="loading.system" class="loading-state">
-        <div class="skeleton-row small"></div>
-      </div>
-      <ul v-else-if="systemMessages.length > 0" class="notification-list">
-        <li v-for="msg in systemMessages.slice(0, 3)" :key="msg.id">
-          <router-link :to="`/system-messages/${msg.id}`" class="notification-link">
-            <span class="notification-title">{{ msg.title || '系统消息' }}</span>
-            <span class="notification-content">{{ msg.content }}</span>
-            <span class="notification-time">{{ formatDateTime(msg.created_at) }}</span>
-          </router-link>
-        </li>
-      </ul>
-      <div v-else class="empty-state small">
-        <p>暂无系统通知</p>
+      <!-- 我的对话 -->
+      <div class="conversations card">
+        <div class="card-header">
+          <h3><i class="fas fa-user-friends"></i> 我的对话</h3>
+          <div class="filter-tabs">
+            <button 
+              v-for="tab in tabs" 
+              :key="tab.id"
+              :class="{ active: activeTab === tab.id }"
+              @click="activeTab = tab.id"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+        </div>
+        <div v-if="loading.conversations" class="loading-state">
+          <div class="skeleton-row" v-for="n in 3" :key="n"></div>
+        </div>
+        <div v-else-if="filteredConversations.length > 0" class="conversations-list">
+          <div 
+            v-for="conv in filteredConversations" 
+            :key="`${conv.item_id}-${conv.other_user_id}`"
+            class="conversation-item"
+            :class="{ unread: conv.unread_count > 0 }"
+            @click="selectConversation(conv)"
+          >
+            <img :src="getUserAvatar(conv.other_user_avatar)" :alt="conv.other_user_name" class="item-image">
+            <div class="conversation-content">
+              <div class="conversation-header">
+                <span class="item-title">
+                  {{ conv.other_user_name }}
+                  <span v-if="conv.type === 'item' && conv.item_title" style="margin-left: 16px; color: #888; font-size: 0.98em;">（{{ conv.item_title }}）</span>
+                  <span v-else-if="conv.type === 'buy_request' && conv.buy_request_title" style="margin-left: 16px; color: #888; font-size: 0.98em;">（{{ conv.buy_request_title }}）</span>
+                </span>
+                <span class="time">{{ formatDateTime(conv.last_message_time) }}</span>
+              </div>
+              <p class="last-message">{{ conv.last_message_content }}</p>
+            </div>
+            <div v-if="conv.unread_count > 0" class="unread-dot"></div>
+          </div>
+        </div>
+        <div v-else class="empty-state">
+          <p>暂无对话</p>
+        </div>
       </div>
     </div>
-
-    <!-- 我的对话 -->
-    <div class="conversations card">
-      <div class="card-header">
-        <h3><i class="fas fa-user-friends"></i> 我的对话</h3>
-        <div class="filter-tabs">
-          <button 
-            v-for="tab in tabs" 
-            :key="tab.id"
-            :class="{ active: activeTab === tab.id }"
-            @click="activeTab = tab.id"
-          >
-            {{ tab.label }}
-          </button>
-        </div>
+    <div v-else-if="activeTab === 'comment'">
+      <div class="comment-interaction card comment-scroll-area">
+        <h3><i class="fas fa-comment-dots"></i> 评论互动</h3>
+        <div v-if="loading.comment" class="loading-state">加载中...</div>
+        <ul v-else-if="commentList.length > 0" class="comment-list">
+          <li v-for="c in commentList" :key="c.id" class="comment-item">
+            <span class="user">{{ c.user_name }}</span>
+            <span v-if="c.reply_to_user_name" class="at-highlight">@{{ c.reply_to_user_name }}</span>
+            <span class="content">{{ c.content }}</span>
+            <span class="time">{{ formatDateTime(c.created_at) }}</span>
+            <button class="like-btn" :class="{ liked: c.liked_by_me }" @click="handleLike(c)">
+              👍 {{ c.like_count || 0 }}
+            </button>
+          </li>
+        </ul>
+        <div v-else class="empty-state">暂无评论</div>
       </div>
-      <div v-if="loading.conversations" class="loading-state">
-        <div class="skeleton-row" v-for="n in 3" :key="n"></div>
-      </div>
-      <div v-else-if="filteredConversations.length > 0" class="conversations-list">
-        <div 
-          v-for="conv in filteredConversations" 
-          :key="`${conv.item_id}-${conv.other_user_id}`"
-          class="conversation-item"
-          :class="{ unread: conv.unread_count > 0 }"
-          @click="selectConversation(conv)"
-        >
-          <img :src="getUserAvatar(conv.other_user_avatar)" :alt="conv.other_user_name" class="item-image">
-          <div class="conversation-content">
-            <div class="conversation-header">
-              <span class="item-title">
-                {{ conv.other_user_name }}
-                <span v-if="conv.type === 'item' && conv.item_title" style="margin-left: 16px; color: #888; font-size: 0.98em;">（{{ conv.item_title }}）</span>
-                <span v-else-if="conv.type === 'buy_request' && conv.buy_request_title" style="margin-left: 16px; color: #888; font-size: 0.98em;">（{{ conv.buy_request_title }}）</span>
-              </span>
-              <span class="time">{{ formatDateTime(conv.last_message_time) }}</span>
-            </div>
-            <p class="last-message">{{ conv.last_message_content }}</p>
-          </div>
-          <div v-if="conv.unread_count > 0" class="unread-dot"></div>
-        </div>
-      </div>
-      <div v-else class="empty-state">
-        <p>暂无对话</p>
+    </div>
+    <div v-else-if="activeTab === 'like'">
+      <div class="like-messages card">
+        <h3><i class="fas fa-thumbs-up"></i> 点赞消息</h3>
+        <div v-if="loading.like" class="loading-state">加载中...</div>
+        <ul v-else-if="likeMessages.length > 0" class="like-message-list">
+          <li v-for="msg in likeMessages" :key="msg.id" class="like-message-item">
+            <span class="like-title">{{ msg.title }}</span>
+            <span class="like-content">{{ msg.content }}</span>
+            <span class="like-time">{{ formatDateTime(msg.created_at) }}</span>
+          </li>
+        </ul>
+        <div v-else class="empty-state">暂无点赞消息</div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/store/auth';
 import api from '@/services/api';
@@ -87,12 +125,20 @@ const authStore = useAuthStore();
 // Data
 const systemMessages = ref([]);
 const conversations = ref([]);
-const loading = ref({ system: false, conversations: false });
+const commentList = ref([]);
+const commentTree = ref([]);
+const commentTargets = ref([]);
+const selectedTarget = ref(null);
+const expandedComments = ref({});
+const loading = ref({ system: false, conversations: false, comment: false, like: false });
 const activeTab = ref('all');
 const tabs = [
   { id: 'all', label: '全部' },
   { id: 'unread', label: '未读' },
 ];
+const allCommentTrees = ref([]);
+const likeLoading = ref({});
+const likeMessages = ref([]);
 
 // Computed
 const filteredConversations = computed(() => {
@@ -100,6 +146,24 @@ const filteredConversations = computed(() => {
     return conversations.value.filter(c => c.unread_count > 0);
   }
   return conversations.value;
+});
+
+function buildCommentTree(flatList) {
+  const map = {};
+  flatList.forEach(c => { map[c.id] = { ...c, children: [] }; });
+  const roots = [];
+  flatList.forEach(c => {
+    if (c.parent_id && map[c.parent_id]) {
+      map[c.parent_id].children.push(map[c.id]);
+    } else if (!c.parent_id) {
+      roots.push(map[c.id]);
+    }
+  });
+  return roots;
+}
+
+const rootComments = computed(() => {
+  return commentTree.value;
 });
 
 // Methods
@@ -127,6 +191,20 @@ const fetchConversations = async () => {
   }
 };
 
+const fetchMyRelatedComments = async () => {
+  loading.value.comment = true;
+  try {
+    const res = await api.getMyRelatedComments();
+    const myId = authStore.user?.id;
+    // 只保留不是我自己发的评论
+    commentList.value = (res.data || []).filter(c => c.user_id !== myId);
+  } catch (e) {
+    commentList.value = [];
+  } finally {
+    loading.value.comment = false;
+  }
+};
+
 const formatDateTime = (datetime) => {
   if (!datetime) return '未知';
   const date = new Date(datetime);
@@ -146,7 +224,7 @@ const getUserAvatar = (avatar) => {
   if (avatar.startsWith('http')) {
       return avatar;
   }
-  return `http://8.138.47.159:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`;
+  return `http://localhost:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`;
 };
 
 const selectConversation = (conv) => {
@@ -167,6 +245,42 @@ const selectConversation = (conv) => {
   });
 };
 
+const toggleExpand = (id) => {
+  expandedComments.value[id] = !expandedComments.value[id];
+};
+
+const handleLike = async (comment) => {
+  if (likeLoading.value[comment.id]) return;
+  likeLoading.value[comment.id] = true;
+  try {
+    if (!comment.liked_by_me) {
+      const res = await api.likeComment(comment.id);
+      comment.like_count = res.data.like_count;
+      comment.liked_by_me = true;
+    } else {
+      const res = await api.unlikeComment(comment.id);
+      comment.like_count = res.data.like_count;
+      comment.liked_by_me = false;
+    }
+  } catch (e) {}
+  likeLoading.value[comment.id] = false;
+};
+
+const fetchLikeMessages = async () => {
+  loading.value.like = true;
+  try {
+    const res = await api.getLikeMessages();
+    // 只保留三类点赞消息
+    likeMessages.value = (res.data || []).filter(
+      m => ["商品被点赞", "求购被点赞", "评论被点赞"].includes(m.title)
+    );
+  } catch (e) {
+    likeMessages.value = [];
+  } finally {
+    loading.value.like = false;
+  }
+};
+
 // Lifecycle
 onMounted(() => {
   if (!authStore.isAuthenticated) {
@@ -175,6 +289,15 @@ onMounted(() => {
   }
   fetchSystemMessages();
   fetchConversations();
+  fetchMyRelatedComments();
+  if (activeTab.value === 'like') fetchLikeMessages();
+});
+
+watch(activeTab, (tab) => {
+  if (tab === 'like') fetchLikeMessages();
+  else if (tab === 'comment') {
+    fetchMyRelatedComments();
+  }
 });
 </script>
 
@@ -191,6 +314,26 @@ onMounted(() => {
   font-weight: 600;
   color: #333;
   margin-bottom: 20px;
+}
+
+.tabs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.tabs button {
+  background: none;
+  border: none;
+  font-size: 1.1em;
+  color: #888;
+  padding: 8px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.tabs button.active {
+  background: #007bff;
+  color: #fff;
 }
 
 .card {
@@ -227,53 +370,44 @@ onMounted(() => {
 
 /* System Notifications */
 .notification-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.notification-list li {
-  display: block;
-  padding: 0;
-  border-bottom: 1px solid #f0f0f0;
-  transition: background-color 0.2s;
-}
-
-.notification-list li:last-child {
-  border-bottom: none;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 6px;
 }
 
 .notification-link {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   padding: 12px 20px;
+  border-bottom: 1px solid #f5f5f5;
   text-decoration: none;
   color: inherit;
+  transition: background 0.2s;
 }
-
-.notification-list li:hover {
-  background-color: #f9f9f9;
+.notification-link:hover {
+  background: #f7faff;
 }
 
 .notification-title {
-  font-weight: 500;
-  color: #007bff;
-  margin-right: 15px;
-  white-space: nowrap;
+  font-weight: 600;
+  color: #1976d2;
+  margin-bottom: 2px;
 }
 
 .notification-content {
-  flex-grow: 1;
-  color: #666;
-  white-space: nowrap;
+  font-size: 0.98em;
+  color: #555;
+  margin-bottom: 2px;
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .notification-time {
-  font-size: 12px;
+  font-size: 0.85em;
   color: #999;
-  margin-left: 15px;
+  align-self: flex-end;
 }
 
 /* Conversations */
@@ -385,7 +519,10 @@ onMounted(() => {
 }
 
 .empty-state.small {
-  padding: 20px;
+  padding: 18px 0;
+  color: #aaa;
+  font-size: 0.98em;
+  text-align: center;
 }
 
 .skeleton-row {
@@ -404,5 +541,161 @@ onMounted(() => {
 @keyframes skeleton-pulse {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+.comment-interaction.card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  margin-bottom: 25px;
+  overflow: hidden;
+  padding: 20px;
+}
+.comment-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 350px;
+  overflow-y: auto;
+}
+.comment-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 1em;
+}
+.comment-item .user {
+  color: #1976d2;
+  font-weight: 600;
+}
+.comment-item .content {
+  flex: 1;
+  color: #333;
+}
+.comment-item .time {
+  color: #999;
+  font-size: 0.95em;
+  margin-left: 10px;
+}
+.at-highlight {
+  color: #e67e22;
+  font-weight: bold;
+  margin: 0 2px;
+}
+.expand-btn {
+  margin-left: 10px;
+  background: none;
+  border: none;
+  color: #007bff;
+  cursor: pointer;
+  font-size: 0.95em;
+}
+.child-comment-list {
+  list-style: none;
+  padding-left: 32px;
+  margin: 6px 0 0 0;
+}
+.child-comment-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f5f5f5;
+  font-size: 0.98em;
+}
+.child-comment-item .user {
+  color: #1976d2;
+  font-weight: 600;
+}
+.child-comment-item .content {
+  color: #333;
+}
+.child-comment-item .time {
+  color: #999;
+  font-size: 0.92em;
+  margin-left: 8px;
+}
+.comment-target-select {
+  margin-bottom: 12px;
+  font-size: 1em;
+}
+.comment-target-select select {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+.comment-scroll-area {
+  max-height: 500px;
+  overflow-y: auto;
+}
+.comment-tree-block {
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.tree-title {
+  font-weight: bold;
+  color: #1976d2;
+  margin-bottom: 8px;
+}
+.like-btn {
+  margin-left: 10px;
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 1em;
+  transition: color 0.2s;
+}
+.like-btn.liked {
+  color: #e67e22;
+  font-weight: bold;
+}
+.comment-scroll {
+  max-height: 180px;
+  overflow-y: auto;
+  border-top: 1px solid #f0f0f0;
+  margin-top: 8px;
+  padding-top: 8px;
+}
+.like-messages.card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  margin-bottom: 25px;
+  overflow: hidden;
+  padding: 20px;
+}
+.like-message-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 350px;
+  overflow-y: auto;
+}
+.like-message-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 1em;
+}
+.like-title {
+  color: #e67e22;
+  font-weight: 600;
+  margin-right: 8px;
+}
+.like-content {
+  flex: 1;
+  color: #333;
+}
+.like-time {
+  color: #999;
+  font-size: 0.95em;
+  margin-left: 10px;
 }
 </style>

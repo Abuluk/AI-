@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
 from db.session import get_db
-from db.models import BuyRequest
+from db.models import BuyRequest, BuyRequestLike, User
 from schemas.buy_request import BuyRequest as BuyRequestSchema, BuyRequestCreate
 from crud import crud_buy_request
 from core.security import get_current_user, get_current_active_user
@@ -9,6 +9,7 @@ from typing import List
 import os
 from fastapi.responses import JSONResponse
 from datetime import datetime
+from crud.crud_buy_request import like_buy_request, unlike_buy_request
 
 router = APIRouter()
 
@@ -74,4 +75,31 @@ async def upload_image(file: UploadFile = File(...)):
     save_path = os.path.join(save_dir, save_name)
     with open(save_path, "wb") as f:
         f.write(await file.read())
-    return {"url": f"/static/images/{save_name}"} 
+    return {"url": f"/static/images/{save_name}"}
+
+@router.post("/{buy_request_id}/like")
+def like_buy_request_api(buy_request_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    count = like_buy_request(db, buy_request_id, current_user.id)
+    if count == -1:
+        raise HTTPException(status_code=400, detail="已点赞")
+    return {"like_count": count}
+
+@router.post("/{buy_request_id}/unlike")
+def unlike_buy_request_api(buy_request_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    count = unlike_buy_request(db, buy_request_id, current_user.id)
+    if count == -1:
+        raise HTTPException(status_code=400, detail="未点赞")
+    return {"like_count": count}
+
+@router.get("/{buy_request_id}")
+def get_buy_request_detail(buy_request_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    br = db.query(BuyRequest).filter(BuyRequest.id == buy_request_id).first()
+    if not br:
+        raise HTTPException(status_code=404, detail="求购不存在")
+    liked_by_me = False
+    if current_user:
+        liked_by_me = db.query(BuyRequestLike).filter_by(buy_request_id=buy_request_id, user_id=current_user.id).first() is not None
+    return {
+        "like_count": br.like_count or 0,
+        "liked_by_me": liked_by_me,
+    } 
