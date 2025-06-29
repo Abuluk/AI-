@@ -3,7 +3,7 @@ from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from db.session import get_db
-from db.models import User, Message
+from db.models import User, Message, Blacklist, Item, BuyRequest
 from schemas.message import MessageCreate, MessageResponse, Conversation
 from core.security import get_current_active_user
 from crud.crud_message import (
@@ -76,9 +76,27 @@ def read_conversation_messages(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    messages = get_conversation_messages(
-        db, user_id=current_user.id, other_user_id=other_user_id, type=type, id=id
-    )
+    if type == "user":
+        # 用户私聊：直接查询双方的消息
+        messages = db.query(Message).filter(
+            Message.is_system == False,
+            Message.target_user.isnot(None),
+            or_(
+                and_(Message.user_id == current_user.id, Message.target_user == str(other_user_id)),
+                and_(Message.user_id == other_user_id, Message.target_user == str(current_user.id))
+            ),
+            or_(
+                and_(Message.user_id == current_user.id, Message.deleted_by_sender == False),
+                and_(Message.user_id == other_user_id, Message.deleted_by_receiver == False)
+            )
+        ).order_by(Message.created_at).all()
+    else:
+        # 商品或求购消息：使用原有逻辑
+        messages = get_conversation_messages(
+            db, user_id=current_user.id, other_user_id=other_user_id, type=type, id=id
+        )
+    
+    # 标记消息为已读
     for msg in messages:
         if msg.user_id != current_user.id and not msg.is_read:
             mark_as_read(db, message_id=msg.id)
@@ -91,8 +109,39 @@ def create_new_message(
     current_user: User = Depends(get_current_active_user)
 ):
     """创建新消息"""
-    if not message.item_id and not message.buy_request_id:
-        raise HTTPException(status_code=400, detail="item_id 和 buy_request_id 必须至少有一个")
+    # 支持三种消息类型：
+    # 1. 商品消息：item_id有值，buy_request_id为空
+    # 2. 求购消息：buy_request_id有值，item_id为空  
+    # 3. 用户私聊：target_user有值，item_id和buy_request_id都为空
+    if not message.item_id and not message.buy_request_id and not message.target_user:
+        raise HTTPException(status_code=400, detail="item_id、buy_request_id 和 target_user 必须至少有一个")
+    
+    # 黑名单校验：检查接收方是否拉黑了发送方
+    target_user_id = None
+    if message.item_id:
+        # 商品消息：检查商品所有者是否拉黑了发送方
+        item = db.query(Item).filter(Item.id == message.item_id).first()
+        if item:
+            target_user_id = item.owner_id
+    elif message.buy_request_id:
+        # 求购消息：检查求购发布者是否拉黑了发送方
+        buy_request = db.query(BuyRequest).filter(BuyRequest.id == message.buy_request_id).first()
+        if buy_request:
+            target_user_id = buy_request.user_id
+    elif message.target_user:
+        # 用户私聊：直接使用target_user
+        target_user_id = int(message.target_user)
+    
+    if target_user_id and target_user_id != current_user.id:
+        # 检查是否被拉黑
+        blacklist_entry = db.query(Blacklist).filter(
+            Blacklist.user_id == target_user_id,
+            Blacklist.blocked_user_id == current_user.id
+        ).first()
+        
+        if blacklist_entry:
+            raise HTTPException(status_code=403, detail="无法发送消息，您已被对方拉黑")
+    
     return create_message(db, message=message, user_id=current_user.id)
 
 @router.patch("/{message_id}/read", response_model=MessageResponse)
@@ -154,22 +203,34 @@ def delete_conversation(
     """
     删除某商品下与某用户的所有消息（仅限当前用户与对方的消息），采用软删除
     """
-    # 查询所有相关消息
-    q = db.query(Message).filter(
-        Message.is_system == False,
-        or_(
-            and_(Message.user_id == current_user.id, Message.target_users == str(other_user_id)),
-            and_(Message.user_id == other_user_id, Message.target_users == str(current_user.id)),
-            and_(Message.user_id.in_([current_user.id, other_user_id]), Message.target_users == None)
-        )
-    )
-    if type == "item":
-        q = q.filter(Message.item_id == id)
-    elif type == "buy_request":
-        q = q.filter(Message.buy_request_id == id)
+    if type == "user":
+        # 用户私聊：删除双方的所有私聊消息
+        messages = db.query(Message).filter(
+            Message.is_system == False,
+            Message.target_user.isnot(None),
+            or_(
+                and_(Message.user_id == current_user.id, Message.target_user == str(other_user_id)),
+                and_(Message.user_id == other_user_id, Message.target_user == str(current_user.id))
+            )
+        ).all()
     else:
-        raise HTTPException(status_code=400, detail="type参数错误")
-    messages = q.all()
+        # 商品或求购消息：使用原有逻辑
+        q = db.query(Message).filter(
+            Message.is_system == False,
+            or_(
+                and_(Message.user_id == current_user.id, Message.target_users == str(other_user_id)),
+                and_(Message.user_id == other_user_id, Message.target_users == str(current_user.id)),
+                and_(Message.user_id.in_([current_user.id, other_user_id]), Message.target_users == None)
+            )
+        )
+        if type == "item":
+            q = q.filter(Message.item_id == id)
+        elif type == "buy_request":
+            q = q.filter(Message.buy_request_id == id)
+        else:
+            raise HTTPException(status_code=400, detail="type参数错误")
+        messages = q.all()
+    
     for msg in messages:
         delete_message(db, message_id=msg.id, current_user_id=current_user.id, is_admin=False)
     return {"message": "对话已删除"}

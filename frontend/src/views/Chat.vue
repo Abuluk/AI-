@@ -4,7 +4,13 @@
       <router-link to="/messages" class="back-btn">
         <i class="fas fa-arrow-left"></i>
       </router-link>
-      <div class="product-info-header">
+      <div v-if="chatType === 'user'" class="user-info-header">
+        <img :src="getUserAvatar(otherUserId)" class="product-avatar">
+        <div class="product-info">
+          <div class="product-title">{{ usersInfo[otherUserId]?.username || '用户' }}</div>
+        </div>
+      </div>
+      <div v-else class="product-info-header">
         <img :src="getItemImage(item?.images)" class="product-avatar" v-if="chatType === 'item'">
         <img :src="'/static/images/default_avatar.png'" class="product-avatar" v-else>
         <div class="product-info">
@@ -153,6 +159,7 @@ export default {
     ]
     
     const canSendMessage = computed(() => {
+      if (chatType.value === 'user') return authStore.isAuthenticated && !sending.value
       return authStore.isAuthenticated && item.value && !sending.value
     })
     
@@ -164,25 +171,29 @@ export default {
       if (path.startsWith('http')) {
         return path;
       }
-      const baseUrl = 'http://localhost:8000';
+      const baseUrl = 'http://8.138.47.159:8000';
       const cleanedPath = path.startsWith('/') ? path.substring(1) : path;
       return `${baseUrl}/${cleanedPath.replace(/\\/g, '/')}`;
     }
 
     // 获取商品或求购信息
     const loadItem = async () => {
-      try {
-        if (chatType.value === 'buy_request') {
-          const response = await api.getBuyRequest(itemId.value)
-          item.value = response.data
-        } else {
+      if (chatType.value === 'item') {
+        try {
           const response = await api.getItem(itemId.value)
           item.value = response.data
+        } catch (error) {
+          item.value = null
         }
-      } catch (error) {
-        console.error('加载信息失败:', error)
-        alert(chatType.value === 'buy_request' ? '求购信息不存在或已被删除' : '商品不存在或已被删除')
-        router.push('/messages')
+      } else if (chatType.value === 'buy_request') {
+        try {
+          const response = await api.getBuyRequest(itemId.value)
+          item.value = response.data
+        } catch (error) {
+          item.value = null
+        }
+      } else {
+        item.value = null
       }
     }
 
@@ -322,7 +333,7 @@ export default {
         return;
       }
       event.target.onerror = null;
-      event.target.src = 'http://localhost:8000/static/images/default_avatar.png';
+      event.target.src = 'http://8.138.47.159:8000/static/images/default_avatar.png';
     }
     
     const handleDeleteConversation = async () => {
@@ -727,8 +738,8 @@ export default {
 }
 
 .message.sent .message-text {
-  background: var(--primary);
-  color: white;
+  background: #fff;
+  color: #333;
 }
 
 .message.sent .message-time {
@@ -782,5 +793,35 @@ export default {
   font-size: 22px;
   cursor: pointer;
   margin: 2px;
+}
+
+.user-info-header {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.user-info-header img {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-right: 15px;
+}
+
+.user-info-header .product-info {
+  flex: 1;
+}
+
+.user-info-header .product-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.message.received .message-text {
+  background: #fff;
+  color: #333;
 }
 </style>

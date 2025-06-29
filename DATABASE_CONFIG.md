@@ -64,7 +64,7 @@ alembic current
 ### 3. 数据库连接测试
 ```bash
 # 测试API连接
-curl http://localhost:8000/api/v1/items?skip=0&limit=5
+curl http://8.138.47.159:8000/api/v1/items?skip=0&limit=5
 ```
 
 ## 配置优势

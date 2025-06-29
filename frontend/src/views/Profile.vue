@@ -203,24 +203,32 @@
           </div>
         </div>
         <!-- 求购信息tab -->
-        <div v-if="activeTab === 'buy_requests'">
+        <div v-else-if="activeTab === 'buy_requests'" class="tab-content">
           <div class="section-header">
-            <h3>求购信息</h3>
-            <button class="post-request-btn" @click="goToPublishBuyRequest">发布</button>
+            <h3>我的求购</h3>
+            <router-link to="/publish-buy-request" class="btn btn-primary">
+              <i class="fas fa-plus"></i> 发布求购
+            </router-link>
           </div>
-          <div v-if="loadingBuyRequests" class="loading-requests">
-            <div class="skeleton-request" v-for="n in 2" :key="n"></div>
+          <div v-if="myBuyRequests.length === 0" class="empty-state">
+            <i class="fas fa-shopping-cart"></i>
+            <p>暂无求购信息</p>
+            <router-link to="/publish-buy-request" class="btn btn-outline">发布求购</router-link>
           </div>
           <div v-else>
-            <div v-if="myBuyRequests.length === 0" class="empty-requests">暂无求购信息</div>
-            <div v-else>
-              <div v-for="req in myBuyRequests" :key="req.id" class="request-item">
-                <div class="request-title">{{ req.title }}</div>
-                <div class="request-footer">
-                  <span class="request-price">¥{{ req.budget }}</span>
-                  <span class="request-user-name">{{ req.user ? req.user.username : '未知' }}</span>
-                  <button class="delete-btn" @click="handleDeleteBuyRequest(req.id)">删除</button>
+            <div v-for="buyRequest in myBuyRequests" :key="buyRequest.id" class="buy-request-card">
+              <div class="buy-request-main">
+                <img :src="getBuyRequestImage(buyRequest.images)" :alt="buyRequest.title" class="buy-request-img">
+                <div class="buy-request-info">
+                  <h4>{{ buyRequest.title }}</h4>
+                  <div class="budget">预算：<span class="price">¥{{ buyRequest.budget }}</span></div>
+                  <div class="desc">{{ buyRequest.description }}</div>
+                  <div class="meta">
+                    <span class="time">{{ formatDateTime(buyRequest.created_at) }}</span>
+                    <span class="likes">👍 {{ buyRequest.like_count || 0 }}</span>
+                  </div>
                 </div>
+                <button class="btn btn-outline btn-sm" @click="handleDeleteBuyRequest(buyRequest.id)">删除</button>
               </div>
             </div>
           </div>
@@ -333,7 +341,7 @@
 <script setup>
 import { useAuthStore } from '@/store/auth'
 import ProductCard from '@/components/ProductCard.vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import api from '@/services/api' // 添加这行导入API服务
 import { ref, reactive, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 
@@ -344,6 +352,7 @@ onBeforeUnmount(() => {
   }
 });
 const router = useRouter()
+const route = useRoute()
 const activeTab = ref('selling')
 const showEditModal = ref(false)
 const showOfflineModal = ref(false)
@@ -746,7 +755,8 @@ onMounted(async () => {
     await Promise.all([
       fetchRealSellingItems(),
       fetchSoldItems(true),
-      fetchFavoriteItems(true)
+      fetchFavoriteItems(true),
+      fetchMyBuyRequests()
     ]);
   } catch (error) {
     console.error('初始化失败:', error);
@@ -757,12 +767,14 @@ onMounted(async () => {
 // 切换标签
 const changeTab = (tabId) => {
   activeTab.value = tabId
-  // 如果数据为空则加载
-  if ((tabId === 'selling' && sellingItems.value.length === 0) ||
-      (tabId === 'sold' && soldItems.value.length === 0) ||
-      (tabId === 'favorites' && favoriteItems.value.length === 0) ||
-      (tabId === 'buy_requests' && myBuyRequests.value.length === 0)) {
-    fetchTabData(tabId)
+  if (tabId === 'selling' && sellingItems.value.length === 0) {
+    fetchSellingItems()
+  } else if (tabId === 'sold' && soldItems.value.length === 0) {
+    fetchSoldItems()
+  } else if (tabId === 'favorites' && favoriteItems.value.length === 0) {
+    fetchFavoriteItems()
+  } else if (tabId === 'buy_requests' && myBuyRequests.value.length === 0) {
+    fetchMyBuyRequests()
   }
 }
 
@@ -1259,8 +1271,34 @@ const goToPublishBuyRequest = () => {
 }
 
 onMounted(() => {
-  fetchMyBuyRequests();
+  // 支持通过URL参数tab自动切换
+  if (route.query.tab && ['selling','sold','favorites','buy_requests'].includes(route.query.tab)) {
+    activeTab.value = route.query.tab
+  }
 })
+
+watch(() => route.query.tab, (newTab) => {
+  if (newTab && ['selling','sold','favorites','buy_requests'].includes(newTab)) {
+    activeTab.value = newTab
+  }
+})
+
+const getBuyRequestImage = (images) => {
+  if (!images) return '/static/images/default_product.png'
+  let img = ''
+  if (typeof images === 'string') {
+    img = images.split(',')[0]
+  } else if (Array.isArray(images)) {
+    img = images[0]
+  }
+  if (!img) return '/static/images/default_product.png'
+  // 如果是完整URL，直接返回
+  if (img.startsWith('http')) return img
+  // 如果是以/static开头，补全域名
+  if (img.startsWith('/static')) return 'http://8.138.47.159:8000' + img
+  // 否则拼成 /static/images/xxx
+  return 'http://8.138.47.159:8000/static/images/' + img
+}
 
 </script>
 
@@ -1807,5 +1845,211 @@ onMounted(() => {
   padding: 12px;
   color: #999;
   font-size: 0.9rem;
+}
+
+/* 好友和黑名单功能样式 */
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-input {
+  padding: 8px 12px 8px 35px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  width: 200px;
+}
+
+.search-box i {
+  position: absolute;
+  left: 12px;
+  color: #999;
+  font-size: 14px;
+}
+
+.search-results {
+  margin-top: 16px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.search-results h4 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.users-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.user-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.user-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #f0f0f0;
+}
+
+.user-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-info h5 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.user-info p {
+  margin: 0;
+  font-size: 14px;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: #007bff;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #0056b3;
+}
+
+.btn-outline {
+  background: transparent;
+  color: #007bff;
+  border: 1px solid #007bff;
+}
+
+.btn-outline:hover {
+  background: #007bff;
+  color: white;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 12px;
+  background: #e9ecef;
+  color: #6c757d;
+}
+
+.status-badge.blacklisted {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.hint {
+  font-size: 14px;
+  color: #999;
+  margin-top: 8px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .search-input {
+    width: 150px;
+  }
+  
+  .user-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .user-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  
+  .search-box {
+    width: 100%;
+  }
+  
+  .search-input {
+    width: 100%;
+  }
+}
+
+.buy-request-card {
+  display: flex;
+  align-items: flex-start;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  padding: 16px;
+  margin-bottom: 18px;
+  gap: 16px;
+}
+.buy-request-main {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+}
+.buy-request-img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #f5f5f5;
+  margin-right: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  border: 1px solid #eee;
+}
+.buy-request-info {
+  flex: 1;
+}
+.budget .price {
+  color: #e74c3c;
+  font-weight: bold;
+  margin-left: 4px;
+}
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  margin-left: 12px;
 }
 </style>

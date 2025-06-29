@@ -224,17 +224,21 @@ const getUserAvatar = (avatar) => {
   if (avatar.startsWith('http')) {
       return avatar;
   }
-  return `http://localhost:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`;
+  return `http://8.138.47.159:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`;
 };
 
 const selectConversation = (conv) => {
   // 判断类型，优先用 conv.type，否则根据 id 字段推断
   let type = conv.type;
-  if (!type) {
-    if (conv.buy_request_id) type = 'buy_request';
-    else type = 'item';
+  let id;
+  if (type === 'user') {
+    // 用户私聊，id用other_user_id
+    id = conv.other_user_id;
+  } else if (type === 'buy_request') {
+    id = conv.buy_request_id;
+  } else {
+    id = conv.item_id;
   }
-  const id = type === 'buy_request' ? conv.buy_request_id : conv.item_id;
   router.push({ 
     name: 'Chat', 
     params: { 
@@ -443,6 +447,9 @@ watch(activeTab, (tab) => {
   cursor: pointer;
   transition: background-color 0.2s;
   position: relative;
+  background: #fff;
+  border-radius: 8px;
+  margin-bottom: 10px;
 }
 
 .conversation-item:hover {

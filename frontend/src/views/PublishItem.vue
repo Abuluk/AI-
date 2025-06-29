@@ -125,7 +125,23 @@
         <div class="form-row">
           <div class="form-group">
             <label>所在地区</label>
-            <input type="text" v-model="form.location" placeholder="例如: 北京朝阳区" required>
+            <div class="location-flex-row">
+              <input
+                type="text"
+                v-model="form.location"
+                placeholder="请输入或选择所在地区"
+                required
+              >
+              <select @change="onLocationSelect($event)" style="flex:1; min-width:160px;">
+                <option value="">选择学校</option>
+                <option value="上海电力大学（临港）">上海电力大学（临港）</option>
+                <option value="上海电力大学（杨浦）">上海电力大学（杨浦）</option>
+                <option value="上海海洋大学">上海海洋大学</option>
+                <option value="上海海事大学">上海海事大学</option>
+                <option value="上海建桥学院">上海建桥学院</option>
+                <option value="上海电机学院">上海电机学院</option>
+              </select>
+            </div>
           </div>
           
           <div class="form-group">
@@ -474,6 +490,12 @@ export default {
         category: false,
         condition: false
       };
+    },
+    onLocationSelect(event) {
+      const value = event.target.value;
+      if (value) {
+        this.form.location = value;
+      }
     }
   }
 }
@@ -1022,5 +1044,54 @@ export default {
 
 .ai-mini-warning i {
   font-size: 1rem;
+}
+
+.location-flex-row {
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+}
+
+.location-flex-row input {
+  flex: 2;
+  min-width: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
+
+.location-flex-row select {
+  flex: 1;
+  min-width: 140px;
+  height: 100%;
+  padding: 10px 15px;
+  border: 1px solid var(--border);
+  border-left: none;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-top-right-radius: 5px;
+  border-bottom-right-radius: 5px;
+  font-size: 1rem;
+  background: white;
+}
+
+@media (max-width: 768px) {
+  .location-flex-row {
+    flex-direction: column;
+  }
+  .location-flex-row input,
+  .location-flex-row select {
+    border-radius: 5px;
+    border-right: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+  }
+  .location-flex-row select {
+    margin-top: 8px;
+    border-top-left-radius: 5px;
+    border-bottom-left-radius: 5px;
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+    border-left: 1px solid var(--border);
+  }
 }
 </style>

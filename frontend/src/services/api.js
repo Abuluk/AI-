@@ -3,7 +3,7 @@ import { ref } from 'vue'
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api/v1',
+  baseURL: 'http://8.138.47.159:8000/api/v1',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
@@ -228,17 +228,24 @@ const apiService = {
   },
 
   /**
-   * 发送消息（支持商品和求购）
+   * 发送消息（支持商品、求购和用户私聊）
    * @param {Object} messageData { content, other_user_id, type, id }
    */
   async sendMessage({ content, other_user_id, type = 'item', id }) {
-    // type: 'item' 或 'buy_request'
     const data = {
       content,
-      other_user_id,
-      item_id: type === 'item' ? id : undefined,
-      buy_request_id: type === 'buy_request' ? id : undefined
+      other_user_id
     }
+    
+    if (type === 'user') {
+      // 用户私聊：使用target_user字段
+      data.target_user = other_user_id
+    } else {
+      // 商品或求购消息：使用item_id或buy_request_id
+      data.item_id = type === 'item' ? id : undefined
+      data.buy_request_id = type === 'buy_request' ? id : undefined
+    }
+    
     return api.post('/messages', data)
   },
 
@@ -402,7 +409,7 @@ const apiService = {
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
     // 直接用axios.post，确保可用
-    return axios.post('http://localhost:8000/api/v1/items/ai-auto-complete', formData, {
+    return axios.post('http://8.138.47.159:8000/api/v1/items/ai-auto-complete', formData, {
       headers: {
         Authorization: localStorage.getItem('access_token') ? `Bearer ${localStorage.getItem('access_token')}` : undefined
       }
@@ -486,6 +493,40 @@ const apiService = {
       }
     })
   },
+
+  // 好友功能
+  async addFriend(friendId) {
+    return api.post('/friends/add', { friend_id: friendId })
+  },
+
+  async removeFriend(friendId) {
+    return api.post('/friends/delete', { friend_id: friendId })
+  },
+
+  async getFriendsList() {
+    return api.get('/friends/list')
+  },
+
+  async searchUsers(keyword) {
+    return api.get(`/friends/search?keyword=${encodeURIComponent(keyword)}`)
+  },
+
+  async getFriendDetail(friendId) {
+    return api.get(`/friends/${friendId}`)
+  },
+
+  // 黑名单功能
+  async addToBlacklist(blockedUserId) {
+    return api.post('/blacklist/add', { blocked_user_id: blockedUserId })
+  },
+
+  async removeFromBlacklist(blockedUserId) {
+    return api.post('/blacklist/remove', { blocked_user_id: blockedUserId })
+  },
+
+  async getBlacklist() {
+    return api.get('/blacklist/list')
+  }
 }
 
 export default apiService;

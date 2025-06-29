@@ -22,6 +22,10 @@
             <i class="fas fa-user-circle"></i>
           </router-link>
           
+          <router-link to="/friends" class="nav-icon" title="好友">
+            <i class="fas fa-user-friends"></i>
+          </router-link>
+          
           <router-link to="/publish" class="nav-icon" title="发布">
             <i class="fas fa-plus-circle"></i>
           </router-link>
@@ -280,5 +284,18 @@ body {
 .admin-icon:hover i,
 .admin-icon.router-link-active i {
   color: #c0392b !important;
+}
+
+button, .btn {
+  box-sizing: border-box;
+}
+/* 避免全局 .btn 影响评论区按钮横排 */
+.comment-actions > button,
+.reply-btn, .delete-btn, .expand-btn, .like-btn, .submit-btn {
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
 }
 </style>

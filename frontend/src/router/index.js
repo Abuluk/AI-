@@ -17,7 +17,8 @@ const routes = [
   { path: '/forgot-password', component: () => import('@/views/LoginRegister.vue') },
   { path: '/terms', component: () => import('@/views/Home.vue') },
   { path: '/privacy', component: () => import('@/views/Home.vue') },
-  { path: '/buy-request/:id', name: 'BuyRequestDetail', component: () => import('@/views/BuyRequestDetail.vue') }
+  { path: '/buy-request/:id', name: 'BuyRequestDetail', component: () => import('@/views/BuyRequestDetail.vue') },
+  { path: '/friends', name: 'Friends', component: () => import('@/views/Friends.vue'), meta: { requiresAuth: true } },
 ]
 
 const router = createRouter({

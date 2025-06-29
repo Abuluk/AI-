@@ -60,6 +60,7 @@ class Message(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("items.id"), nullable=True)
     buy_request_id = Column(Integer, ForeignKey("buy_requests.id"), nullable=True)  # 新增
+    target_user = Column(String(50), nullable=True)  # 新增：目标用户ID（用于用户私聊）
     created_at = Column(DateTime, server_default=func.now())  # 使用数据库函数
     is_read = Column(Boolean, default=False)  # 添加已读状态
     is_system = Column(Boolean, default=False)  # 添加系统消息标识
@@ -111,7 +112,7 @@ class SiteConfig(Base):
 class Comment(Base):
     __tablename__ = 'comments'
     id = Column(Integer, primary_key=True, index=True)
-    content = Column(String, nullable=False)
+    content = Column(String(500), nullable=False)
     user_id = Column(Integer, ForeignKey('users.id'))
     item_id = Column(Integer, ForeignKey('items.id'), nullable=True)
     buy_request_id = Column(Integer, ForeignKey('buy_requests.id'), nullable=True)
@@ -149,3 +150,19 @@ class BuyRequestLike(Base):
     buy_request_id = Column(Integer, ForeignKey('buy_requests.id'))
     created_at = Column(DateTime, default=datetime.utcnow)
     __table_args__ = (UniqueConstraint('user_id', 'buy_request_id', name='_user_buyreq_uc'),)
+
+class Friend(Base):
+    __tablename__ = 'friends'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    friend_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint('user_id', 'friend_id', name='uq_user_friend'),)
+
+class Blacklist(Base):
+    __tablename__ = 'blacklist'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    blocked_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint('user_id', 'blocked_user_id', name='uq_user_blocked'),)

@@ -8,12 +8,12 @@ class Settings:
     PROJECT_VERSION: str = "1.0.0"
     
     # 数据库配置 - MySQL
-    MYSQL_USER: str = os.getenv("MYSQL_USER", "root")
-    MYSQL_PASSWORD: str = os.getenv("MYSQL_PASSWORD", "20030208..")
+    MYSQL_USER: str = os.getenv("MYSQL_USER", "ershou")
+    MYSQL_PASSWORD: str = os.getenv("MYSQL_PASSWORD", "nnbHDhPmjTMBeRGZ")
     MYSQL_SERVER: str = os.getenv("MYSQL_SERVER", "localhost")
     MYSQL_PORT: str = os.getenv("MYSQL_PORT", "3306")
     MYSQL_DB: str = os.getenv("MYSQL_DB", "ershou")
-    DATABASE_URL = f"mysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_SERVER}:{MYSQL_PORT}/{MYSQL_DB}"
+    DATABASE_URL = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_SERVER}:{MYSQL_PORT}/{MYSQL_DB}"
     
     # 安全配置
     SECRET_KEY: str = os.getenv("SECRET_KEY", "196ca263383b2fd21dfae2eda445f30b25d14806a861ababf10a408beb5e2117")

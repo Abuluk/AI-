@@ -11,6 +11,8 @@ from .endpoints import (
     favorites,  # 新增导入
     site_config,  # 新增导入site_config
     comments,  # 新增导入comments
+    friends,  # 新增导入好友功能
+    blacklist,  # 新增导入黑名单功能
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
@@ -76,4 +78,20 @@ api_router.include_router(
     comments.router,
     prefix="/comments",
     tags=["评论"]
+)
+
+# 好友功能路由 - 需要认证
+api_router.include_router(
+    friends.router,
+    prefix="/friends",
+    tags=["好友"],
+    dependencies=[Depends(oauth2_scheme)]
+)
+
+# 黑名单功能路由 - 需要认证
+api_router.include_router(
+    blacklist.router,
+    prefix="/blacklist",
+    tags=["黑名单"],
+    dependencies=[Depends(oauth2_scheme)]
 )

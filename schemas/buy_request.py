@@ -8,7 +8,7 @@ class BuyRequestBase(BaseModel):
     description: Optional[str] = None
     budget: Optional[float] = None
     images: Optional[List[str]] = None
-    like_count: int = 0
+    like_count: Optional[int] = 0
 
 class BuyRequestCreate(BuyRequestBase):
     pass

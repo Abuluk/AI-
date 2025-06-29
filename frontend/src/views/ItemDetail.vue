@@ -128,8 +128,8 @@
 
     <!-- 评论区 -->
     <CommentSection :itemId="product.id" :currentUser="user" :isOwner="isOwner" />
-    <div class="related-products card">
-      <h2>推荐商品</h2>
+    <div class="related-products">
+      <h2 class="section-title">推荐商品</h2>
       <div class="products-grid">
         <ProductCard 
           v-for="product in relatedProducts" 
@@ -615,14 +615,24 @@ export default {
   margin-top: 20px;
 }
 
-.related-products h2 {
-  margin-bottom: 15px;
+.related-products {
+  margin-top: 32px;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
 }
-
-.related-products .products-grid {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+.related-products .section-title {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: #223;
 }
-
+.products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+}
 @media (max-width: 768px) {
   .detail-content {
     flex-direction: column;
@@ -661,7 +671,7 @@ export default {
   }
   
   .products-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 15px;
   }
 }

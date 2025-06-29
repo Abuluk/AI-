@@ -16,7 +16,7 @@ class ItemBase(BaseModel):
     category: Optional[int] = None
     condition: Optional[str] = "unknown"
     location: str
-    like_count: int = 0  # 新增点赞数
+    like_count: Optional[int] = 0  # 改为可选字段，允许 None 值
 
 class ItemCreate(ItemBase):
     pass
@@ -32,6 +32,7 @@ class ItemInDB(ItemBase):
     category: Optional[int] = None
     condition: Optional[str] = "unknown"
     location: str
+    like_count: Optional[int] = 0  # 改为可选字段，允许 None 值
     # 添加可选字段和默认值
     status: Optional[str] = "online"
     sold: Optional[bool] = False

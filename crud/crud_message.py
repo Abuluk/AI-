@@ -15,7 +15,7 @@ def create_message(db: Session, message: MessageCreate, user_id: int):
         user_id=user_id,
         item_id=message.item_id,
         buy_request_id=message.buy_request_id,
-        target_users=message.target_user,
+        target_user=message.target_user,
         is_read=False,
         is_system=False
     )
@@ -191,7 +191,7 @@ def get_conversation_messages(db: Session, user_id: int, other_user_id: int, typ
 
 def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
     """
-    获取用户的对话列表，支持商品(item)和求购(buy_request)两种类型。
+    获取用户的对话列表，支持商品(item)、求购(buy_request)、用户私聊(user)三种类型。
     过滤掉当前用户已删除的消息。
     """
     output = []
@@ -208,7 +208,7 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
         Message.item_id.isnot(None),
         Message.deleted_by_sender == False
     ).distinct()
-    # 2. 别人发给我的（我是 owner）
+    # 2. 别人发给自己的（我是 owner）
     received_items = db.query(
         Message.item_id,
         Message.user_id.label('other_user_id')
@@ -271,7 +271,7 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
         Message.buy_request_id.isnot(None),
         Message.deleted_by_sender == False
     ).distinct()
-    # 2. 别人发给我的（我是发布者）
+    # 2. 别人发给自己的（我是发布者）
     received_brs = db.query(
         Message.buy_request_id,
         Message.user_id.label('other_user_id')
@@ -317,6 +317,49 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
             'other_user_avatar': other_user.avatar,
             'item_title': None,
             'buy_request_title': br_title,
+            'last_message_content': last_message.content,
+            'last_message_time': last_message.created_at,
+            'unread_count': unread_count
+        })
+    # ----------- 用户私聊对话 -----------
+    # 查询所有与当前用户相关的私聊消息
+    user_chat_msgs = db.query(Message).filter(
+        Message.is_system == False,
+        Message.target_user.isnot(None),
+        or_(Message.user_id == user_id, Message.target_user == str(user_id))
+    ).all()
+    # 用frozenset({user_id, target_user})去重，分组
+    chat_pairs = {}
+    for msg in user_chat_msgs:
+        uid1 = msg.user_id
+        uid2 = int(msg.target_user)
+        if uid1 == uid2:
+            continue  # 跳过自己给自己发的
+        pair = frozenset([uid1, uid2])
+        if pair not in chat_pairs or msg.created_at > chat_pairs[pair].created_at:
+            chat_pairs[pair] = msg
+    for pair, last_message in chat_pairs.items():
+        # 取对方id
+        other_user_id = [uid for uid in pair if uid != user_id][0]
+        other_user = db.query(User).filter(User.id == other_user_id).first()
+        if not other_user:
+            continue
+        # 统计未读数（对方发给我且未读）
+        unread_count = db.query(func.count(Message.id)).filter(
+            Message.is_system == False,
+            Message.target_user == str(user_id),
+            Message.user_id == other_user_id,
+            Message.is_read == False
+        ).scalar() or 0
+        output.append({
+            'type': 'user',
+            'item_id': None,
+            'buy_request_id': None,
+            'other_user_id': other_user.id,
+            'other_user_name': other_user.username,
+            'other_user_avatar': other_user.avatar,
+            'item_title': None,
+            'buy_request_title': None,
             'last_message_content': last_message.content,
             'last_message_time': last_message.created_at,
             'unread_count': unread_count

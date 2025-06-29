@@ -82,7 +82,7 @@ class CommentResponse(BaseModel):
     user_avatar: Optional[str] = None
     reply_to_user_name: Optional[str] = None
     children: Optional[List['CommentResponse']] = None
-    like_count: int = 0  # 新增点赞数
+    like_count: Optional[int] = 0  # 改为可选字段，允许 None 值
     liked_by_me: bool = False  # 当前用户是否已点赞
 
     class Config:
