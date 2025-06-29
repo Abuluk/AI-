@@ -100,12 +100,17 @@ export default {
           loadUnreadCount()
         }
       }, 30000)
+      
+      // 监听未读消息计数更新事件
+      window.addEventListener('updateUnreadCount', loadUnreadCount)
     })
     
     onUnmounted(() => {
       if (intervalId) {
         clearInterval(intervalId)
       }
+      // 移除事件监听器
+      window.removeEventListener('updateUnreadCount', loadUnreadCount)
     })
 
     // --- 返回合并后的数据 ---

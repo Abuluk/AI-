@@ -15,7 +15,8 @@ from crud.crud_message import (
     get_system_message,
     mark_as_read,
     delete_message,
-    get_user_messages
+    get_user_messages,
+    get_message
 )
 import os
 from datetime import datetime
@@ -161,6 +162,50 @@ def mark_message_as_read(
          raise HTTPException(status_code=403, detail="无权限操作此消息")
             
     return mark_as_read(db, message_id=message_id)
+
+@router.patch("/system/{message_id}/read", response_model=MessageResponse)
+def mark_system_message_as_read(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """标记系统消息为已读"""
+    message = get_message(db, message_id=message_id)
+    if not message:
+        raise HTTPException(status_code=404, detail="系统消息不存在")
+    
+    # 检查是否是系统消息
+    if not message.is_system:
+        raise HTTPException(status_code=400, detail="只能标记系统消息为已读")
+    
+    # 检查用户是否有权限标记此系统消息为已读
+    # 系统消息可以是发送给所有用户的，也可以是发送给特定用户的
+    if message.target_users == "all" or message.target_users == str(current_user.id):
+        return mark_as_read(db, message_id=message_id)
+    else:
+        raise HTTPException(status_code=403, detail="无权限操作此系统消息")
+
+@router.patch("/batch/like-messages/read")
+def mark_like_messages_as_read(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """批量标记点赞消息为已读"""
+    # 查找所有发送给当前用户的未读点赞消息
+    like_messages = db.query(Message).filter(
+        Message.is_system == True,
+        Message.target_users == str(current_user.id),
+        Message.title.in_(["商品被点赞", "求购被点赞", "评论被点赞"]),
+        Message.is_read == False
+    ).all()
+    
+    # 标记所有点赞消息为已读
+    for message in like_messages:
+        message.is_read = True
+    
+    db.commit()
+    
+    return {"message": f"已标记 {len(like_messages)} 条点赞消息为已读"}
 
 @router.delete("/{message_id}")
 def remove_message(

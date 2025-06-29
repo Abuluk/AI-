@@ -18,97 +18,6 @@ from db.models import ItemLike
 
 router = APIRouter()
 
-# 公共端点 - 获取所有商品（无需认证）
-@router.get("", response_model=List[ItemInDB])
-def get_all_items(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
-    order_by: str = Query("created_at_desc", description="排序方式: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎)"),
-    category: Optional[int] = Query(None, description="商品分类ID"),
-    db: Session = Depends(get_db)
-):
-    """获取所有在售商品列表，支持分页和排序（只显示状态为online的商品）"""
-    query = db.query(Item).options(joinedload(Item.owner)).filter(
-        Item.status == "online",  # 只显示上架的商品
-        Item.sold == False        # 不显示已售出的商品
-    )
-    if category is not None:
-        query = query.filter(Item.category == category)
-    # 根据排序参数进行排序
-    if order_by == "created_at_desc":
-        query = query.order_by(Item.created_at.desc())
-    elif order_by == "price_asc":
-        query = query.order_by(Item.price.asc())
-    elif order_by == "price_desc":
-        query = query.order_by(Item.price.desc())
-    elif order_by == "views_desc":
-        query = query.order_by(Item.views.desc())
-    else:
-        query = query.order_by(Item.created_at.desc())
-    items = query.offset(skip).limit(limit).all()
-    # 手动序列化 owner 字段
-    result = []
-    for item in items:
-        item_dict = jsonable_encoder(item)
-        if item.owner:
-            item_dict["owner"] = {
-                "id": item.owner.id,
-                "username": item.owner.username,
-                "avatar": item.owner.avatar
-            }
-        else:
-            item_dict["owner"] = None
-        result.append(item_dict)
-    return result
-
-# 公共端点 - 搜索商品（无需认证）- 必须在/{item_id}之前定义
-@router.get("/search", response_model=List[ItemInDB])
-def search_items(
-    q: str = Query(None, min_length=1),
-    skip: int = 0,
-    limit: int = 100,
-    order_by: str = Query("created_at_desc", description="排序方式: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎)"),
-    db: Session = Depends(get_db)
-):
-    if not q:
-        query = db.query(Item).options(joinedload(Item.owner)).filter(
-            Item.status == "online",
-            Item.sold == False
-        )
-    else:
-        query = db.query(Item).options(joinedload(Item.owner)).filter(
-            or_(
-                Item.title.ilike(f"%{q}%"),
-                Item.description.ilike(f"%{q}%")
-            ),
-            Item.status == "online",
-            Item.sold == False
-        )
-    if order_by == "created_at_desc":
-        query = query.order_by(Item.created_at.desc())
-    elif order_by == "price_asc":
-        query = query.order_by(Item.price.asc())
-    elif order_by == "price_desc":
-        query = query.order_by(Item.price.desc())
-    elif order_by == "views_desc":
-        query = query.order_by(Item.views.desc())
-    else:
-        query = query.order_by(Item.created_at.desc())
-    items = query.offset(skip).limit(limit).all()
-    result = []
-    for item in items:
-        item_dict = jsonable_encoder(item)
-        if item.owner:
-            item_dict["owner"] = {
-                "id": item.owner.id,
-                "username": item.owner.username,
-                "avatar": item.owner.avatar
-            }
-        else:
-            item_dict["owner"] = None
-        result.append(item_dict)
-    return result
-
 # 公共端点 - 获取AI分析的低价好物推荐
 @router.get("/ai-cheap-deals")
 def get_ai_cheap_deals(
@@ -184,6 +93,173 @@ def get_ai_cheap_deals(
             status_code=500,
             detail=f"获取AI推荐失败: {str(e)}"
         )
+
+@router.get("/promoted")
+def get_promoted_items(db: Session = Depends(get_db)):
+    """获取推广商品列表（公开接口）"""
+    # 从SiteConfig中获取推广商品ID列表
+    config = db.query(SiteConfig).filter(SiteConfig.key == "promoted_items").first()
+    if not config or not config.value:
+        return []
+    
+    try:
+        promoted_ids = json.loads(config.value)
+        if not promoted_ids:
+            return []
+        
+        # 获取推广商品详情，只返回在售且未售出的商品
+        promoted_items = db.query(Item).filter(
+            Item.id.in_(promoted_ids),
+            Item.status == "online",
+            Item.sold == False
+        ).all()
+        
+        # 按配置的顺序返回
+        result = []
+        for item_id in promoted_ids:
+            item = next((item for item in promoted_items if item.id == item_id), None)
+            if item:
+                # 处理图片路径
+                if item.images:
+                    images = item.images.split(',')
+                    processed_images = []
+                    for img in images:
+                        if img.strip():
+                            if not img.startswith('/'):
+                                img = '/' + img
+                            processed_images.append(img)
+                    item.images = ','.join(processed_images)
+                
+                result.append(item)
+        
+        return result
+    except Exception as e:
+        print(f"获取推广商品失败: {e}")
+        return []
+
+@router.get("/site_config/activity_banner", response_model=SiteConfigSchema)
+def get_activity_banner(db: Session = Depends(get_db)):
+    config = db.query(SiteConfig).filter(SiteConfig.key == "activity_banner").first()
+    if not config or not config.value:
+        return SiteConfigSchema(key="activity_banner", value=None)
+    return SiteConfigSchema(key="activity_banner", value=json.loads(config.value))
+
+# 公共端点 - 获取所有商品（无需认证）
+@router.get("", response_model=List[ItemInDB])
+def get_all_items(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+    order_by: str = Query("created_at_desc", description="排序方式: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎)"),
+    category: Optional[int] = Query(None, description="商品分类ID"),
+    exclude_promoted: Optional[bool] = Query(False, description="是否排除推广商品"),
+    status: Optional[str] = Query(None, description="商品状态: online, offline"),
+    sold: Optional[bool] = Query(None, description="是否已售出"),
+    db: Session = Depends(get_db)
+):
+    """获取所有商品列表，支持分页、排序和分类过滤"""
+    query = db.query(Item)
+    
+    # 状态过滤
+    if status is not None:
+        query = query.filter(Item.status == status)
+    
+    # 售出状态过滤
+    if sold is not None:
+        query = query.filter(Item.sold == sold)
+    
+    # 分类过滤
+    if category is not None:
+        query = query.filter(Item.category == category)
+    
+    # 排除推广商品
+    if exclude_promoted:
+        # 获取推广商品ID列表
+        config = db.query(SiteConfig).filter(SiteConfig.key == "promoted_items").first()
+        if config and config.value:
+            try:
+                promoted_ids = json.loads(config.value)
+                if promoted_ids:
+                    query = query.filter(~Item.id.in_(promoted_ids))
+            except Exception as e:
+                print(f"解析推广商品配置失败: {e}")
+    
+    # 排序
+    if order_by == "created_at_desc":
+        query = query.order_by(Item.created_at.desc())
+    elif order_by == "price_asc":
+        query = query.order_by(Item.price.asc())
+    elif order_by == "price_desc":
+        query = query.order_by(Item.price.desc())
+    elif order_by == "views_desc":
+        query = query.order_by(Item.views.desc())
+    else:
+        query = query.order_by(Item.created_at.desc())
+    
+    # 分页
+    items = query.offset(skip).limit(limit).all()
+    
+    # 处理图片路径
+    for item in items:
+        if item.images:
+            images = item.images.split(',')
+            processed_images = []
+            for img in images:
+                if img.strip():
+                    # 确保路径格式正确
+                    if not img.startswith('/'):
+                        img = '/' + img
+                    processed_images.append(img)
+            item.images = ','.join(processed_images)
+    
+    return items
+
+# 公共端点 - 搜索商品（无需认证）- 必须在/{item_id}之前定义
+@router.get("/search", response_model=List[ItemInDB])
+def search_items(
+    q: str = Query(None, min_length=1),
+    skip: int = 0,
+    limit: int = 100,
+    order_by: str = Query("created_at_desc", description="排序方式: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎)"),
+    db: Session = Depends(get_db)
+):
+    if not q:
+        query = db.query(Item).options(joinedload(Item.owner)).filter(
+            Item.status == "online",
+            Item.sold == False
+        )
+    else:
+        query = db.query(Item).options(joinedload(Item.owner)).filter(
+            or_(
+                Item.title.ilike(f"%{q}%"),
+                Item.description.ilike(f"%{q}%")
+            ),
+            Item.status == "online",
+            Item.sold == False
+        )
+    if order_by == "created_at_desc":
+        query = query.order_by(Item.created_at.desc())
+    elif order_by == "price_asc":
+        query = query.order_by(Item.price.asc())
+    elif order_by == "price_desc":
+        query = query.order_by(Item.price.desc())
+    elif order_by == "views_desc":
+        query = query.order_by(Item.views.desc())
+    else:
+        query = query.order_by(Item.created_at.desc())
+    items = query.offset(skip).limit(limit).all()
+    result = []
+    for item in items:
+        item_dict = jsonable_encoder(item)
+        if item.owner:
+            item_dict["owner"] = {
+                "id": item.owner.id,
+                "username": item.owner.username,
+                "avatar": item.owner.avatar
+            }
+        else:
+            item_dict["owner"] = None
+        result.append(item_dict)
+    return result
 
 # 公共端点 - 获取单个商品（无需认证）
 @router.get("/{item_id}", response_model=ItemInDB)
@@ -441,13 +517,6 @@ async def ai_auto_complete_item_by_image_ws(
     result = await spark_ai_service.auto_complete_item_by_image_ws(image_bytes_list)
     return result
 
-@router.get("/site_config/activity_banner", response_model=SiteConfigSchema)
-def get_activity_banner(db: Session = Depends(get_db)):
-    config = db.query(SiteConfig).filter(SiteConfig.key == "activity_banner").first()
-    if not config or not config.value:
-        return SiteConfigSchema(key="activity_banner", value=None)
-    return SiteConfigSchema(key="activity_banner", value=json.loads(config.value))
-
 @router.post("/{item_id}/like")
 def like_item_api(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     count = like_item(db, item_id, current_user.id)
@@ -461,3 +530,57 @@ def unlike_item_api(item_id: int, db: Session = Depends(get_db), current_user: U
     if count == -1:
         raise HTTPException(status_code=400, detail="未点赞")
     return {"like_count": count}
+
+@router.get("/{item_id}/recommendations")
+def get_item_recommendations(
+    item_id: int,
+    limit: int = Query(4, ge=1, le=10),
+    db: Session = Depends(get_db)
+):
+    """获取商品的推荐商品列表"""
+    # 首先检查是否有管理员设置的推荐商品
+    config_key = f"item_recommendations_{item_id}"
+    config = db.query(SiteConfig).filter(SiteConfig.key == config_key).first()
+    
+    if config and config.value:
+        try:
+            recommended_ids = json.loads(config.value)
+            if recommended_ids:
+                # 获取管理员设置的推荐商品
+                recommended_items = db.query(Item).filter(
+                    Item.id.in_(recommended_ids),
+                    Item.status == "online",
+                    Item.sold == False
+                ).limit(limit).all()
+                
+                if recommended_items:
+                    return recommended_items
+        except Exception as e:
+            print(f"解析推荐商品配置失败: {e}")
+    
+    # 如果没有管理员设置的推荐商品，使用默认推荐逻辑
+    # 获取同分类的其他商品
+    current_item = db.query(Item).filter(Item.id == item_id).first()
+    if not current_item:
+        raise HTTPException(status_code=404, detail="商品不存在")
+    
+    # 获取同分类的其他商品，排除当前商品
+    recommended_items = db.query(Item).filter(
+        Item.category == current_item.category,
+        Item.id != item_id,
+        Item.status == "online",
+        Item.sold == False
+    ).order_by(Item.views.desc()).limit(limit).all()
+    
+    # 如果同分类商品不够，补充其他分类的商品
+    if len(recommended_items) < limit:
+        remaining_limit = limit - len(recommended_items)
+        other_items = db.query(Item).filter(
+            Item.category != current_item.category,
+            Item.id != item_id,
+            Item.status == "online",
+            Item.sold == False
+        ).order_by(Item.views.desc()).limit(remaining_limit).all()
+        recommended_items.extend(other_items)
+    
+    return recommended_items

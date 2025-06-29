@@ -1,6 +1,6 @@
 <template>
   <div class="container buy-request-publish">
-    <h1 class="page-title">发布求购信息</h1>
+    <h1 class="page-title">{{ editing ? '编辑求购信息' : '发布求购信息' }}</h1>
     <form class="buy-request-form" @submit.prevent="submitBuyRequest">
       <div class="form-group">
         <label>求购标题</label>
@@ -20,12 +20,13 @@
         <div class="image-preview-list">
           <div v-for="(img, idx) in imagePreviews" :key="idx" class="image-preview">
             <img :src="img" />
+            <button type="button" class="remove-image" @click="removeImage(idx)">×</button>
           </div>
         </div>
       </div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" @click="cancel">取消</button>
-        <button type="submit" class="btn btn-primary">发布</button>
+        <button type="submit" class="btn btn-primary">{{ editing ? '更新' : '发布' }}</button>
       </div>
       <div v-if="msg" class="msg">{{ msg }}</div>
     </form>
@@ -37,6 +38,8 @@ import api from '@/services/api'
 export default {
   data() {
     return {
+      editing: false,
+      buyRequestId: null,
       form: {
         title: '',
         description: '',
@@ -48,11 +51,57 @@ export default {
       imagePreviews: []
     }
   },
+  mounted() {
+    // 检查是否是编辑模式
+    const editId = this.$route.query.edit;
+    if (editId) {
+      this.editing = true;
+      this.buyRequestId = editId;
+      this.fetchBuyRequestData();
+    }
+  },
   methods: {
+    // 获取求购信息数据（编辑时使用）
+    async fetchBuyRequestData() {
+      try {
+        const response = await api.getBuyRequest(this.buyRequestId);
+        const buyRequest = response.data;
+        this.form = {
+          title: buyRequest.title,
+          description: buyRequest.description,
+          budget: buyRequest.budget,
+          images: buyRequest.images || []
+        };
+        // 显示现有图片
+        if (buyRequest.images) {
+          // 检查images的类型，如果是字符串则分割，如果是数组则直接使用
+          let imageArray = [];
+          if (typeof buyRequest.images === 'string') {
+            imageArray = buyRequest.images.split(',').filter(img => img.trim());
+          } else if (Array.isArray(buyRequest.images)) {
+            imageArray = buyRequest.images;
+          }
+          
+          this.imagePreviews = imageArray.map(img => {
+            if (img.startsWith('http')) return img;
+            return `http://localhost:8000/static/images/${img}`;
+          });
+        }
+      } catch (error) {
+        console.error('获取求购信息失败:', error);
+        alert('无法加载求购信息');
+      }
+    },
     async handleImageChange(e) {
       const files = Array.from(e.target.files)
       this.imageFiles = files
       this.imagePreviews = files.map(file => URL.createObjectURL(file))
+    },
+    removeImage(index) {
+      this.imagePreviews.splice(index, 1);
+      if (index < this.imageFiles.length) {
+        this.imageFiles.splice(index, 1);
+      }
     },
     async uploadImages() {
       const uploaded = []
@@ -70,13 +119,22 @@ export default {
         if (this.imageFiles.length > 0) {
           images = await this.uploadImages()
         }
-        await api.createBuyRequest({ ...this.form, images })
-        this.msg = '发布成功！即将跳转...'
+        
+        if (this.editing) {
+          // 编辑模式：更新求购信息
+          await api.updateBuyRequest(this.buyRequestId, { ...this.form, images });
+          this.msg = '更新成功！即将跳转...';
+        } else {
+          // 新建模式：创建求购信息
+          await api.createBuyRequest({ ...this.form, images });
+          this.msg = '发布成功！即将跳转...';
+        }
+        
         setTimeout(() => {
-          this.$router.push('/')
+          this.$router.push('/profile?tab=buy_requests');
         }, 1000)
       } catch (e) {
-        this.msg = '发布失败，请重试'
+        this.msg = this.editing ? '更新失败，请重试' : '发布失败，请重试';
       }
     },
     cancel() {
@@ -156,11 +214,34 @@ export default {
   gap: 10px;
   margin-top: 8px;
 }
+.image-preview {
+  position: relative;
+}
 .image-preview img {
   width: 80px;
   height: 80px;
   object-fit: cover;
   border-radius: 6px;
   border: 1px solid #eee;
+}
+.remove-image {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.remove-image:hover {
+  background: #c0392b;
 }
 </style> 

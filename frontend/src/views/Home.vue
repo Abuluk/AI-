@@ -106,10 +106,10 @@
           <p>暂无在售商品</p>
         </div>
         <div v-else class="products-grid">
-          <ProductCard 
-            v-for="product in sortedProducts" 
-            :key="product.id" 
-            :product="product" 
+          <ProductCard
+            v-for="product in sortedProducts"
+            :key="product.id"
+            :product="product"
           />
         </div>
       </div>
@@ -205,7 +205,19 @@ const CATEGORY_MAP = [
   { id: 5, name: '美妆护肤' },
   { id: 6, name: '图书文娱' },
   { id: 7, name: '运动户外' },
-  { id: 8, name: '家居家装' }
+  { id: 8, name: '家居家装' },
+  { id: 9, name: '食品饮料' },
+  { id: 10, name: '母婴用品' },
+  { id: 11, name: '汽车用品' },
+  { id: 12, name: '宠物用品' },
+  { id: 13, name: '乐器音响' },
+  { id: 14, name: '收藏品' },
+  { id: 15, name: '游戏动漫' },
+  { id: 16, name: '珠宝配饰' },
+  { id: 17, name: '箱包旅行' },
+  { id: 18, name: '园艺花卉' },
+  { id: 19, name: '手工DIY' },
+  { id: 20, name: '其他' }
 ];
 
 export default {
@@ -262,33 +274,56 @@ export default {
       activityBanners: [],
       currentBanner: 0,
       bannerTimer: null,
+      hasPromotedItems: false,
     }
   },
   computed: {
+    promotedProducts() {
+      return this.sortedProducts.filter(p => p.is_promoted)
+    },
+    normalProducts() {
+      return this.sortedProducts.filter(p => !p.is_promoted)
+    },
     sortedProducts() {
-      const products = [...this.products]
-      const parseTime = (t) => {
-        if (!t) return 0
-        let date
-        if (typeof t === 'string') {
-          let iso = t.replace(' ', 'T')
-          if (!iso.endsWith('Z')) iso += 'Z'
-          date = new Date(iso)
-        } else {
-          date = new Date(t)
+      let products = [...this.products];
+      
+      // 分离推广商品和普通商品
+      const promotedProducts = products.filter(p => p.is_promoted);
+      const normalProducts = products.filter(p => !p.is_promoted);
+      
+      // 推广商品保持原有顺序
+      // 普通商品按照用户选择的排序方式排列
+      let sortedNormalProducts = [...normalProducts];
+      
+      if (this.sortOption !== 'default') {
+        const parseTime = (t) => {
+          if (!t) return 0
+          let date
+          if (typeof t === 'string') {
+            let iso = t.replace(' ', 'T')
+            if (!iso.endsWith('Z')) iso += 'Z'
+            date = new Date(iso)
+          } else {
+            date = new Date(t)
+          }
+          return isNaN(date.getTime()) ? 0 : date.getTime()
         }
-        return isNaN(date.getTime()) ? 0 : date.getTime()
+        
+        switch(this.sortOption) {
+          case 'price_asc':
+            sortedNormalProducts.sort((a, b) => a.price - b.price);
+            break;
+          case 'price_desc':
+            sortedNormalProducts.sort((a, b) => b.price - a.price);
+            break;
+          case 'newest':
+            sortedNormalProducts.sort((a, b) => parseTime(b.created_at) - parseTime(a.created_at));
+            break;
+        }
       }
-      switch(this.sortOption) {
-        case 'price_asc':
-          return products.sort((a, b) => a.price - b.price)
-        case 'price_desc':
-          return products.sort((a, b) => b.price - a.price)
-        case 'newest':
-          return products.sort((a, b) => parseTime(b.created_at) - parseTime(a.created_at))
-        default:
-          return products
-      }
+      
+      // 合并推广商品和排序后的普通商品
+      return [...promotedProducts, ...sortedNormalProducts];
     }
   },
   mounted() {
@@ -346,14 +381,73 @@ export default {
           limit: this.pagination.limit,
           order_by: this.getOrderByParam(),
           location: this.selectedLocation,
-          category: this.selectedCategory ? Number(this.selectedCategory) : undefined
+          category: this.selectedCategory ? Number(this.selectedCategory) : undefined,
+          status: 'online', // 只获取在售商品
+          sold: false // 只获取未售出商品
         };
+        
+        // 如果是第一页且没有搜索条件，优先获取推广商品（所有排序方式都适用）
+        if (this.pagination.page === 1 && !q && !this.selectedLocation && !this.selectedCategory) {
+          try {
+            const promotedResponse = await api.getPromotedItems();
+            if (promotedResponse.data && promotedResponse.data.length > 0) {
+              // 将推广商品放在前面
+              const promotedItems = promotedResponse.data.map(item => ({
+                ...item,
+                is_promoted: true
+              }));
+              const remainingLimit = this.pagination.limit - promotedItems.length;
+              
+              if (remainingLimit > 0) {
+                // 获取剩余的商品，使用当前排序方式
+                const remainingParams = {
+                  ...params,
+                  limit: remainingLimit,
+                  exclude_promoted: true // 排除已推广的商品
+                };
+                const remainingResponse = await api.getItems(remainingParams);
+                const remainingItems = remainingResponse.data.map(item => ({
+                  ...item,
+                  is_promoted: false
+                }));
+                
+                // 合并推广商品和普通商品
+                this.products = [...promotedItems, ...remainingItems];
+                this.hasMore = remainingItems.length === remainingLimit;
+                this.hasPromotedItems = true;
+                this.loading = false;
+                return;
+              } else {
+                // 如果推广商品已经填满了页面，直接使用推广商品
+                this.products = promotedItems;
+                this.hasMore = false;
+                this.hasPromotedItems = true;
+                this.loading = false;
+                return;
+              }
+            }
+          } catch (promotedError) {
+            console.warn('获取推广商品失败，使用默认商品:', promotedError);
+          }
+        }
+        
+        // 如果没有推广商品或获取失败，使用原来的逻辑
         if (q) {
           response = await api.searchItems(q, params);
         } else {
           response = await api.getItems(params);
         }
         let items = response.data;
+        
+        // 过滤掉已售出和下架的商品
+        items = items.filter(item => item.status === 'online' && !item.sold);
+        
+        // 为所有商品添加is_promoted标识
+        items = items.map(item => ({
+          ...item,
+          is_promoted: false
+        }));
+        
         // 地区模糊匹配（忽略大小写）
         if (this.selectedLocation) {
           const loc = this.selectedLocation.trim().toLowerCase();
@@ -369,6 +463,7 @@ export default {
           this.products = [...this.products, ...items];
         } else {
           this.products = items;
+          this.hasPromotedItems = false;
         }
         this.hasMore = items.length === this.pagination.limit;
       } catch (error) {
@@ -1151,5 +1246,47 @@ export default {
 }
 .carousel-dots .active {
   background: #409eff;
+}
+
+/* 推广商品标识样式 */
+.promotion-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  padding: 4px 8px;
+  background: linear-gradient(135deg, #ff6b6b, #ff8e53);
+  color: white;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  animation: pulse 2s infinite;
+}
+
+.promotion-badge i {
+  font-size: 0.7rem;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.promoted-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.normal-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
 }
 </style>

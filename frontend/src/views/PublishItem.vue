@@ -179,6 +179,7 @@ export default {
   data() {
     return {
       editing: false,
+      itemId: null,
       form: {
         title: '',
         description: '',
@@ -196,7 +197,19 @@ export default {
         { id: 5, name: '美妆护肤' },
         { id: 6, name: '图书文娱' },
         { id: 7, name: '运动户外' },
-        { id: 8, name: '家居家装' }
+        { id: 8, name: '家居家装' },
+        { id: 9, name: '食品饮料' },
+        { id: 10, name: '母婴用品' },
+        { id: 11, name: '汽车用品' },
+        { id: 12, name: '宠物用品' },
+        { id: 13, name: '乐器音响' },
+        { id: 14, name: '收藏品' },
+        { id: 15, name: '游戏动漫' },
+        { id: 16, name: '珠宝配饰' },
+        { id: 17, name: '箱包旅行' },
+        { id: 18, name: '园艺花卉' },
+        { id: 19, name: '手工DIY' },
+        { id: 20, name: '其他' }
       ],
       aiLoading: false,
       aiError: null,
@@ -209,6 +222,14 @@ export default {
     }
   },
   mounted() {
+    // 检查是否是编辑模式
+    const editId = this.$route.query.edit;
+    if (editId) {
+      this.editing = true;
+      this.itemId = editId;
+      this.fetchItemData();
+    }
+    
     // 页面加载时重置AI标识
     this.resetAiBadges();
   },
@@ -251,28 +272,35 @@ export default {
           }
         });
 
-        // 调用API创建商品
-        const response = await api.createItem(formData);
-        const newItem = response.data;
+        let response;
+        if (this.editing) {
+          // 编辑模式：更新商品
+          response = await api.updateItem(this.itemId, formData);
+          alert('更新成功！');
+        } else {
+          // 新建模式：创建商品
+          response = await api.createItem(formData);
+          const newItem = response.data;
+          
+          // 更新用户状态
+          const authStore = useAuthStore();
+          if (authStore.user) {
+            authStore.user.items_count += 1;
+          }
+          // 单独处理用户信息刷新，不影响主流程
+          try {
+            await authStore.fetchCurrentUser();
+          } catch (fetchError) {
+            console.error('刷新用户信息失败:', fetchError);
+          }
+          alert('发布成功！');
+        }
         
-        // 更新用户状态
-        const authStore = useAuthStore();
-        if (authStore.user) {
-          authStore.user.items_count += 1;
-        }
-        // 单独处理用户信息刷新，不影响主流程
-        try {
-          await authStore.fetchCurrentUser();
-        } catch (fetchError) {
-          console.error('刷新用户信息失败:', fetchError);
-        }
         // 无论用户信息刷新是否成功，都跳转到个人主页
         this.$router.push({ path: '/profile' });
-        // 显示成功提示
-        alert('发布成功！');
       } catch (error) {
-        console.error('发布失败:', error);
-        let errorMessage = '发布失败，请重试';
+        console.error(this.editing ? '更新失败:' : '发布失败:', error);
+        let errorMessage = this.editing ? '更新失败，请重试' : '发布失败，请重试';
         if (error.response?.data?.detail) {
           errorMessage = error.response.data.detail;
         }
@@ -420,7 +448,7 @@ export default {
           if (ai.category && ai.category !== '未知') {
             // 确保category是数字类型
             const categoryId = parseInt(ai.category);
-            if (!isNaN(categoryId) && categoryId >= 1 && categoryId <= 8) {
+            if (!isNaN(categoryId) && categoryId >= 1 && categoryId <= 20) {
               this.form.category = categoryId.toString();
               this.aiFilledFields.category = true;
             }

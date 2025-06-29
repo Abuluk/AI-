@@ -40,8 +40,8 @@
             <button 
               v-for="tab in tabs" 
               :key="tab.id"
-              :class="{ active: activeTab === tab.id }"
-              @click="activeTab = tab.id"
+              :class="{ active: conversationFilter === tab.id }"
+              @click="conversationFilter = tab.id"
             >
               {{ tab.label }}
             </button>
@@ -132,6 +132,7 @@ const selectedTarget = ref(null);
 const expandedComments = ref({});
 const loading = ref({ system: false, conversations: false, comment: false, like: false });
 const activeTab = ref('all');
+const conversationFilter = ref('all');
 const tabs = [
   { id: 'all', label: '全部' },
   { id: 'unread', label: '未读' },
@@ -142,7 +143,7 @@ const likeMessages = ref([]);
 
 // Computed
 const filteredConversations = computed(() => {
-  if (activeTab.value === 'unread') {
+  if (conversationFilter.value === 'unread') {
     return conversations.value.filter(c => c.unread_count > 0);
   }
   return conversations.value;
@@ -224,7 +225,7 @@ const getUserAvatar = (avatar) => {
   if (avatar.startsWith('http')) {
       return avatar;
   }
-  return `http://8.138.47.159:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`;
+  return `http://localhost:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`;
 };
 
 const selectConversation = (conv) => {
@@ -239,6 +240,10 @@ const selectConversation = (conv) => {
   } else {
     id = conv.item_id;
   }
+  
+  // 触发全局未读消息计数更新
+  window.dispatchEvent(new CustomEvent('updateUnreadCount'));
+  
   router.push({ 
     name: 'Chat', 
     params: { 
@@ -297,9 +302,19 @@ onMounted(() => {
   if (activeTab.value === 'like') fetchLikeMessages();
 });
 
-watch(activeTab, (tab) => {
-  if (tab === 'like') fetchLikeMessages();
-  else if (tab === 'comment') {
+watch(activeTab, async (tab) => {
+  if (tab === 'like') {
+    // 先标记所有点赞消息为已读
+    try {
+      await api.markLikeMessagesAsRead();
+      // 触发全局未读消息计数更新
+      window.dispatchEvent(new CustomEvent('updateUnreadCount'));
+    } catch (error) {
+      console.warn('标记点赞消息为已读失败:', error);
+    }
+    // 然后获取点赞消息列表
+    fetchLikeMessages();
+  } else if (tab === 'comment') {
     fetchMyRelatedComments();
   }
 });

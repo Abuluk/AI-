@@ -323,6 +323,242 @@
       </div>
     </div>
 
+    <!-- 推广位管理 -->
+    <div v-if="activeTab === 'promotions'" class="tab-content">
+      <div class="section-header">
+        <h2>推广位管理</h2>
+        <div class="promotion-controls">
+          <button @click="showPromotionModal = true" class="btn btn-primary">
+            <i class="fas fa-plus"></i> 设置推广商品
+          </button>
+          <button @click="clearPromotions" class="btn btn-outline">
+            <i class="fas fa-trash"></i> 清空推广位
+          </button>
+        </div>
+      </div>
+
+      <!-- 推广商品设置模态框 -->
+      <div v-if="showPromotionModal" class="modal-overlay" @click="showPromotionModal = false">
+        <div class="modal-content promotion-modal" @click.stop>
+          <div class="modal-header">
+            <h3>设置推广商品</h3>
+            <button @click="showPromotionModal = false" class="close-btn">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="promotion-info">
+              <p>推广商品将显示在首页第一排，最多可设置6个商品</p>
+            </div>
+            <div class="form-group">
+              <label>搜索商品</label>
+              <input 
+                v-model="promotionSearch" 
+                @input="searchItemsForPromotion"
+                placeholder="输入商品标题搜索"
+                class="form-input"
+              >
+            </div>
+            <div v-if="promotionSearchResults.length > 0" class="search-results">
+              <h4>搜索结果</h4>
+              <div class="item-grid">
+                <div 
+                  v-for="item in promotionSearchResults" 
+                  :key="item.id"
+                  class="item-card"
+                  :class="{ selected: selectedPromotionItems.includes(item.id) }"
+                  @click="togglePromotionItem(item.id)"
+                >
+                  <img :src="getFirstImage(item)" :alt="item.title" class="item-thumb">
+                  <div class="item-info">
+                    <h5>{{ item.title }}</h5>
+                    <p class="price">¥{{ item.price }}</p>
+                    <p class="status">{{ getItemDisplayStatus(item).text }}</p>
+                  </div>
+                  <div class="select-indicator">
+                    <i class="fas fa-check"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-if="selectedPromotionItems.length > 0" class="selected-items">
+              <h4>已选择的推广商品 ({{ selectedPromotionItems.length }}/6)</h4>
+              <div class="selected-grid">
+                <div 
+                  v-for="itemId in selectedPromotionItems" 
+                  :key="itemId"
+                  class="selected-item"
+                >
+                  <img :src="getFirstImage(getItemById(itemId))" :alt="getItemById(itemId)?.title" class="item-thumb">
+                  <div class="item-info">
+                    <h6>{{ getItemById(itemId)?.title }}</h6>
+                    <p class="price">¥{{ getItemById(itemId)?.price }}</p>
+                  </div>
+                  <button @click="removePromotionItem(itemId)" class="remove-btn">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button @click="showPromotionModal = false" class="btn btn-outline">取消</button>
+            <button @click="savePromotions" class="btn btn-primary" :disabled="savingPromotions">
+              {{ savingPromotions ? '保存中...' : '保存推广位' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 当前推广商品展示 -->
+      <div class="promotion-section">
+        <h3>当前推广商品</h3>
+        <div v-if="loading.promotions" class="loading-state">
+          <div class="skeleton-row" v-for="n in 3" :key="n"></div>
+        </div>
+        <div v-else-if="promotedItems.length === 0" class="empty-state">
+          <i class="fas fa-star"></i>
+          <p>暂无推广商品</p>
+          <p class="hint">系统将使用默认商品排序</p>
+        </div>
+        <div v-else class="promoted-items-grid">
+          <div 
+            v-for="(item, index) in promotedItems" 
+            :key="item.id"
+            class="promoted-item"
+          >
+            <div class="item-rank">{{ index + 1 }}</div>
+            <img :src="getFirstImage(item)" :alt="item.title" class="item-image">
+            <div class="item-details">
+              <h4>{{ item.title }}</h4>
+              <p class="price">¥{{ item.price }}</p>
+              <p class="status">{{ getItemDisplayStatus(item).text }}</p>
+              <p class="owner">发布者: {{ item.owner?.username || '未知' }}</p>
+            </div>
+            <div class="item-actions">
+              <button @click="removePromotedItem(item.id)" class="btn btn-sm btn-danger">
+                <i class="fas fa-times"></i> 移除
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 商品推荐设置 -->
+      <div class="recommendation-section">
+        <h3>商品推荐设置</h3>
+        <div class="recommendation-controls">
+          <button @click="showRecommendationModal = true" class="btn btn-primary">
+            <i class="fas fa-link"></i> 设置商品推荐
+          </button>
+        </div>
+
+        <!-- 商品推荐设置模态框 -->
+        <div v-if="showRecommendationModal" class="modal-overlay" @click="showRecommendationModal = false">
+          <div class="modal-content recommendation-modal" @click.stop>
+            <div class="modal-header">
+              <h3>设置商品推荐</h3>
+              <button @click="showRecommendationModal = false" class="close-btn">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label>选择要设置推荐的商品</label>
+                <input 
+                  v-model="recommendationSearch" 
+                  @input="searchItemsForRecommendation"
+                  placeholder="输入商品标题搜索"
+                  class="form-input"
+                >
+              </div>
+              <div v-if="recommendationSearchResults.length > 0" class="search-results">
+                <h4>搜索结果</h4>
+                <div class="item-grid">
+                  <div 
+                    v-for="item in recommendationSearchResults" 
+                    :key="item.id"
+                    class="item-card"
+                    @click="selectItemForRecommendation(item)"
+                  >
+                    <img :src="getFirstImage(item)" :alt="item.title" class="item-thumb">
+                    <div class="item-info">
+                      <h5>{{ item.title }}</h5>
+                      <p class="price">¥{{ item.price }}</p>
+                      <p class="status">{{ getItemDisplayStatus(item).text }}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-if="selectedItemForRecommendation" class="selected-item-section">
+                <h4>为商品 "{{ selectedItemForRecommendation.title }}" 设置推荐</h4>
+                <div class="form-group">
+                  <label>搜索推荐商品</label>
+                  <input 
+                    v-model="recommendedItemSearch" 
+                    @input="searchRecommendedItems"
+                    placeholder="输入推荐商品标题搜索"
+                    class="form-input"
+                  >
+                </div>
+                <div v-if="recommendedItemSearchResults.length > 0" class="search-results">
+                  <h4>推荐商品搜索结果</h4>
+                  <div class="item-grid">
+                    <div 
+                      v-for="item in recommendedItemSearchResults" 
+                      :key="item.id"
+                      class="item-card"
+                      :class="{ selected: selectedRecommendedItems.includes(item.id) }"
+                      @click="toggleRecommendedItem(item.id)"
+                    >
+                      <img :src="getFirstImage(item)" :alt="item.title" class="item-thumb">
+                      <div class="item-info">
+                        <h5>{{ item.title }}</h5>
+                        <p class="price">¥{{ item.price }}</p>
+                        <p class="status">{{ getItemDisplayStatus(item).text }}</p>
+                      </div>
+                      <div class="select-indicator">
+                        <i class="fas fa-check"></i>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="selectedRecommendedItems.length > 0" class="selected-items">
+                  <h4>已选择的推荐商品 ({{ selectedRecommendedItems.length }}/4)</h4>
+                  <div class="selected-grid">
+                    <div 
+                      v-for="itemId in selectedRecommendedItems" 
+                      :key="itemId"
+                      class="selected-item"
+                    >
+                      <img :src="getFirstImage(getItemById(itemId))" :alt="getItemById(itemId)?.title" class="item-thumb">
+                      <div class="item-info">
+                        <h6>{{ getItemById(itemId)?.title }}</h6>
+                        <p class="price">¥{{ getItemById(itemId)?.price }}</p>
+                      </div>
+                      <button @click="removeRecommendedItem(itemId)" class="remove-btn">
+                        <i class="fas fa-times"></i>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button @click="showRecommendationModal = false" class="btn btn-outline">取消</button>
+              <button 
+                @click="saveRecommendations" 
+                class="btn btn-primary" 
+                :disabled="savingRecommendations || !selectedItemForRecommendation"
+              >
+                {{ savingRecommendations ? '保存中...' : '保存推荐' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 消息管理 -->
     <div v-if="activeTab === 'messages'" class="tab-content">
       <div class="section-header">
@@ -474,7 +710,8 @@ const loading = reactive({
   users: false,
   items: false,
   messages: false,
-  buy_requests: false
+  buy_requests: false,
+  promotions: false
 })
 
 const stats = ref({})
@@ -482,6 +719,7 @@ const users = ref([])
 const items = ref([])
 const systemMessages = ref([])
 const buyRequests = ref([])
+const promotedItems = ref([])
 
 // 添加缺失的分页变量
 const systemMessagesPage = ref(1)
@@ -525,6 +763,7 @@ const tabs = [
   { id: 'users', label: '用户管理', icon: 'fas fa-users' },
   { id: 'items', label: '商品管理', icon: 'fas fa-box' },
   { id: 'buy_requests', label: '求购管理', icon: 'fas fa-shopping-cart' },
+  { id: 'promotions', label: '推广位管理', icon: 'fas fa-star' },
   { id: 'messages', label: '消息管理', icon: 'fas fa-bullhorn' },
   { id: 'activity', label: '活动页管理', icon: 'fas fa-bullhorn' },
 ]
@@ -683,6 +922,8 @@ const changeTab = (tabId) => {
     loadSystemMessages()
   } else if (tabId === 'buy_requests') {
     loadBuyRequests()
+  } else if (tabId === 'promotions') {
+    loadPromotedItems()
   } else if (tabId === 'activity') {
     loadActivityBanners()
   }
@@ -701,7 +942,8 @@ const getFirstImage = (item) => {
   if (!img) return '/static/images/default_product.png'
   if (img.startsWith('http')) return img
   if (img.startsWith('/static/images/')) return img
-  return `/static/images/${img.replace(/^static[\\\/]images[\\\/]/, '')}`
+  if (img.startsWith('static/images/')) return `/${img}`
+  return `/static/images/${img}`
 }
 
 const logout = () => {
@@ -878,7 +1120,10 @@ const getUserAvatar = (user) => {
   if (user.avatar.startsWith('/static/images/')) {
     return user.avatar
   }
-  return `/static/images/${user.avatar.replace(/^static[\\\/]images[\\\/]/, '')}`
+  if (user.avatar.startsWith('static/images/')) {
+    return `/${user.avatar}`
+  }
+  return `/static/images/${user.avatar}`
 }
 
 const loadBuyRequests = async () => {
@@ -919,6 +1164,208 @@ watch(buyRequestFilters, () => {
     loadBuyRequests();
   }
 }, { deep: true });
+
+// 推广位管理相关
+const showPromotionModal = ref(false)
+const promotionSearch = ref('')
+const promotionSearchResults = ref([])
+const selectedPromotionItems = ref([])
+const savingPromotions = ref(false)
+
+const searchItemsForPromotion = async () => {
+  if (!promotionSearch.value.trim()) {
+    promotionSearchResults.value = []
+    return
+  }
+  
+  try {
+    const response = await api.searchItems(promotionSearch.value, { 
+      limit: 20
+    })
+    promotionSearchResults.value = response.data.filter(item => 
+      !promotedItems.value.some(promoted => promoted.id === item.id)
+    )
+  } catch (error) {
+    console.error('搜索商品失败:', error)
+    alert('搜索商品失败')
+  }
+}
+
+const togglePromotionItem = (itemId) => {
+  const index = selectedPromotionItems.value.indexOf(itemId)
+  if (index > -1) {
+    selectedPromotionItems.value.splice(index, 1)
+  } else if (selectedPromotionItems.value.length < 6) {
+    selectedPromotionItems.value.push(itemId)
+  } else {
+    alert('最多只能选择6个推广商品')
+  }
+}
+
+const removePromotionItem = (itemId) => {
+  const index = selectedPromotionItems.value.indexOf(itemId)
+  if (index > -1) {
+    selectedPromotionItems.value.splice(index, 1)
+  }
+}
+
+const savePromotions = async () => {
+  if (selectedPromotionItems.value.length === 0) {
+    alert('请至少选择一个推广商品')
+    return
+  }
+  
+  savingPromotions.value = true
+  try {
+    await api.updatePromotedItems(selectedPromotionItems.value)
+    alert('推广位设置成功')
+    showPromotionModal.value = false
+    
+    // 重置表单
+    promotionSearch.value = ''
+    promotionSearchResults.value = []
+    selectedPromotionItems.value = []
+    
+    // 重新加载推广商品列表
+    await loadPromotedItems()
+  } catch (error) {
+    console.error('保存推广位失败:', error)
+    alert('保存失败')
+  } finally {
+    savingPromotions.value = false
+  }
+}
+
+const clearPromotions = async () => {
+  if (!confirm('确定要清空所有推广商品吗？此操作不可恢复！')) {
+    return
+  }
+  
+  try {
+    await api.updatePromotedItems([])
+    promotedItems.value = []
+    alert('推广位已清空')
+  } catch (error) {
+    console.error('清空推广位失败:', error)
+    alert('清空失败')
+  }
+}
+
+const removePromotedItem = async (itemId) => {
+  if (!confirm('确定要移除这个推广商品吗？')) {
+    return
+  }
+  
+  try {
+    const newPromotedItems = promotedItems.value
+      .filter(item => item.id !== itemId)
+      .map(item => item.id)
+    
+    await api.updatePromotedItems(newPromotedItems)
+    promotedItems.value = promotedItems.value.filter(item => item.id !== itemId)
+    alert('推广商品已移除')
+  } catch (error) {
+    console.error('移除推广商品失败:', error)
+    alert('移除失败')
+  }
+}
+
+const getItemById = (itemId) => {
+  return promotionSearchResults.value.find(item => item.id === itemId) || 
+         promotedItems.value.find(item => item.id === itemId) || 
+         items.value.find(item => item.id === itemId) || {}
+}
+
+const loadPromotedItems = async () => {
+  loading.promotions = true
+  try {
+    const response = await api.getPromotedItems()
+    promotedItems.value = response.data
+  } catch (error) {
+    console.error('获取推广商品失败:', error)
+    alert('获取推广商品失败')
+  } finally {
+    loading.promotions = false
+  }
+}
+
+// 商品推荐设置相关
+const showRecommendationModal = ref(false)
+const recommendationSearch = ref('')
+const recommendationSearchResults = ref([])
+const selectedItemForRecommendation = ref(null)
+const recommendedItemSearch = ref('')
+const recommendedItemSearchResults = ref([])
+const selectedRecommendedItems = ref([])
+const savingRecommendations = ref(false)
+
+const searchItemsForRecommendation = async () => {
+  if (!recommendationSearch.value.trim()) {
+    recommendationSearchResults.value = []
+    return
+  }
+  
+  try {
+    const response = await api.searchItems(recommendedItemSearch.value, { 
+      limit: 20
+    })
+    recommendedItemSearchResults.value = response.data.filter(item => 
+      !selectedRecommendedItems.value.includes(item.id)
+    )
+  } catch (error) {
+    console.error('搜索推荐商品失败:', error)
+    alert('搜索推荐商品失败')
+  }
+}
+
+const selectItemForRecommendation = (item) => {
+  selectedItemForRecommendation.value = item
+}
+
+const toggleRecommendedItem = (itemId) => {
+  const index = selectedRecommendedItems.value.indexOf(itemId)
+  if (index > -1) {
+    selectedRecommendedItems.value.splice(index, 1)
+  } else if (selectedRecommendedItems.value.length < 4) {
+    selectedRecommendedItems.value.push(itemId)
+  } else {
+    alert('最多只能选择4个推荐商品')
+  }
+}
+
+const removeRecommendedItem = (itemId) => {
+  const index = selectedRecommendedItems.value.indexOf(itemId)
+  if (index > -1) {
+    selectedRecommendedItems.value.splice(index, 1)
+  }
+}
+
+const saveRecommendations = async () => {
+  if (!selectedItemForRecommendation.value) {
+    alert('请选择要设置推荐的商品')
+    return
+  }
+  
+  savingRecommendations.value = true
+  try {
+    await api.updateRecommendedItems(selectedItemForRecommendation.value.id, selectedRecommendedItems.value)
+    alert('商品推荐设置成功')
+    showRecommendationModal.value = false
+    
+    // 重置表单
+    recommendationSearch.value = ''
+    recommendationSearchResults.value = []
+    selectedItemForRecommendation.value = null
+    recommendedItemSearch.value = ''
+    recommendedItemSearchResults.value = []
+    selectedRecommendedItems.value = []
+  } catch (error) {
+    console.error('保存商品推荐失败:', error)
+    alert('保存失败')
+  } finally {
+    savingRecommendations.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -1451,5 +1898,285 @@ th {
   flex-direction: column;
   justify-content: stretch;
   margin-top: 0;
+}
+
+/* 推广位管理样式 */
+.promotion-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.promotion-modal {
+  max-width: 800px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.promotion-info {
+  margin-bottom: 20px;
+}
+
+.search-results {
+  margin-bottom: 20px;
+}
+
+.item-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.item-card {
+  width: calc(33.33% - 10px);
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  position: relative;
+}
+
+.item-card:hover {
+  background-color: #f5f5f5;
+}
+
+.item-card.selected {
+  border-color: #3498db;
+  background-color: #e3f2fd;
+}
+
+.item-thumb {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.item-info {
+  text-align: center;
+}
+
+.item-info h5 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.item-info p {
+  margin: 5px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.select-indicator {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #3498db;
+  color: white;
+  position: absolute;
+  top: 5px;
+  right: 5px;
+}
+
+.item-card.selected .select-indicator {
+  display: flex;
+}
+
+.selected-items {
+  margin-top: 20px;
+}
+
+.selected-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.selected-item {
+  width: calc(33.33% - 10px);
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  position: relative;
+}
+
+.selected-item img {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.selected-item .item-info {
+  text-align: center;
+}
+
+.selected-item .item-info h6 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.selected-item .item-info p {
+  margin: 5px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.selected-item .remove-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: #999;
+}
+
+.selected-item .remove-btn:hover {
+  color: #333;
+}
+
+.promotion-section {
+  margin-top: 30px;
+}
+
+.promotion-section h3 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.empty-state i {
+  font-size: 24px;
+  color: #999;
+  margin-bottom: 10px;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 16px;
+  color: #666;
+}
+
+.hint {
+  font-size: 14px;
+  color: #999;
+}
+
+.promoted-items-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.promoted-item {
+  width: calc(33.33% - 10px);
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  position: relative;
+}
+
+.promoted-item .item-rank {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  background: #3498db;
+  color: white;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.promoted-item .item-image {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.promoted-item .item-details {
+  text-align: center;
+}
+
+.promoted-item .item-details h4 {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.promoted-item .item-details p {
+  margin: 5px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.promoted-item .item-details .price {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.promoted-item .item-details .status {
+  font-size: 12px;
+  color: #999;
+}
+
+.promoted-item .item-details .owner {
+  font-size: 12px;
+  color: #999;
+}
+
+.promoted-item .item-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: center;
+}
+
+.promoted-item .item-actions button {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  color: #999;
+}
+
+.promoted-item .item-actions button:hover {
+  color: #333;
+}
+
+/* 商品推荐设置样式 */
+.recommendation-section {
+  margin-top: 30px;
+}
+
+.recommendation-controls {
+  margin-bottom: 20px;
+}
+
+.recommendation-modal {
+  max-width: 800px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.selected-item-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
 }
 </style> 

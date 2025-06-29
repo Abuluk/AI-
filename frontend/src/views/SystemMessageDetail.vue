@@ -39,6 +39,15 @@ const fetchMessage = async () => {
   try {
     const response = await api.getSystemMessage(messageId);
     message.value = response.data;
+    
+    // 自动标记系统消息为已读
+    try {
+      await api.markSystemMessageAsRead(messageId);
+      // 触发全局未读消息计数更新
+      window.dispatchEvent(new CustomEvent('updateUnreadCount'));
+    } catch (markError) {
+      console.warn('标记系统消息为已读失败:', markError);
+    }
   } catch (err) {
     error.value = err.response?.data?.detail || '无法连接到服务器';
     console.error('获取系统消息失败:', err);

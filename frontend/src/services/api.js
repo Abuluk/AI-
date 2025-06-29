@@ -3,7 +3,7 @@ import { ref } from 'vue'
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: 'http://8.138.47.159:8000/api/v1',
+  baseURL: 'http://localhost:8000/api/v1',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
@@ -218,6 +218,16 @@ const apiService = {
     return api.get('/messages/unread-count')
   },
 
+  // 标记系统消息为已读
+  async markSystemMessageAsRead(messageId) {
+    return api.patch(`/messages/system/${messageId}/read`)
+  },
+
+  // 批量标记点赞消息为已读
+  async markLikeMessagesAsRead() {
+    return api.patch('/messages/batch/like-messages/read')
+  },
+
   /**
    * 获取对话消息（支持商品和求购）
    * @param {Object} params { type: 'item'|'buy_request', id, other_user_id }
@@ -404,12 +414,17 @@ const apiService = {
     return api.delete(`/buy_requests/${id}`);
   },
 
+  // 新增：更新求购信息
+  async updateBuyRequest(id, data) {
+    return api.put(`/buy_requests/${id}`, data);
+  },
+
   // AI自动补全商品信息（图片识别，支持多图片）
   async aiAutoCompleteItemByImage(files) {
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
     // 直接用axios.post，确保可用
-    return axios.post('http://8.138.47.159:8000/api/v1/items/ai-auto-complete', formData, {
+    return axios.post('http://localhost:8000/api/v1/items/ai-auto-complete', formData, {
       headers: {
         Authorization: localStorage.getItem('access_token') ? `Bearer ${localStorage.getItem('access_token')}` : undefined
       }
@@ -526,6 +541,25 @@ const apiService = {
 
   async getBlacklist() {
     return api.get('/blacklist/list')
+  },
+
+  // 商品推广位管理
+  async getPromotedItems() {
+    return api.get('/items/promoted')
+  },
+
+  async updatePromotedItems(itemIds) {
+    return api.put('/admin/promoted_items', itemIds)
+  },
+
+  async getRecommendedItems(itemId, limit = 4) {
+    return api.get(`/items/${itemId}/recommendations`, { params: { limit } })
+  },
+
+  async updateRecommendedItems(itemId, recommendedItemIds) {
+    return api.put(`/admin/items/${itemId}/recommendations`, { 
+      recommended_item_ids: recommendedItemIds 
+    })
   }
 }
 

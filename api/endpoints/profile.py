@@ -59,7 +59,7 @@ async def update_avatar(
     
     # 确保URL以http开头
     if not avatar_url.startswith("http"):
-        avatar_url = f"http://8.138.47.159:8000{avatar_url}"
+        avatar_url = f"http://localhost:8000{avatar_url}"
     
     user_update = UserUpdate(avatar=avatar_url)
     return update_user(db, user_id=current_user.id, user_update=user_update)

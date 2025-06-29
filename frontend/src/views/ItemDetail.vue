@@ -41,9 +41,9 @@
             <h3>卖家信息</h3>
             <div class="seller-card">
               <div class="seller-header">
-                <img :src="seller.avatar" class="seller-avatar" @error="handleAvatarError">
+                <img :src="seller.avatar" class="seller-avatar" @error="handleAvatarError" @click="goToUserProfile(seller.id)" style="cursor: pointer;">
                 <div class="seller-basic-info">
-                  <div class="seller-name">{{ seller.username }}</div>
+                  <div class="seller-name" @click="goToUserProfile(seller.id)" style="cursor: pointer;">{{ seller.username }}</div>
                   <div class="seller-stats">
                     <span class="stat-item">
                       <i class="fas fa-box"></i>
@@ -232,7 +232,7 @@ export default {
         if (this.product.images) {
           const images = this.product.images.split(',')
           this.product.images = images.map(img => {
-            if (!img) return '/default_product.png'
+            if (!img) return '/static/images/default_product.png'
             let path = img.trim().replace(/\\/g, '/')
             if (!path.startsWith('/')) {
               path = '/' + path
@@ -240,7 +240,7 @@ export default {
             return path
           })
         } else {
-          this.product.images = ['/default_product.png']
+          this.product.images = ['/static/images/default_product.png']
         }
 
         this.mainImage = this.product.images[0]
@@ -355,10 +355,24 @@ export default {
     },
     async fetchRelatedProducts() {
       try {
-        const response = await api.getItems({ limit: 5, order_by: 'created_at_desc' });
-        this.relatedProducts = response.data.filter(p => p.id !== this.product.id).slice(0, 4);
+        // 优先获取管理员设置的推荐商品
+        const recommendedResponse = await api.getRecommendedItems(this.id, 4)
+        if (recommendedResponse.data && recommendedResponse.data.length > 0) {
+          this.relatedProducts = recommendedResponse.data
+        } else {
+          // 如果没有设置推荐商品，使用默认的推荐逻辑
+          const response = await api.getItems({ limit: 5, order_by: 'created_at_desc' });
+          this.relatedProducts = response.data.filter(p => p.id !== this.product.id).slice(0, 4);
+        }
       } catch (error) {
         console.error('获取推荐商品失败:', error);
+        // 如果获取推荐商品失败，使用默认逻辑
+        try {
+          const response = await api.getItems({ limit: 5, order_by: 'created_at_desc' });
+          this.relatedProducts = response.data.filter(p => p.id !== this.product.id).slice(0, 4);
+        } catch (fallbackError) {
+          console.error('获取默认推荐商品也失败:', fallbackError);
+        }
       }
     },
     formatDateTime(datetime) {
@@ -409,6 +423,9 @@ export default {
       } finally {
         this.likeLoading = false;
       }
+    },
+    goToUserProfile(userId) {
+      this.$router.push(`/user/${userId}`);
     },
   }
 }

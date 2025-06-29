@@ -302,10 +302,14 @@ def get_all_items(
     items = query.offset(skip).limit(limit).all()
     for item in items:
         if item.images:
-            item.images = ','.join([
-                img.replace('/static/images/', '').replace('static/images/', '') if not img.startswith('http') else img
-                for img in item.images.split(',')
-            ])
+            images = item.images.split(',')
+            processed_images = []
+            for img in images:
+                if img.strip():
+                    if not img.startswith('/'):
+                        img = '/' + img
+                    processed_images.append(img)
+            item.images = ','.join(processed_images)
     return items
 
 @router.get("/items/{item_id}", response_model=ItemInDB)
@@ -463,35 +467,154 @@ def delete_buy_request(
     current_admin: User = Depends(get_current_admin)
 ):
     """删除求购信息"""
-    # 先获取求购信息，以便发送系统消息
     buy_request = db.query(BuyRequest).filter(BuyRequest.id == buy_request_id).first()
     if not buy_request:
         raise HTTPException(status_code=404, detail="求购信息不存在")
     
-    # 发送系统消息给求购信息发布者
-    system_message = schemas.message.SystemMessageCreate(
-        title="求购信息删除通知",
-        content=f"您的求购信息《{buy_request.title}》因不合规内容已被管理员删除。如有疑问，请联系客服。",
-        target_users=str(buy_request.user_id),  # 发送给求购信息发布者
-        buy_request_id=buy_request_id  # 关联到具体求购信息
-    )
-    
-    # 发送系统消息
-    try:
-        crud_message.create_system_message(db=db, message_in=system_message, admin_id=current_admin.id)
-    except Exception as e:
-        # 记录错误但不影响求购信息删除
-        print(f"发送系统消息失败: {e}")
-    
-    # 删除与该求购信息相关的普通消息（非系统消息）
-    db.query(Message).filter(
-        Message.buy_request_id == buy_request_id,
-        Message.is_system == False
-    ).delete()
-    
     # 删除求购信息
-    success = crud_buy_request.delete_buy_request_admin(db, buy_request_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="求购信息不存在")
+    db.delete(buy_request)
+    db.commit()
     
-    return {"message": "求购信息已删除"} 
+    # 发送系统消息通知发布者
+    try:
+        message_content = f"您的求购信息「{buy_request.title}」因不合规内容已被管理员删除。如有疑问，请联系客服。"
+        system_message = Message(
+            title="求购信息被删除通知",
+            content=message_content,
+            target_users=f"{buy_request.user_id}",
+            created_at=datetime.utcnow()
+        )
+        db.add(system_message)
+        db.commit()
+    except Exception as e:
+        print(f"发送删除通知失败: {e}")
+    
+    return {"message": "求购信息已删除"}
+
+# 推广位管理接口
+@router.get("/promoted_items")
+def get_promoted_items(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """获取推广商品列表"""
+    # 从SiteConfig中获取推广商品ID列表
+    config = db.query(SiteConfig).filter(SiteConfig.key == "promoted_items").first()
+    if not config or not config.value:
+        return []
+    
+    try:
+        promoted_ids = json.loads(config.value)
+        if not promoted_ids:
+            return []
+        
+        # 获取推广商品详情
+        promoted_items = db.query(Item).filter(Item.id.in_(promoted_ids)).all()
+        
+        # 按配置的顺序返回
+        result = []
+        for item_id in promoted_ids:
+            item = next((item for item in promoted_items if item.id == item_id), None)
+            if item:
+                # 处理图片路径
+                processed_images = item.images
+                if item.images:
+                    images = item.images.split(',')
+                    processed_images_list = []
+                    for img in images:
+                        if img.strip():
+                            if not img.startswith('/'):
+                                img = '/' + img
+                            processed_images_list.append(img)
+                    processed_images = ','.join(processed_images_list)
+                
+                # 获取商品所有者信息
+                owner = db.query(User).filter(User.id == item.owner_id).first()
+                owner_info = {
+                    "id": owner.id,
+                    "username": owner.username,
+                    "avatar": owner.avatar
+                } if owner else None
+                
+                result.append({
+                    "id": item.id,
+                    "title": item.title,
+                    "price": item.price,
+                    "description": item.description,
+                    "images": processed_images,
+                    "status": item.status,
+                    "sold": item.sold,
+                    "category": item.category,
+                    "location": item.location,
+                    "views": item.views,
+                    "favorited_count": item.favorited_count,
+                    "created_at": item.created_at,
+                    "updated_at": item.updated_at,
+                    "owner": owner_info
+                })
+        
+        return result
+    except Exception as e:
+        print(f"获取推广商品失败: {e}")
+        return []
+
+@router.put("/promoted_items")
+def update_promoted_items(
+    item_ids: List[int] = Body(...),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """更新推广商品设置"""
+    # 验证商品是否存在
+    if item_ids:
+        existing_items = db.query(Item).filter(Item.id.in_(item_ids)).all()
+        if len(existing_items) != len(item_ids):
+            raise HTTPException(status_code=400, detail="部分商品不存在")
+    
+    # 保存到SiteConfig
+    config = db.query(SiteConfig).filter(SiteConfig.key == "promoted_items").first()
+    if config:
+        config.value = json.dumps(item_ids)
+    else:
+        config = SiteConfig(
+            key="promoted_items",
+            value=json.dumps(item_ids)
+        )
+        db.add(config)
+    
+    db.commit()
+    return {"message": "推广商品设置已更新", "item_ids": item_ids}
+
+@router.put("/items/{item_id}/recommendations")
+def update_item_recommendations(
+    item_id: int,
+    recommended_item_ids: List[int],
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """为特定商品设置推荐商品"""
+    # 验证主商品是否存在
+    main_item = db.query(Item).filter(Item.id == item_id).first()
+    if not main_item:
+        raise HTTPException(status_code=404, detail="商品不存在")
+    
+    # 验证推荐商品是否存在
+    if recommended_item_ids:
+        existing_items = db.query(Item).filter(Item.id.in_(recommended_item_ids)).all()
+        if len(existing_items) != len(recommended_item_ids):
+            raise HTTPException(status_code=400, detail="部分推荐商品不存在")
+    
+    # 保存到SiteConfig
+    config_key = f"item_recommendations_{item_id}"
+    config = db.query(SiteConfig).filter(SiteConfig.key == config_key).first()
+    if config:
+        config.value = json.dumps(recommended_item_ids)
+    else:
+        config = SiteConfig(
+            key=config_key,
+            value=json.dumps(recommended_item_ids)
+        )
+        db.add(config)
+    
+    db.commit()
+    return {"message": "商品推荐设置已更新", "item_id": item_id, "recommended_item_ids": recommended_item_ids} 

@@ -87,7 +87,7 @@
       <!-- 在售商品标签页 -->
         <div v-if="activeTab === 'selling'">
           <div class="section-header">
-           <h3>在售商品</h3>
+           <h3>在售商品 ({{ sellingItems.length }})</h3>
             <div class="sort-controls">
               <!-- 修复排序功能：移除@change事件，改为使用计算属性 -->
               <select v-model="sorting.selling">
@@ -114,6 +114,7 @@
                 @online="handleOnlineItem"
                 @sold="handleSoldItem"
                 @delete="handleDeleteItem"
+                @edit="handleEditItem"
               >
                 <span>发布时间：{{ formatDateTime(item.created_at) }}</span>
               </ProductCard>
@@ -133,7 +134,7 @@
         <!-- 已售商品 -->
         <div v-if="activeTab === 'sold'">
           <div class="section-header">
-            <h3>已售商品</h3>
+            <h3>已售商品 ({{ soldItems.length }})</h3>
             <div class="sort-controls">
                 <select v-model="sorting.sold" @change="fetchSoldItems(true)">
                 <option value="newest">最新售出</option>
@@ -155,6 +156,7 @@
                 :sold="true"
                 :showActions="true"
                 @delete="handleDeleteItem"
+                @edit="handleEditItem"
               >
                 <span>售出时间：{{ formatDateTime(item.soldAt) }}</span>
               </ProductCard>
@@ -171,7 +173,7 @@
         <!-- 收藏商品 -->
         <div v-if="activeTab === 'favorites'">
           <div class="section-header">
-            <h3>收藏的商品</h3>
+            <h3>收藏的商品 ({{ favoriteItems.length }})</h3>
           </div>
           
           <div v-if="loading.favorites" class="loading-state">
@@ -187,6 +189,7 @@
                 :showActions="true"
                 :isFavorite="true"
                 @unfavorite="handleUnfavoriteItem"
+                @edit="handleEditItem"
               >
                 <span>收藏时间：{{ formatDateTime(item.favoritedAt) }}</span>
               </ProductCard>
@@ -228,7 +231,10 @@
                     <span class="likes">👍 {{ buyRequest.like_count || 0 }}</span>
                   </div>
                 </div>
-                <button class="btn btn-outline btn-sm" @click="handleDeleteBuyRequest(buyRequest.id)">删除</button>
+                <div class="buy-request-actions">
+                  <button class="btn btn-primary btn-sm" @click="handleEditBuyRequest(buyRequest.id)">编辑</button>
+                  <button class="btn btn-outline btn-sm" @click="handleDeleteBuyRequest(buyRequest.id)">删除</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1047,9 +1053,9 @@ const handleOfflineItem = async (itemId) => {
 
 // 获取商品第一张图片
 const getFirstImage = (item) => {
-  if (!item.images) return 'default_product.png'
+  if (!item.images) return '/static/images/default_product.png'
   const images = item.images.split(',')
-  return images[0] || 'default_product.png'
+  return images[0] || '/static/images/default_product.png'
 }
 
 // 处理商品已售出
@@ -1076,29 +1082,35 @@ const handleSoldItem = async (itemId) => {
 
 // 处理商品删除
 const handleDeleteItem = async (itemId) => {
-  if (confirm('确定要删除该商品吗？删除后将无法恢复。')) {
-    try {
-      await api.deleteItem(itemId)
-      
-      // 从在售商品列表中移除
-      sellingItems.value = sellingItems.value.filter(item => item.id !== itemId)
-      
-      // 从已售商品列表中移除
-      soldItems.value = soldItems.value.filter(item => item.id !== itemId)
-      
-      // 从已下架商品列表中移除（如果存在）
-      offlineItems.value = offlineItems.value.filter(item => item.id !== itemId)
-      
-      // 更新统计数据
-      tabs.value[0].count = sellingItems.value.length
-      tabs.value[1].count = soldItems.value.length
-      
-      alert('商品已删除')
-    } catch (error) {
-      console.error('删除商品失败:', error)
-      alert('删除失败，请重试')
-    }
+  if (!confirm('确定要删除该商品吗？删除后将无法恢复。')) {
+    return;
   }
+  try {
+    await api.deleteItem(itemId);
+    
+    // 从在售商品列表中移除
+    sellingItems.value = sellingItems.value.filter(item => item.id !== itemId);
+    
+    // 从已售商品列表中移除
+    soldItems.value = soldItems.value.filter(item => item.id !== itemId);
+    
+    // 从已下架商品列表中移除（如果存在）
+    offlineItems.value = offlineItems.value.filter(item => item.id !== itemId);
+    
+    // 更新统计数据
+    tabs.value[0].count = sellingItems.value.length;
+    tabs.value[1].count = soldItems.value.length;
+    
+    alert('商品已删除');
+  } catch (error) {
+    console.error('删除商品失败:', error);
+    alert('删除失败，请重试');
+  }
+}
+
+// 处理商品编辑
+const handleEditItem = (itemId) => {
+  router.push(`/publish?edit=${itemId}`);
 }
 
 // 取消收藏商品
@@ -1266,8 +1278,8 @@ const handleDeleteBuyRequest = async (id) => {
   fetchMyBuyRequests();
 }
 
-const goToPublishBuyRequest = () => {
-  router.push('/publish-buy-request');
+const handleEditBuyRequest = (id) => {
+  router.push(`/publish-buy-request?edit=${id}`);
 }
 
 onMounted(() => {
@@ -1295,9 +1307,9 @@ const getBuyRequestImage = (images) => {
   // 如果是完整URL，直接返回
   if (img.startsWith('http')) return img
   // 如果是以/static开头，补全域名
-  if (img.startsWith('/static')) return 'http://8.138.47.159:8000' + img
+  if (img.startsWith('/static')) return 'http://localhost:8000' + img
   // 否则拼成 /static/images/xxx
-  return 'http://8.138.47.159:8000/static/images/' + img
+  return 'http://localhost:8000/static/images/' + img
 }
 
 </script>
@@ -2051,5 +2063,39 @@ const getBuyRequestImage = (images) => {
   font-size: 13px;
   border-radius: 4px;
   margin-left: 12px;
+}
+.buy-request-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.buy-request-actions .btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.buy-request-actions .btn-primary {
+  background: #3498db;
+  color: white;
+}
+
+.buy-request-actions .btn-primary:hover {
+  background: #2980b9;
+}
+
+.buy-request-actions .btn-outline {
+  background: transparent;
+  color: #3498db;
+  border: 1px solid #3498db;
+}
+
+.buy-request-actions .btn-outline:hover {
+  background: #3498db;
+  color: white;
 }
 </style>

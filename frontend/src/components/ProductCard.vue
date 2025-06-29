@@ -9,6 +9,8 @@
         <!-- 添加下架/已售状态显示 -->
         <div v-if="product.status === 'offline'" class="sold-badge">已下架</div>
         <div v-else-if="product.sold" class="sold-badge">已售出</div>
+        <!-- 添加推广标识 -->
+        <div v-if="product.is_promoted" class="promotion-badge">推广</div>
       </div>
       
       <div class="product-info">
@@ -52,6 +54,15 @@
               @click.stop="markSold"
             >
               <i class="fas fa-check-double"></i> 已售出
+            </button>
+            
+            <!-- 编辑按钮 -->
+            <button 
+              class="btn btn-primary btn-sm"
+              @click.stop="editItem"
+              title="编辑商品"
+            >
+              <i class="fas fa-edit"></i> 编辑
             </button>
             
             <!-- 删除按钮 - 放在其他按钮右边 -->
@@ -107,7 +118,7 @@ export default {
       default: false
     }
   },
-  emits: ['offline', 'online', 'sold', 'delete', 'unfavorite'],
+  emits: ['offline', 'online', 'sold', 'delete', 'unfavorite', 'edit'],
   methods: {
     getFirstImage(product) {
       if (!product || !product.images) {
@@ -145,6 +156,10 @@ export default {
     },
     unfavoriteItem() {
       this.$emit('unfavorite', this.product.id);
+    },
+    editItem() {
+      // 触发编辑事件
+      this.$emit('edit', this.product.id);
     }
   },
   data() {
@@ -153,7 +168,7 @@ export default {
       //defaultImage: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><rect width="100%" height="100%" fill="%23f0f0f0"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="%23999" font-family="Arial" font-size="16">无图片</text></svg>'
       
       // 或者使用在线默认图片：
-       defaultImage: '/static/images/default_avatar.png'
+       defaultImage: '/static/images/default_product.png'
     }
   },
   setup() {
@@ -246,6 +261,17 @@ export default {
   font-size: 0.8rem;
 }
 
+.promotion-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: var(--success);
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
 .stats {
   display: flex;
   gap: 10px;
@@ -307,6 +333,15 @@ export default {
 
 .btn-delete:hover {
   background-color: #c0392b;
+}
+
+.btn-primary {
+  background-color: #3498db;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #2980b9;
 }
 
 @media (max-width: 768px) {

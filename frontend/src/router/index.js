@@ -7,6 +7,7 @@ const routes = [
   { path: '/publish-buy-request', name: 'PublishBuyRequest', component: () => import('@/views/BuyRequestPublish.vue') },
   { path: '/login', component: () => import('@/views/LoginRegister.vue') },
   { path: '/profile',name: 'Profile', component: () => import('@/views/Profile.vue') },
+  { path: '/user/:id', name: 'UserProfile', component: () => import('@/views/UserProfile.vue'), props: true },
   { path: '/messages', component: () => import('@/views/MessagesList.vue') },
   { path: '/chat/:id/:other_user_id/:type?', name: 'Chat', component: () => import('@/views/Chat.vue'), meta: { requiresAuth: true }, props: true },
   { path: '/system-messages', name: 'SystemMessagesAll', component: () => import('@/views/SystemMessagesAll.vue') },

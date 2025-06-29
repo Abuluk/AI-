@@ -16,9 +16,9 @@
         <h4>搜索结果</h4>
         <div class="users-list">
           <div v-for="user in searchResults" :key="user.id" class="user-card">
-            <img :src="getUserAvatar(user.avatar)" :alt="user.username" class="user-avatar">
+            <img :src="getUserAvatar(user.avatar)" :alt="user.username" class="user-avatar" @click="goToUserProfile(user.id)" style="cursor: pointer;">
             <div class="user-info">
-              <h5>{{ user.username }}</h5>
+              <h5 @click="goToUserProfile(user.id)" style="cursor: pointer;">{{ user.username }}</h5>
               <p v-if="user.bio">{{ user.bio }}</p>
             </div>
             <div class="user-actions">
@@ -37,9 +37,9 @@
       </div>
       <div v-else class="users-list">
         <div v-for="friend in friendsList" :key="friend.id" class="user-card" @click="goToChat(friend.id)" style="cursor:pointer;">
-          <img :src="getUserAvatar(friend.avatar)" :alt="friend.username" class="user-avatar">
+          <img :src="getUserAvatar(friend.avatar)" :alt="friend.username" class="user-avatar" @click.stop="goToUserProfile(friend.id)" style="cursor: pointer;">
           <div class="user-info">
-            <h5>{{ friend.username }}</h5>
+            <h5 @click.stop="goToUserProfile(friend.id)" style="cursor: pointer;">{{ friend.username }}</h5>
             <p v-if="friend.bio">{{ friend.bio }}</p>
           </div>
           <div class="user-actions" @click.stop>
@@ -57,9 +57,9 @@
       </div>
       <div v-else class="users-list">
         <div v-for="user in blacklist" :key="user.id" class="user-card">
-          <img :src="getUserAvatar(user.avatar)" :alt="user.username" class="user-avatar">
+          <img :src="getUserAvatar(user.avatar)" :alt="user.username" class="user-avatar" @click="goToUserProfile(user.id)" style="cursor: pointer;">
           <div class="user-info">
-            <h5>{{ user.username }}</h5>
+            <h5 @click="goToUserProfile(user.id)" style="cursor: pointer;">{{ user.username }}</h5>
             <p v-if="user.bio">{{ user.bio }}</p>
           </div>
           <div class="user-actions">
@@ -180,11 +180,15 @@ const getUserAvatar = (avatar) => {
   if (avatar.startsWith('http')) {
     return avatar
   }
-  return `http://8.138.47.159:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`
+  return `http://localhost:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`
 }
 
 const goToChat = (friendId) => {
   router.push({ name: 'Chat', params: { id: friendId, other_user_id: friendId, type: 'user' } })
+}
+
+const goToUserProfile = (userId) => {
+  router.push({ name: 'UserProfile', params: { id: userId } })
 }
 
 onMounted(async () => {

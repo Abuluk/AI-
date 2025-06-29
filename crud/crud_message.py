@@ -371,23 +371,59 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
 def get_unread_count(db: Session, user_id: int) -> int:
     """获取用户所有对话的未读消息总数"""
     
-    # 找出用户参与的所有对话的 item_id
+    total_unread = 0
+    
+    # 1. 计算商品相关对话的未读消息
     buyer_item_ids = db.query(Message.item_id).filter(Message.user_id == user_id, Message.is_system == False).distinct()
     seller_item_ids = db.query(Item.id).join(Message, Message.item_id == Item.id).filter(Item.owner_id == user_id, Message.is_system == False).distinct()
     
     involved_item_ids_query = buyer_item_ids.union(seller_item_ids)
     involved_item_ids = {row[0] for row in involved_item_ids_query.all()}
     
-    if not involved_item_ids:
-        return 0
-
-    # 计算这些对话中所有未读消息的总和
-    total_unread = db.query(func.count(Message.id)).filter(
-        Message.item_id.in_(involved_item_ids),
-        Message.is_read == False,
+    if involved_item_ids:
+        item_unread = db.query(func.count(Message.id)).filter(
+            Message.item_id.in_(involved_item_ids),
+            Message.is_read == False,
+            Message.is_system == False,
+            Message.user_id != user_id
+        ).scalar() or 0
+        total_unread += item_unread
+    
+    # 2. 计算求购相关对话的未读消息
+    buyer_br_ids = db.query(Message.buy_request_id).filter(Message.user_id == user_id, Message.is_system == False).distinct()
+    seller_br_ids = db.query(BuyRequest.id).join(Message, Message.buy_request_id == BuyRequest.id).filter(BuyRequest.user_id == user_id, Message.is_system == False).distinct()
+    
+    involved_br_ids_query = buyer_br_ids.union(seller_br_ids)
+    involved_br_ids = {row[0] for row in involved_br_ids_query.all() if row[0] is not None}
+    
+    if involved_br_ids:
+        br_unread = db.query(func.count(Message.id)).filter(
+            Message.buy_request_id.in_(involved_br_ids),
+            Message.is_read == False,
+            Message.is_system == False,
+            Message.user_id != user_id
+        ).scalar() or 0
+        total_unread += br_unread
+    
+    # 3. 计算用户私聊的未读消息
+    user_chat_unread = db.query(func.count(Message.id)).filter(
         Message.is_system == False,
-        Message.user_id != user_id
+        Message.target_user == str(user_id),
+        Message.user_id != user_id,
+        Message.is_read == False
     ).scalar() or 0
+    total_unread += user_chat_unread
+    
+    # 4. 计算系统消息的未读数量
+    system_unread = db.query(func.count(Message.id)).filter(
+        Message.is_system == True,
+        Message.is_read == False,
+        or_(
+            Message.target_users == "all",
+            Message.target_users == str(user_id)
+        )
+    ).scalar() or 0
+    total_unread += system_unread
     
     return total_unread
 

@@ -22,8 +22,14 @@ def create_buy_request(db: Session, buy_request: BuyRequestCreate, user_id: int)
         db_obj.images = []
     return db_obj
 
-def get_buy_requests(db: Session, skip=0, limit=10):
-    brs = db.query(BuyRequest).options(joinedload(BuyRequest.user)).order_by(BuyRequest.created_at.desc()).offset(skip).limit(limit).all()
+def get_buy_requests(db: Session, skip=0, limit=10, user_id=None):
+    query = db.query(BuyRequest).options(joinedload(BuyRequest.user))
+    
+    # 如果指定了user_id，则过滤该用户的求购信息
+    if user_id is not None:
+        query = query.filter(BuyRequest.user_id == user_id)
+    
+    brs = query.order_by(BuyRequest.created_at.desc()).offset(skip).limit(limit).all()
     for br in brs:
         if br.images:
             br.images = br.images.split(",")
