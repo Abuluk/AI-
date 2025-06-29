@@ -166,3 +166,14 @@ class Blacklist(Base):
     blocked_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     __table_args__ = (UniqueConstraint('user_id', 'blocked_user_id', name='uq_user_blocked'),)
+
+class Feedback(Base):
+    __tablename__ = 'feedbacks'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    content = Column(String(1000), nullable=False)
+    status = Column(String(20), default='pending')  # pending/solved
+    created_at = Column(DateTime, default=datetime.utcnow)
+    solved_at = Column(DateTime, nullable=True)
+
+    user = relationship('User', foreign_keys=[user_id])

@@ -13,6 +13,8 @@ from .endpoints import (
     comments,  # 新增导入comments
     friends,  # 新增导入好友功能
     blacklist,  # 新增导入黑名单功能
+    feedback,  # 新增
+    ai_strategy,  # 新增
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
@@ -94,4 +96,18 @@ api_router.include_router(
     prefix="/blacklist",
     tags=["黑名单"],
     dependencies=[Depends(oauth2_scheme)]
+)
+
+# 意见反馈路由
+api_router.include_router(
+    feedback.router,
+    prefix="/feedback",
+    tags=["意见反馈"]
+)
+
+# AI策略路由
+api_router.include_router(
+    ai_strategy.router,
+    prefix="/ai_strategy",
+    tags=["AI策略"]
 )

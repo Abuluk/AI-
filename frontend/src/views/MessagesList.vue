@@ -13,6 +13,7 @@
       <div class="system-notifications card">
         <div class="card-header">
           <h3><i class="fas fa-bullhorn"></i> 系统通知</h3>
+          <button class="feedback-btn" @click="showFeedbackModal = true">意见反馈</button>
           <router-link to="/system-messages" class="see-all">查看全部</router-link>
         </div>
         <div v-if="loading.system" class="loading-state">
@@ -110,6 +111,24 @@
         <div v-else class="empty-state">暂无点赞消息</div>
       </div>
     </div>
+    <!-- 意见反馈弹窗 -->
+    <div v-if="showFeedbackModal" class="modal-overlay" @click.self="showFeedbackModal = false">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>意见反馈</h3>
+          <button class="close-btn" @click="showFeedbackModal = false"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+          <textarea v-model="feedbackContent" placeholder="请输入您的意见或建议..." rows="5" class="form-textarea"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" @click="showFeedbackModal = false">取消</button>
+          <button class="btn btn-primary" :disabled="feedbackLoading || !feedbackContent.trim()" @click="submitFeedback">
+            {{ feedbackLoading ? '提交中...' : '提交反馈' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -140,6 +159,9 @@ const tabs = [
 const allCommentTrees = ref([]);
 const likeLoading = ref({});
 const likeMessages = ref([]);
+const showFeedbackModal = ref(false)
+const feedbackContent = ref('')
+const feedbackLoading = ref(false)
 
 // Computed
 const filteredConversations = computed(() => {
@@ -225,7 +247,7 @@ const getUserAvatar = (avatar) => {
   if (avatar.startsWith('http')) {
       return avatar;
   }
-  return `http://localhost:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`;
+  return `http://8.138.47.159:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`;
 };
 
 const selectConversation = (conv) => {
@@ -289,6 +311,21 @@ const fetchLikeMessages = async () => {
     loading.value.like = false;
   }
 };
+
+const submitFeedback = async () => {
+  if (!feedbackContent.value.trim()) return
+  feedbackLoading.value = true
+  try {
+    await api.createFeedback(feedbackContent.value)
+    alert('反馈提交成功，感谢您的宝贵意见！')
+    showFeedbackModal.value = false
+    feedbackContent.value = ''
+  } catch (e) {
+    alert('反馈提交失败，请稍后重试')
+  } finally {
+    feedbackLoading.value = false
+  }
+}
 
 // Lifecycle
 onMounted(() => {
@@ -719,5 +756,77 @@ watch(activeTab, async (tab) => {
   color: #999;
   font-size: 0.95em;
   margin-left: 10px;
+}
+.feedback-btn {
+  margin-right: 16px;
+  background: #fff;
+  border: 1px solid #3498db;
+  color: #3498db;
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.feedback-btn:hover {
+  background: #eaf6fd;
+}
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-content {
+  background: #fff;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  overflow: hidden;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #eee;
+}
+.modal-body {
+  padding: 20px;
+}
+.form-textarea {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  padding: 10px;
+  font-size: 15px;
+  resize: vertical;
+}
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 20px;
+  border-top: 1px solid #eee;
+}
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #999;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.close-btn:hover {
+  color: #333;
 }
 </style>

@@ -1307,9 +1307,9 @@ const getBuyRequestImage = (images) => {
   // 如果是完整URL，直接返回
   if (img.startsWith('http')) return img
   // 如果是以/static开头，补全域名
-  if (img.startsWith('/static')) return 'http://localhost:8000' + img
+  if (img.startsWith('/static')) return 'http://8.138.47.159:8000' + img
   // 否则拼成 /static/images/xxx
-  return 'http://localhost:8000/static/images/' + img
+  return 'http://8.138.47.159:8000/static/images/' + img
 }
 
 </script>

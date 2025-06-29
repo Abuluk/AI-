@@ -23,7 +23,7 @@ def include_router(app):
     app.include_router(api_router, prefix="/api/v1")
 
 def start_application():
-    app = FastAPI(title="二手交易系统", version="1.0.0")
+    app = FastAPI(title="二手交易系统", version="1.0.0", debug=True)
     # create_tables()  # Only run this manually during development or use Alembic for migrations
     include_router(app)
     return app

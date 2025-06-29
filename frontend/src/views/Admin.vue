@@ -670,6 +670,67 @@
       </div>
     </div>
 
+    <!-- 留言管理 -->
+    <div v-if="activeTab === 'feedbacks'" class="tab-content">
+      <div class="section-header">
+        <h2>留言管理</h2>
+        <button class="btn btn-outline" @click="loadFeedbacks" :disabled="loading.feedbacks">刷新</button>
+      </div>
+      <div v-if="loading.feedbacks" class="loading-state">
+        <div class="skeleton-row" v-for="n in 5" :key="n"></div>
+      </div>
+      <div v-else>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>用户ID</th>
+              <th>内容</th>
+              <th>状态</th>
+              <th>提交时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="fb in feedbacks" :key="fb.id">
+              <td>{{ fb.id }}</td>
+              <td>{{ fb.user_id }}</td>
+              <td style="max-width:300px;word-break:break-all;">{{ fb.content }}</td>
+              <td>
+                <span :class="['status-badge', fb.status === 'solved' ? 'active' : 'inactive']">
+                  {{ fb.status === 'solved' ? '已解决' : '待处理' }}
+                </span>
+              </td>
+              <td>{{ formatTime(fb.created_at) }}</td>
+              <td>
+                <div class="action-buttons">
+                  <button v-if="fb.status !== 'solved'" class="btn btn-sm btn-success" @click="solveFeedback(fb)">已解决</button>
+                  <button class="btn btn-sm btn-danger" @click="deleteFeedback(fb)">删除</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-if="feedbacks.length === 0" class="empty-state">暂无留言</div>
+      </div>
+    </div>
+
+    <!-- AI策略 -->
+    <div v-if="activeTab === 'ai_strategy'" class="tab-content">
+      <div class="section-header">
+        <h2>AI策略报告</h2>
+        <button class="btn btn-primary" @click="getAIStrategy" :disabled="aiLoading">{{ aiLoading ? '生成中...' : '生成AI报告' }}</button>
+      </div>
+      <div v-if="aiLoading" class="loading-state">AI报告生成中...</div>
+      <div v-else-if="aiReport">
+        <div class="ai-report-card">
+          <h3>AI分析报告</h3>
+          <pre style="white-space:pre-wrap;word-break:break-all;">{{ aiReport }}</pre>
+        </div>
+      </div>
+      <div v-else class="empty-state">点击上方按钮生成AI策略报告</div>
+    </div>
+
     <!-- 活动页管理 -->
     <div v-if="activeTab === 'activity'" class="tab-content">
       <h2>活动页管理</h2>
@@ -711,7 +772,8 @@ const loading = reactive({
   items: false,
   messages: false,
   buy_requests: false,
-  promotions: false
+  promotions: false,
+  feedbacks: false
 })
 
 const stats = ref({})
@@ -720,6 +782,7 @@ const items = ref([])
 const systemMessages = ref([])
 const buyRequests = ref([])
 const promotedItems = ref([])
+const feedbacks = ref([])
 
 // 添加缺失的分页变量
 const systemMessagesPage = ref(1)
@@ -765,6 +828,8 @@ const tabs = [
   { id: 'buy_requests', label: '求购管理', icon: 'fas fa-shopping-cart' },
   { id: 'promotions', label: '推广位管理', icon: 'fas fa-star' },
   { id: 'messages', label: '消息管理', icon: 'fas fa-bullhorn' },
+  { id: 'feedbacks', label: '留言管理', icon: 'fas fa-comment-dots' },
+  { id: 'ai_strategy', label: 'AI策略', icon: 'fas fa-robot' },
   { id: 'activity', label: '活动页管理', icon: 'fas fa-bullhorn' },
 ]
 
@@ -926,6 +991,8 @@ const changeTab = (tabId) => {
     loadPromotedItems()
   } else if (tabId === 'activity') {
     loadActivityBanners()
+  } else if (tabId === 'feedbacks') {
+    loadFeedbacks()
   }
 }
 
@@ -1364,6 +1431,58 @@ const saveRecommendations = async () => {
     alert('保存失败')
   } finally {
     savingRecommendations.value = false
+  }
+}
+
+// 留言管理相关
+const loadingFeedbacks = ref(false)
+const aiReport = ref('')
+const aiLoading = ref(false)
+
+const loadFeedbacks = async () => {
+  loading.feedbacks = true
+  try {
+    const res = await api.getAllFeedbacks()
+    feedbacks.value = res.data
+  } catch (e) {
+    alert('获取留言失败')
+  } finally {
+    loading.feedbacks = false
+  }
+}
+
+const solveFeedback = async (fb) => {
+  if (!confirm('确定将此留言标记为已解决？')) return
+  try {
+    await api.solveFeedback(fb.id)
+    fb.status = 'solved'
+    alert('已标记为已解决')
+  } catch (e) {
+    alert('操作失败')
+  }
+}
+
+const deleteFeedback = async (fb) => {
+  if (!confirm('确定要删除此留言？')) return
+  try {
+    await api.deleteFeedback(fb.id)
+    feedbacks.value = feedbacks.value.filter(f => f.id !== fb.id)
+    alert('已删除')
+  } catch (e) {
+    alert('删除失败')
+  }
+}
+
+const getAIStrategy = async () => {
+  aiLoading.value = true
+  aiReport.value = ''
+  try {
+    const res = await api.getAIStrategyReport()
+    aiReport.value = res.data.report || res.data.msg || JSON.stringify(res.data, null, 2)
+  } catch (e) {
+    aiReport.value = 'AI报告获取失败'
+  } finally {
+    aiLoading.value = false
   }
 }
 </script>
@@ -2178,5 +2297,14 @@ th {
   margin-top: 20px;
   padding-top: 20px;
   border-top: 1px solid #eee;
+}
+
+/* AI策略样式 */
+.ai-report-card {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 24px;
+  margin-top: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 </style> 

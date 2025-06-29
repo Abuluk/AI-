@@ -84,7 +84,7 @@ export default {
           
           this.imagePreviews = imageArray.map(img => {
             if (img.startsWith('http')) return img;
-            return `http://localhost:8000/static/images/${img}`;
+            return `http://8.138.47.159:8000/static/images/${img}`;
           });
         }
       } catch (error) {
