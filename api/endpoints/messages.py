@@ -16,7 +16,8 @@ from crud.crud_message import (
     mark_as_read,
     delete_message,
     get_user_messages,
-    get_message
+    get_message,
+    mark_all_as_read
 )
 import os
 from datetime import datetime
@@ -307,3 +308,12 @@ async def upload_chat_image(file: UploadFile = File(...)):
     with open(save_path, "wb") as f:
         f.write(await file.read())
     return {"url": f"/static/images/{save_name}"}
+
+@router.post("/all-read")
+def mark_all_messages_as_read(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """一键全部已读"""
+    mark_all_as_read(db, user_id=current_user.id)
+    return {"message": "全部消息已标记为已读"}

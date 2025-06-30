@@ -579,6 +579,10 @@ const apiService = {
   // AI策略相关
   async getAIStrategyReport() {
     return api.post('/ai_strategy/', {}, { timeout: 600000 }) // 10分钟超时
+  },
+
+  async markAllMessagesAsRead() {
+    return api.post('/messages/all-read')
   }
 }
 

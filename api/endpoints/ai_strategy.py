@@ -128,10 +128,10 @@ def ai_strategy(
         
         # 获取数据
         users = db.query(User).all()
-        items = db.query(Item).all()
+        items = db.query(Item).filter(Item.status == 'online').all()
         feedbacks = db.query(Feedback).all()
         
-        print(f"获取到数据: 用户{len(users)}个, 商品{len(items)}个, 反馈{len(feedbacks)}条")
+        print(f"获取到数据: 用户{len(users)}个, 在售商品{len(items)}个, 反馈{len(feedbacks)}条")
         
         # 组装prompt
         user_count = len(users)
@@ -147,11 +147,11 @@ def ai_strategy(
 
 平台数据概览：
 - 用户总数：{user_count}人
-- 商品总数：{item_count}个
+- 在售商品数：{item_count}个
 - 用户反馈：{feedback_count}条
 
 示例用户：{', '.join(sample_users) if sample_users else '暂无'}
-示例商品：{', '.join(sample_items) if sample_items else '暂无'}
+示例在售商品：{', '.join(sample_items) if sample_items else '暂无'}
 示例反馈：{', '.join(sample_feedbacks) if sample_feedbacks else '暂无'}
 
 请从以下角度进行分析：

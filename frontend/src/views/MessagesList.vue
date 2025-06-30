@@ -37,15 +37,21 @@
       <div class="conversations card">
         <div class="card-header">
           <h3><i class="fas fa-user-friends"></i> 我的对话</h3>
-          <div class="filter-tabs">
-            <button 
-              v-for="tab in tabs" 
-              :key="tab.id"
-              :class="{ active: conversationFilter === tab.id }"
-              @click="conversationFilter = tab.id"
-            >
-              {{ tab.label }}
-            </button>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div class="filter-tabs">
+              <button 
+                v-for="tab in tabs" 
+                :key="tab.id"
+                :class="{ active: conversationFilter === tab.id }"
+                @click="conversationFilter = tab.id"
+              >
+                {{ tab.label }}
+              </button>
+              <button 
+                :class="{ active: false, 'all-read-btn': true }"
+                @click="markAllAsRead"
+              >全部已读</button>
+            </div>
           </div>
         </div>
         <div v-if="loading.conversations" class="loading-state">
@@ -324,6 +330,17 @@ const submitFeedback = async () => {
     alert('反馈提交失败，请稍后重试')
   } finally {
     feedbackLoading.value = false
+  }
+}
+
+const markAllAsRead = async () => {
+  try {
+    await api.markAllMessagesAsRead();
+    await fetchConversations();
+    window.dispatchEvent(new CustomEvent('updateUnreadCount'));
+    alert('全部消息已标记为已读！');
+  } catch (e) {
+    alert('操作失败，请稍后重试');
   }
 }
 
@@ -828,5 +845,21 @@ watch(activeTab, async (tab) => {
 }
 .close-btn:hover {
   color: #333;
+}
+.all-read-btn {
+  background: none;
+  border: 1.5px solid #27ae60;
+  color: #27ae60;
+  border-radius: 20px;
+  padding: 6px 22px;
+  font-size: 15px;
+  margin-left: 8px;
+  transition: background 0.2s, color 0.2s, border 0.2s;
+  cursor: pointer;
+}
+.all-read-btn:hover {
+  background: #eafaf1;
+  color: #219150;
+  border-color: #219150;
 }
 </style>

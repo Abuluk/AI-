@@ -479,6 +479,44 @@ def get_system_message(db: Session, message_id: int) -> Optional[Message]:
     """获取单条系统消息"""
     return db.query(Message).filter(Message.id == message_id, Message.is_system == True).first()
 
+def mark_all_as_read(db: Session, user_id: int):
+    """将当前用户所有未读消息全部标记为已读（包括商品、求购、私聊、系统消息）"""
+    # 商品相关
+    db.query(Message).filter(
+        Message.is_system == False,
+        Message.is_read == False,
+        Message.user_id != user_id,
+        (
+            (Message.item_id.in_([row[0] for row in db.query(Message.item_id).filter(Message.user_id == user_id, Message.is_system == False).distinct()])) |
+            (Message.item_id.in_([row[0] for row in db.query(Item.id).join(Message, Message.item_id == Item.id).filter(Item.owner_id == user_id, Message.is_system == False).distinct()]))
+        )
+    ).update({Message.is_read: True}, synchronize_session=False)
+    # 求购相关
+    db.query(Message).filter(
+        Message.is_system == False,
+        Message.is_read == False,
+        Message.user_id != user_id,
+        (
+            (Message.buy_request_id.in_([row[0] for row in db.query(Message.buy_request_id).filter(Message.user_id == user_id, Message.is_system == False).distinct() if row[0] is not None])) |
+            (Message.buy_request_id.in_([row[0] for row in db.query(BuyRequest.id).join(Message, Message.buy_request_id == BuyRequest.id).filter(BuyRequest.user_id == user_id, Message.is_system == False).distinct() if row[0] is not None]))
+        )
+    ).update({Message.is_read: True}, synchronize_session=False)
+    # 私聊
+    db.query(Message).filter(
+        Message.is_system == False,
+        Message.is_read == False,
+        Message.target_user == str(user_id),
+        Message.user_id != user_id
+    ).update({Message.is_read: True}, synchronize_session=False)
+    # 系统消息
+    db.query(Message).filter(
+        Message.is_system == True,
+        Message.is_read == False,
+        or_(Message.target_users == "all", Message.target_users == str(user_id))
+    ).update({Message.is_read: True}, synchronize_session=False)
+    db.commit()
+    return True
+
 # 创建CRUD实例（为了保持API兼容性）
 class MessageCRUD:
     def get(self, db: Session, id: int):
