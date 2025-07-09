@@ -109,7 +109,7 @@
         <div class="skeleton-row" v-for="n in 5" :key="n"></div>
       </div>
 
-      <div v-else class="users-table">
+      <div v-else class="users-table" @scroll="onScroll($event, 'users')">
         <table>
           <thead>
             <tr>
@@ -174,6 +174,8 @@
             </tr>
           </tbody>
         </table>
+        <div v-if="loadingMoreUsers" style="text-align:center;padding:8px;">加载中...</div>
+        <div v-if="!hasMoreUsers && users.length > 0" style="text-align:center;padding:8px;">已加载全部</div>
       </div>
     </div>
 
@@ -201,7 +203,7 @@
         <div class="skeleton-row" v-for="n in 5" :key="n"></div>
       </div>
 
-      <div v-else class="items-table">
+      <div v-else class="items-table" @scroll="onScroll($event, 'items')">
         <table>
           <thead>
             <tr>
@@ -261,6 +263,8 @@
             </tr>
           </tbody>
         </table>
+        <div v-if="loadingMoreItems" style="text-align:center;padding:8px;">加载中...</div>
+        <div v-if="!hasMoreItems && items.length > 0" style="text-align:center;padding:8px;">已加载全部</div>
       </div>
     </div>
 
@@ -281,7 +285,7 @@
         <div class="skeleton-row" v-for="n in 5" :key="n"></div>
       </div>
 
-      <div v-else class="buy-requests-table">
+      <div v-else class="buy-requests-table" @scroll="onScroll($event, 'buy_requests')">
         <table>
           <thead>
             <tr>
@@ -320,6 +324,8 @@
             </tr>
           </tbody>
         </table>
+        <div v-if="loadingMoreBuyRequests" style="text-align:center;padding:8px;">加载中...</div>
+        <div v-if="!hasMoreBuyRequests && buyRequests.length > 0" style="text-align:center;padding:8px;">已加载全部</div>
       </div>
     </div>
 
@@ -630,7 +636,7 @@
           <div class="skeleton-row" v-for="n in 3" :key="n"></div>
         </div>
 
-        <div v-else class="messages-table">
+        <div v-else class="messages-table" @scroll="onScroll($event, 'messages')">
           <table>
             <thead>
               <tr>
@@ -666,6 +672,8 @@
               </tr>
             </tbody>
           </table>
+          <div v-if="loadingMoreMessages" style="text-align:center;padding:8px;">加载中...</div>
+          <div v-if="!hasMoreMessages && systemMessages.length > 0" style="text-align:center;padding:8px;">已加载全部</div>
         </div>
       </div>
     </div>
@@ -843,32 +851,82 @@ const loadStats = async () => {
   }
 }
 
-const loadUsers = async () => {
-  loading.users = true
+// 分页与自动加载相关变量
+const userPage = ref(1)
+const userLimit = 50
+const hasMoreUsers = ref(true)
+const loadingMoreUsers = ref(false)
+
+const itemPage = ref(1)
+const itemLimit = 50
+const hasMoreItems = ref(true)
+const loadingMoreItems = ref(false)
+
+const buyRequestPage = ref(1)
+const buyRequestLimit = 50
+const hasMoreBuyRequests = ref(true)
+const loadingMoreBuyRequests = ref(false)
+
+const messagePage = ref(1)
+const messageLimit = ref(50)
+const hasMoreMessages = ref(true)
+const loadingMoreMessages = ref(false)
+
+// 用户管理自动加载
+const loadUsers = async (reset = false) => {
+  if (loading.users || loadingMoreUsers.value) return
+  if (reset) {
+    userPage.value = 1
+    hasMoreUsers.value = true
+    users.value = []
+  }
+  if (!hasMoreUsers.value) return
+  loading.users = userPage.value === 1
+  loadingMoreUsers.value = userPage.value > 1
   try {
-    const params = {}
+    const params = {
+      skip: (userPage.value - 1) * userLimit,
+      limit: userLimit
+    }
     if (userFilters.search) params.search = userFilters.search
     if (userFilters.is_active !== '') params.is_active = userFilters.is_active === 'true'
     if (userFilters.is_admin !== '') params.is_admin = userFilters.is_admin === 'true'
-    
     const response = await api.getAdminUsers(params)
-    users.value = response.data
+    if (userPage.value === 1) {
+      users.value = response.data
+    } else {
+      users.value.push(...response.data)
+    }
+    if (response.data.length < userLimit) {
+      hasMoreUsers.value = false
+    } else {
+      userPage.value++
+    }
   } catch (error) {
-    console.error('获取用户列表失败:', error)
     alert('获取用户列表失败')
   } finally {
     loading.users = false
+    loadingMoreUsers.value = false
   }
 }
 
-const loadItems = async () => {
-  loading.items = true
+// 商品管理自动加载
+const loadItems = async (reset = false) => {
+  if (loading.items || loadingMoreItems.value) return
+  if (reset) {
+    itemPage.value = 1
+    hasMoreItems.value = true
+    items.value = []
+  }
+  if (!hasMoreItems.value) return
+  loading.items = itemPage.value === 1
+  loadingMoreItems.value = itemPage.value > 1
   try {
     const params = {
+      skip: (itemPage.value - 1) * itemLimit,
+      limit: itemLimit,
       search: itemFilters.search || undefined,
     }
-    
-    // 根据统一的状态进行参数转换
     switch (itemFilters.displayStatus) {
       case 'online':
         params.status = 'online'
@@ -879,121 +937,130 @@ const loadItems = async () => {
         break
       case 'offline':
         params.status = 'offline'
-        params.sold = false // 逻辑上，已下架的商品不应该是已售
+        params.sold = false
         break
     }
-    
     const response = await api.getAdminItems(params)
-    items.value = response.data
+    if (itemPage.value === 1) {
+      items.value = response.data
+    } else {
+      items.value.push(...response.data)
+    }
+    if (response.data.length < itemLimit) {
+      hasMoreItems.value = false
+    } else {
+      itemPage.value++
+    }
   } catch (error) {
-    console.error('获取商品列表失败:', error)
     alert('获取商品列表失败')
   } finally {
     loading.items = false
+    loadingMoreItems.value = false
   }
 }
 
-const toggleUserStatus = async (user) => {
-  if (!confirm(`确定要${user.is_active ? '禁用' : '激活'}用户 ${user.username || user.email} 吗？`)) {
-    return
+// 求购管理自动加载
+const loadBuyRequests = async (reset = false) => {
+  if (loading.buy_requests || loadingMoreBuyRequests.value) return
+  if (reset) {
+    buyRequestPage.value = 1
+    hasMoreBuyRequests.value = true
+    buyRequests.value = []
   }
-  
+  if (!hasMoreBuyRequests.value) return
+  loading.buy_requests = buyRequestPage.value === 1
+  loadingMoreBuyRequests.value = buyRequestPage.value > 1
   try {
-    await api.updateUserStatus(user.id, !user.is_active)
-    user.is_active = !user.is_active
-    alert('操作成功')
-  } catch (error) {
-    console.error('更新用户状态失败:', error)
-    alert('操作失败')
-  }
-}
-
-const toggleAdminStatus = async (user) => {
-  if (!confirm(`确定要${user.is_admin ? '取消' : '设置'}用户 ${user.username || user.email} 的管理员权限吗？`)) {
-    return
-  }
-  
-  try {
-    await api.updateUserAdminStatus(user.id, !user.is_admin)
-    user.is_admin = !user.is_admin
-    alert('操作成功')
-  } catch (error) {
-    console.error('更新管理员状态失败:', error)
-    alert('操作失败')
-  }
-}
-
-const deleteUser = async (user) => {
-  if (!confirm(`确定要删除用户 ${user.username || user.email} 吗？此操作不可恢复！`)) {
-    return
-  }
-  
-  try {
-    await api.deleteAdminUser(user.id)
-    users.value = users.value.filter(u => u.id !== user.id)
-    alert('用户已删除')
-  } catch (error) {
-    console.error('删除用户失败:', error)
-    alert('删除失败')
-  }
-}
-
-const updateItemStatus = async (item, status) => {
-  // 如果是下架商品，显示确认对话框
-  if (status === 'offline') {
-    const confirmed = confirm(`确定要下架商品"${item.title}"吗？\n\n下架后系统将自动发送通知消息给商品所有者，告知商品因不合规内容被下架。`)
-    if (!confirmed) {
-      return
+    const params = {
+      skip: (buyRequestPage.value - 1) * buyRequestLimit,
+      limit: buyRequestLimit
     }
-  }
-  
-  try {
-    await api.updateAdminItemStatus(item.id, status)
-    item.status = status
-    
-    if (status === 'offline') {
-      alert('商品已下架，系统消息已发送给商品所有者')
+    if (buyRequestFilters.search) params.search = buyRequestFilters.search
+    const response = await api.getAdminBuyRequests(params)
+    if (buyRequestPage.value === 1) {
+      buyRequests.value = response.data
     } else {
-      alert('操作成功')
+      buyRequests.value.push(...response.data)
+    }
+    if (response.data.length < buyRequestLimit) {
+      hasMoreBuyRequests.value = false
+    } else {
+      buyRequestPage.value++
     }
   } catch (error) {
-    console.error('更新商品状态失败:', error)
-    alert('操作失败')
+    alert('获取求购信息列表失败')
+  } finally {
+    loading.buy_requests = false
+    loadingMoreBuyRequests.value = false
   }
 }
 
-const deleteItem = async (item) => {
-  if (!confirm(`确定要删除商品 "${item.title}" 吗？此操作不可恢复！`)) {
-    return
+// 消息管理自动加载
+const loadSystemMessages = async (reset = false) => {
+  if (loading.messages || loadingMoreMessages.value) return
+  if (reset) {
+    messagePage.value = 1
+    hasMoreMessages.value = true
+    systemMessages.value = []
   }
-  
+  if (!hasMoreMessages.value) return
+  loading.messages = messagePage.value === 1
+  loadingMoreMessages.value = messagePage.value > 1
   try {
-    await api.deleteAdminItem(item.id)
-    items.value = items.value.filter(i => i.id !== item.id)
-    alert('商品已删除')
+    const response = await api.getSystemMessages({
+      skip: (messagePage.value - 1) * messageLimit.value,
+      limit: messageLimit.value
+    })
+    if (messagePage.value === 1) {
+      systemMessages.value = response.data
+    } else {
+      systemMessages.value.push(...response.data)
+    }
+    if (response.data.length < messageLimit.value) {
+      hasMoreMessages.value = false
+    } else {
+      messagePage.value++
+    }
   } catch (error) {
-    console.error('删除商品失败:', error)
-    alert('删除失败')
+    alert('获取系统消息失败')
+  } finally {
+    loading.messages = false
+    loadingMoreMessages.value = false
   }
 }
 
+// 滚动监听
+const onScroll = (e, type) => {
+  const el = e.target
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 10) {
+    if (type === 'users') loadUsers(false)
+    if (type === 'items') loadItems(false)
+    if (type === 'buy_requests') loadBuyRequests(false)
+    if (type === 'messages') loadSystemMessages(false)
+  }
+}
+
+// 过滤器变化时重置分页
+watch(userFilters, () => {
+  if (activeTab.value === 'users') loadUsers(true)
+}, { deep: true })
+watch(itemFilters, () => {
+  if (activeTab.value === 'items') loadItems(true)
+}, { deep: true })
+watch(buyRequestFilters, () => {
+  if (activeTab.value === 'buy_requests') loadBuyRequests(true)
+}, { deep: true })
+
+// tab切换时重置分页
 const changeTab = (tabId) => {
   activeTab.value = tabId
-  if (tabId === 'users' && users.value.length === 0) {
-    loadUsers()
-  } else if (tabId === 'items' && items.value.length === 0) {
-    loadItems()
-  } else if (tabId === 'messages') {
-    loadSystemMessages()
-  } else if (tabId === 'buy_requests') {
-    loadBuyRequests()
-  } else if (tabId === 'promotions') {
-    loadPromotedItems()
-  } else if (tabId === 'activity') {
-    loadActivityBanners()
-  } else if (tabId === 'feedbacks') {
-    loadFeedbacks()
-  }
+  if (tabId === 'users') loadUsers(true)
+  else if (tabId === 'items') loadItems(true)
+  else if (tabId === 'messages') loadSystemMessages(true)
+  else if (tabId === 'buy_requests') loadBuyRequests(true)
+  else if (tabId === 'promotions') loadPromotedItems()
+  else if (tabId === 'activity') loadActivityBanners()
+  else if (tabId === 'feedbacks') loadFeedbacks()
 }
 
 const formatTime = (time) => {
@@ -1043,25 +1110,7 @@ const getItemDisplayStatus = (item) => {
   return { text: '已下架', class: 'offline' }
 };
 
-// 获取系统消息
-const loadSystemMessages = async () => {
-  loading.messages = true
-  try {
-    // 使用正确的 API 函数
-    const response = await api.getSystemMessages({
-      skip: (systemMessagesPage.value - 1) * systemMessagesLimit.value,
-      limit: systemMessagesLimit.value
-    })
-    systemMessages.value = response.data
-    // 这里需要后端返回总数
-    // systemMessagesTotal.value = response.data.total
-  } catch (error) {
-    console.error('获取系统消息失败:', error)
-    alert('获取系统消息失败')
-  } finally {
-    loading.messages = false
-  }
-}
+
 
 // 发布系统消息
 const publishSystemMessage = async () => {
@@ -1126,7 +1175,7 @@ const getTargetUsersText = (targetUsers) => {
 // 生命周期
 onMounted(() => {
   loadStats()
-  loadUsers()
+  loadUsers(true)
   loadActivityBanners()
 })
 
@@ -1193,21 +1242,7 @@ const getUserAvatar = (user) => {
   return `/static/images/${user.avatar}`
 }
 
-const loadBuyRequests = async () => {
-  loading.buy_requests = true
-  try {
-    const params = {}
-    if (buyRequestFilters.search) params.search = buyRequestFilters.search
-    
-    const response = await api.getAdminBuyRequests(params)
-    buyRequests.value = response.data
-  } catch (error) {
-    console.error('获取求购信息列表失败:', error)
-    alert('获取求购信息列表失败')
-  } finally {
-    loading.buy_requests = false
-  }
-}
+
 
 const deleteBuyRequest = async (buyRequest) => {
   const confirmed = confirm(`确定要删除求购信息"${buyRequest.title}"吗？\n\n删除后系统将自动发送通知消息给求购信息发布者，告知求购信息因不合规内容被删除。`)
@@ -2307,4 +2342,28 @@ th {
   margin-top: 20px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
-</style> 
+.tab-content {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-bottom: 20px;
+}
+.users-table,
+.items-table,
+.buy-requests-table,
+.messages-table {
+  max-height: 60vh;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+.users-table table,
+.items-table table,
+.buy-requests-table table,
+.messages-table table {
+  min-width: 900px;
+}
+@media (max-width: 768px) {
+  .tab-content {
+    max-height: 60vh;
+  }
+}
+</style>

@@ -6,7 +6,7 @@
       <div class="user-area">
         <div v-if="authStore.user" class="user-info">
           <div class="profile-link" @click="goToProfile">
-            <img :src="authStore.user.avatar" alt="用户头像" class="user-avatar">
+            <img :src="authStore.user?.avatar || '/static/images/default_avatar.png'" alt="用户头像" class="user-avatar" @error="handleImageError">
             <span class="user-name">{{ authStore.user.username }}</span>
           </div>
           <button @click="handleLogout" class="logout-btn">退出</button>
@@ -287,43 +287,40 @@ export default {
     sortedProducts() {
       let products = [...this.products];
       
-      // 分离推广商品和普通商品
-      const promotedProducts = products.filter(p => p.is_promoted);
-      const normalProducts = products.filter(p => !p.is_promoted);
+      // 首先按推广商品优先排序
+      products.sort((a, b) => {
+        if (a.is_promoted && !b.is_promoted) return -1;
+        if (!a.is_promoted && b.is_promoted) return 1;
+        return 0;
+      });
       
-      // 推广商品保持原有顺序
-      // 普通商品按照用户选择的排序方式排列
-      let sortedNormalProducts = [...normalProducts];
-      
-      if (this.sortOption !== 'default') {
-        const parseTime = (t) => {
-          if (!t) return 0
-          let date
-          if (typeof t === 'string') {
-            let iso = t.replace(' ', 'T')
-            if (!iso.endsWith('Z')) iso += 'Z'
-            date = new Date(iso)
-          } else {
-            date = new Date(t)
-          }
-          return isNaN(date.getTime()) ? 0 : date.getTime()
-        }
-        
-        switch(this.sortOption) {
-          case 'price_asc':
-            sortedNormalProducts.sort((a, b) => a.price - b.price);
-            break;
-          case 'price_desc':
-            sortedNormalProducts.sort((a, b) => b.price - a.price);
-            break;
-          case 'newest':
-            sortedNormalProducts.sort((a, b) => parseTime(b.created_at) - parseTime(a.created_at));
-            break;
-        }
+      // 只在用户选择了排序时才排序，否则保持现有顺序
+      if (this.sortOption === 'default') {
+        return products
       }
       
-      // 合并推广商品和排序后的普通商品
-      return [...promotedProducts, ...sortedNormalProducts];
+      const parseTime = (t) => {
+        if (!t) return 0
+        let date
+        if (typeof t === 'string') {
+          let iso = t.replace(' ', 'T')
+          if (!iso.endsWith('Z')) iso += 'Z'
+          date = new Date(iso)
+        } else {
+          date = new Date(t)
+        }
+        return isNaN(date.getTime()) ? 0 : date.getTime()
+      }
+      switch(this.sortOption) {
+        case 'price_asc':
+          return products.sort((a, b) => a.price - b.price)
+        case 'price_desc':
+          return products.sort((a, b) => b.price - a.price)
+        case 'newest':
+          return products.sort((a, b) => parseTime(b.created_at) - parseTime(a.created_at))
+        default:
+          return products
+      }
     }
   },
   mounted() {
@@ -386,7 +383,7 @@ export default {
           sold: false // 只获取未售出商品
         };
         
-        // 如果是第一页且没有搜索条件，优先获取推广商品（所有排序方式都适用）
+        // 如果是第一页且没有搜索条件，优先获取推广商品
         if (this.pagination.page === 1 && !q && !this.selectedLocation && !this.selectedCategory) {
           try {
             const promotedResponse = await api.getPromotedItems();
@@ -399,7 +396,7 @@ export default {
               const remainingLimit = this.pagination.limit - promotedItems.length;
               
               if (remainingLimit > 0) {
-                // 获取剩余的商品，使用当前排序方式
+                // 获取剩余的商品
                 const remainingParams = {
                   ...params,
                   limit: remainingLimit,
@@ -415,13 +412,8 @@ export default {
                 this.products = [...promotedItems, ...remainingItems];
                 this.hasMore = remainingItems.length === remainingLimit;
                 this.hasPromotedItems = true;
-                this.loading = false;
-                return;
-              } else {
-                // 如果推广商品已经填满了页面，直接使用推广商品
-                this.products = promotedItems;
-                this.hasMore = false;
-                this.hasPromotedItems = true;
+                // 调试：输出products首位
+                console.log('首页products首位：', this.products[0]);
                 this.loading = false;
                 return;
               }
@@ -520,7 +512,9 @@ export default {
           order_by: 'price_asc',
         };
         const response = await api.getItems(params);
-        this.lowestDeals = response.data || [];
+        this.lowestDeals = (response.data || []).filter(
+          item => item.status === 'online' && !item.sold
+        );
       } catch (e) {
         this.lowestDeals = [];
       }
@@ -613,6 +607,9 @@ export default {
     },
     goToBanner(idx) {
       this.currentBanner = idx;
+    },
+    handleImageError(e) {
+      e.target.src = '/static/images/default_avatar.png';
     },
   }
 }
@@ -1163,8 +1160,8 @@ export default {
 .activity-banner-carousel {
   width: 100%;
   max-width: 1200px;
-  height: 120px;
-  min-height: 120px;
+  aspect-ratio: 5 / 1;
+  min-height: 80px;
   margin: 24px auto;
   overflow: hidden;
   background: transparent;
@@ -1192,7 +1189,7 @@ export default {
 }
 .activity-img {
   width: 100%;
-  height: 120px;
+  height: 100%;
   object-fit: cover;
   display: block;
 }
@@ -1288,5 +1285,27 @@ export default {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 20px;
+}
+
+@media (max-width: 768px) {
+  .activity-banner-carousel {
+    height: 120px;
+    min-height: 80px;
+  }
+  .activity-img {
+    height: 120px;
+    min-height: 80px;
+    width: 100%;
+    object-fit: cover;
+  }
+  .carousel-controls button {
+    font-size: 20px;
+    width: 28px;
+    height: 28px;
+  }
+  .carousel-dots span {
+    width: 8px;
+    height: 8px;
+  }
 }
 </style>

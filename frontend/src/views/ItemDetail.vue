@@ -12,7 +12,7 @@
       
       <div class="detail-content">
         <div class="detail-images">
-          <img :src="mainImage" class="main-image">
+          <img :src="mainImage" class="main-image" @click="handlePreview(mainImage)" style="cursor:zoom-in;">
           <div class="thumbnail-container">
             <img 
               v-for="(img, index) in product.images" 
@@ -20,7 +20,8 @@
               :src="img" 
               class="thumbnail"
               :class="{ active: mainImage === img }"
-              @click="mainImage = img"
+              @click="mainImage = img; handlePreview(img)"
+              style="cursor:zoom-in;"
             >
           </div>
         </div>
@@ -41,7 +42,7 @@
             <h3>卖家信息</h3>
             <div class="seller-card">
               <div class="seller-header">
-                <img :src="seller.avatar" class="seller-avatar" @error="handleAvatarError" @click="goToUserProfile(seller.id)" style="cursor: pointer;">
+                <img :src="seller.avatar || '/static/images/default_avatar.png'" class="seller-avatar" @error="handleAvatarError" @click="goToUserProfile(seller.id)" style="cursor: pointer;">
                 <div class="seller-basic-info">
                   <div class="seller-name" @click="goToUserProfile(seller.id)" style="cursor: pointer;">{{ seller.username }}</div>
                   <div class="seller-stats">
@@ -138,6 +139,7 @@
         />
       </div>
     </div>
+    <ImagePreview :url="previewImgUrl" :visible="showPreview" @close="showPreview=false" />
   </div>
 </template>
 
@@ -147,11 +149,13 @@ import CommentSection from '@/components/CommentSection.vue'
 import api from '@/services/api'
 import { mapState } from 'pinia'
 import { useAuthStore } from '@/store/auth'
+import ImagePreview from '@/components/ImagePreview.vue'
 
 export default {
   components: {
     ProductCard,
-    CommentSection
+    CommentSection,
+    ImagePreview
   },
   props: {
     id: {
@@ -192,6 +196,8 @@ export default {
       isFavorited: false,
       isOwner: false,
       likeLoading: false,
+      previewImgUrl: '',
+      showPreview: false,
     }
   },
   async mounted() {
@@ -426,6 +432,10 @@ export default {
     },
     goToUserProfile(userId) {
       this.$router.push(`/user/${userId}`);
+    },
+    handlePreview(url) {
+      this.previewImgUrl = url
+      this.showPreview = true
     },
   }
 }

@@ -6,7 +6,7 @@
         <div class="avatar-container">
           <!-- 头像上传区域 -->
           <div class="avatar-wrapper" :class="{ 'loading': avatarLoading }">
-            <img :src="user.avatar" class="user-avatar">
+            <img :src="user.avatar || '/static/images/default_avatar.png'" class="user-avatar" @error="handleImageError">
             <div class="avatar-overlay" v-if="avatarLoading">
               <i class="fas fa-spinner fa-spin"></i>
             </div>
@@ -384,8 +384,7 @@ watch(() => authStore.user?.avatar, (newAvatar) => {
 });
 
 const handleImageError = (event) => {
-  console.error('头像加载失败:', event.target.src);
-  event.target.src = 'default_avatar.png';
+  event.target.src = '/static/images/default_avatar.png';
 };
 
 // 头像上传状态

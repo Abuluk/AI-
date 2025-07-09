@@ -4,7 +4,7 @@ import { ref } from 'vue'
 // 创建axios实例
 const api = axios.create({
   baseURL: 'http://8.138.47.159:8000/api/v1',
-  timeout: 30000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json'
   }

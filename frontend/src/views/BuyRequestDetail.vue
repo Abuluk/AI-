@@ -9,7 +9,7 @@
           <div class="meta">
             <span class="budget">预算：¥{{ buyRequest.budget }}</span>
             <span class="user">
-              <img v-if="buyRequest.user && buyRequest.user.avatar_url" :src="buyRequest.user.avatar_url" alt="头像" class="avatar">
+              <img v-if="buyRequest.user && buyRequest.user.avatar_url" :src="buyRequest.user.avatar_url" alt="头像" class="avatar" @error="handleAvatarError">
               {{ buyRequest.user ? buyRequest.user.username : '未知用户' }}
             </span>
           </div>
@@ -24,7 +24,7 @@
         <h3>发布者信息</h3>
         <div class="seller-card" v-if="publisher">
           <div class="seller-header">
-            <img :src="publisher.avatar ? formatAvatar(publisher.avatar) : '/static/images/default_avatar.png'" class="seller-avatar" @error="handleAvatarError">
+            <img :src="publisher && publisher.avatar ? formatAvatar(publisher.avatar) : '/static/images/default_avatar.png'" class="seller-avatar" @error="handleAvatarError">
             <div class="seller-basic-info">
               <div class="seller-name">{{ publisher.username }}</div>
               <div class="seller-stats">

@@ -247,7 +247,7 @@ const formatDateTime = (datetime) => {
 
 const getUserAvatar = (avatar) => {
   if (!avatar || avatar.includes('default')) {
-    return '/vite.svg'; // 默认头像
+    return '/static/images/default_avatar.png';
   }
   // 确保路径正确
   if (avatar.startsWith('http')) {

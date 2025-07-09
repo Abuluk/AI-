@@ -280,6 +280,10 @@ const submitForm = async () => {
     }
   }
 }
+
+const handleImageError = (event) => {
+  event.target.src = '/static/images/default_avatar.png';
+};
 </script>
 
 <style scoped>

@@ -3,9 +3,12 @@
     <!-- NavBar Start: 内容已直接内联 -->
     <header class="navbar-header">
       <div class="navbar">
-        <router-link to="/" class="logo">
-          <i class="fas fa-fish"></i>
-          <span>上电校园二手站</span>
+        <router-link to="/" class="logo new-logo">
+          <div class="logo-x"></div>
+          <div class="logo-title-block">
+            <div class="main-title">校园二手交易平台</div>
+            <div class="sub-title">贴心天使</div>
+          </div>
         </router-link>
         
         <SearchBar :initialQuery="route.query.q" />
@@ -302,5 +305,60 @@ button, .btn {
   min-width: 0 !important;
   max-width: none !important;
   margin: 0 !important;
+}
+
+.new-logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.logo-x {
+  width: 40px;
+  height: 40px;
+  position: relative;
+  flex-shrink: 0;
+}
+.logo-x::before, .logo-x::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 6px;
+  transform: translate(-50%, -50%);
+}
+.logo-x::before {
+  width: 32px;
+  height: 8px;
+  background: linear-gradient(90deg, #8fd14f 0 33%, #2bb3f6 33% 66%, #ffd23f 66% 100%);
+  transform: translate(-50%, -50%) rotate(30deg);
+}
+.logo-x::after {
+  width: 32px;
+  height: 8px;
+  background: linear-gradient(90deg, #ffd23f 0 33%, #a6a6a6 33% 66%, #b0b7e2 66% 100%);
+  transform: translate(-50%, -50%) rotate(-30deg);
+}
+.logo-title-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+.main-title {
+  font-size: 1.2rem;
+  color: #2bb3f6;
+  font-weight: bold;
+  letter-spacing: 1px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.sub-title {
+  font-size: 0.95rem;
+  color: #ffc13b;
+  margin-top: 2px;
+  margin-left: 1px;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 </style>

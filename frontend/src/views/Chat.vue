@@ -59,7 +59,7 @@
               <span>{{ message.title || '系统消息' }}</span>
             </div>
             <div v-else-if="isImageMessage(message.content)" class="message-image">
-              <img :src="getImageUrl(message.content)" style="max-width:180px;max-height:180px;border-radius:8px;" />
+              <img :src="getImageUrl(message.content)" style="max-width:180px;max-height:180px;border-radius:8px;cursor:zoom-in;" @click="handlePreview(getImageUrl(message.content))" />
             </div>
             <div v-else-if="isLizhiEmoji(message.content) || isOnlyEmoji(message.content)" class="message-lizhi">
               <template v-for="part in parseLizhiContent(message.content)" :key="part.key">
@@ -109,6 +109,7 @@
       </div>
     </div>
     <button @click="handleDeleteConversation" class="delete-btn">删除对话</button>
+    <ImagePreview :url="previewImgUrl" :visible="showPreview" @close="showPreview=false" />
   </div>
 </template>
 
@@ -117,6 +118,7 @@ import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
 import api from '@/services/api'
+import ImagePreview from '@/components/ImagePreview.vue'
 
 export default {
   props: {
@@ -133,6 +135,7 @@ export default {
       required: false
     }
   },
+  components: { ImagePreview },
   setup(props) {
     const router = useRouter()
     const authStore = useAuthStore()
@@ -154,6 +157,8 @@ export default {
     const imageInput = ref(null)
     const imageFile = ref(null)
     const imagePreview = ref('')
+    const previewImgUrl = ref('')
+    const showPreview = ref(false)
     const emojiList = [
       '😀','😂','😍','😎','😭','😡','👍','🎉','❤️','🥳','🤔','😅','😏','😳','😱','😴','😇','😜','😋','😢'
     ]
@@ -319,22 +324,16 @@ export default {
     
     const getUserAvatar = (userId) => {
       const user = usersInfo.value[userId];
-      console.log('getUserAvatar user:', user); // 调试用
       if (user && user.avatar) {
-        return resolveUrl(user.avatar);
+        return user.avatar.startsWith('http') ? user.avatar : (user.avatar ? (user.avatar.startsWith('/') ? user.avatar : '/static/images/' + user.avatar.replace(/^.*[\\/]/, '')) : '/static/images/default_avatar.png');
       }
-      // 如果没有头像，返回默认头像
-      return resolveUrl('/static/images/default_avatar.png');
-    }
+      return '/static/images/default_avatar.png';
+    };
     
     const handleAvatarError = (event) => {
-      if (event.target.src.endsWith('/static/images/default_avatar.png')) {
-        event.target.onerror = null;
-        return;
-      }
+      event.target.src = '/static/images/default_avatar.png';
       event.target.onerror = null;
-      event.target.src = 'http://8.138.47.159:8000/static/images/default_avatar.png';
-    }
+    };
     
     const handleDeleteConversation = async () => {
       if (confirm('确定要删除该对话吗？此操作不可恢复！')) {
@@ -377,6 +376,11 @@ export default {
         if (i < arr.length - 1) parts.push({ type: 'lizhi', key: idx++ })
       })
       return parts
+    }
+    
+    function handlePreview(url) {
+      previewImgUrl.value = url
+      showPreview.value = true
     }
     
     onMounted(async () => {
@@ -425,7 +429,10 @@ export default {
       isOnlyEmoji,
       lizhiUrl,
       getImageUrl,
-      parseLizhiContent
+      parseLizhiContent,
+      previewImgUrl,
+      showPreview,
+      handlePreview
     }
   }
 }
