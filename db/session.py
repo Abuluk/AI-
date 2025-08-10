@@ -1,8 +1,9 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from core.config import settings
 
-# MySQL 数据库连接字符串
-SQLALCHEMY_DATABASE_URL = "mysql://root:20030208..@localhost:3306/ershou"
+# 使用配置文件中的数据库连接字符串
+SQLALCHEMY_DATABASE_URL = settings.DATABASE_URL
 
 # 创建数据库引擎，无需传递 check_same_thread（MySQL 不需要）
 engine = create_engine(SQLALCHEMY_DATABASE_URL)

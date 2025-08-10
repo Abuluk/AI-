@@ -1,26 +1,81 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from db.session import get_db
-from core.security import get_current_active_user
+from core.security import get_current_active_user, get_current_user
 from db.models import User
 from db.models import Item
-from schemas.user import UserInDB, UserUpdate
+from schemas.user import UserInDB, UserUpdate, UserPublic, UserIds
 from db.models import Favorite
 from schemas.item import ItemInDB
+from schemas.favorite import FavoriteInDB
 from typing import List, Optional
 from crud.crud_user import (
     get_user,
     update_user,
-    delete_user
+    delete_user,
+    get_users_by_ids
 )
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, EmailStr
+import random, string, time
+import smtplib
+from email.mime.text import MIMEText
 
 router = APIRouter()
 
+# 简单内存验证码存储，生产建议用redis
+reset_codes = {}
+
+class RequestPasswordReset(BaseModel):
+    account: EmailStr
+
+class DoResetPassword(BaseModel):
+    account: EmailStr
+    code: str
+    new_password: str
+
+def send_email_code(to_email, code):
+    # 这里请替换为你自己的邮箱配置
+    smtp_server = 'smtp.qq.com'
+    smtp_port = 465
+    smtp_user = '2720691438@qq.com'
+    smtp_pass = 'zzpvejnmtsvbdghi'
+    msg = MIMEText(f'您的验证码是：{code}，5分钟内有效。', 'plain', 'utf-8')
+    msg['Subject'] = '找回密码验证码'
+    msg['From'] = smtp_user
+    msg['To'] = to_email
+    s = smtplib.SMTP_SSL(smtp_server, smtp_port)
+    s.login(smtp_user, smtp_pass)
+    s.sendmail(smtp_user, [to_email], msg.as_string())
+    s.quit()
+
 @router.get("/me", response_model=UserInDB)
 def read_user_me(
-    current_user: UserInDB = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
 ):
-    return current_user
+    # 计算用户的商品数量
+    items_count = db.query(Item).filter(Item.owner_id == current_user.id).count()
+    
+    # 返回完整的用户信息，包括is_admin字段
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "phone": current_user.phone,
+        "avatar": current_user.avatar,
+        "bio": current_user.bio,
+        "location": current_user.location,
+        "contact": current_user.contact,
+        "created_at": current_user.created_at,
+        "updated_at": current_user.updated_at,
+        "last_login": current_user.last_login,
+        "is_active": current_user.is_active,
+        "is_admin": current_user.is_admin,
+        "followers": current_user.followers,
+        "following": current_user.following,
+        "items_count": items_count
+    }
 
 @router.put("/me", response_model=UserInDB)
 def update_user_me(
@@ -46,7 +101,8 @@ def get_user_stats(
     # 获取用户商品统计
     selling_count = db.query(Item).filter(
         Item.owner_id == user_id,
-        Item.sold == False
+        Item.sold == False,
+        Item.status == "online"
     ).count()
     
     sold_count = db.query(Item).filter(
@@ -66,39 +122,110 @@ def get_user_stats(
     }
 
 # 添加用户商品查询路由
-# users.py
-@router.get("/{user_id}/items", response_model=List[ItemInDB])
+@router.get("/{user_id}/items")
 def get_user_items(
     user_id: int,
     status: Optional[str] = Query("selling", description="商品状态: selling(在售), sold(已售), offline(下架)"),
     skip: int = Query(0, description="跳过记录数"),
     limit: int = Query(10, description="每页记录数"),
+    order_by: str = Query("created_at_desc", description="排序方式: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎)"),
     db: Session = Depends(get_db)
 ):
     """
-    获取指定用户的商品列表，可按状态筛选
+    获取指定用户的商品列表，可按状态筛选和排序，返回分页数据和总数
     """
     # 验证用户存在
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    
     # 根据状态筛选商品
     query = db.query(Item).filter(Item.owner_id == user_id)
-    
     if status == "selling":
-        # 在售商品：未售出且状态为 online
         query = query.filter(Item.sold == False, Item.status == "online")
     elif status == "sold":
-        # 已售商品：已售出
         query = query.filter(Item.sold == True)
     elif status == "offline":
-        # 下架商品：状态为 offline
         query = query.filter(Item.status == "offline")
     else:
-        # 如果是不支持的状态，返回空列表
-        return []
-    
-    # 添加分页
+        return JSONResponse(content={"data": [], "total": 0})
+    # 总数
+    total = query.count()
+    # 排序
+    if order_by == "created_at_desc":
+        query = query.order_by(Item.created_at.desc())
+    elif order_by == "price_asc":
+        query = query.order_by(Item.price.asc())
+    elif order_by == "price_desc":
+        query = query.order_by(Item.price.desc())
+    elif order_by == "views_desc":
+        query = query.order_by(Item.views.desc())
+    else:
+        query = query.order_by(Item.created_at.desc())
+    # 分页
     items = query.offset(skip).limit(limit).all()
-    return items
+    return {"data": items, "total": total}
+
+@router.get("/{user_id}", response_model=UserInDB)
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    """获取指定用户信息"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # 计算用户的商品数量
+    items_count = db.query(Item).filter(Item.owner_id == user_id).count()
+    
+    # 返回用户信息，包含商品数量
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "avatar": user.avatar,
+        "bio": user.bio,
+        "location": user.location,
+        "contact": user.contact,
+        "phone": user.phone,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "last_login": user.last_login,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
+        "followers": user.followers,
+        "following": user.following,
+        "items_count": items_count
+    }
+
+@router.post("/by_ids", response_model=List[UserPublic])
+def get_users_info_by_ids(
+    payload: UserIds,
+    db: Session = Depends(get_db)
+):
+    """
+    根据用户ID列表批量获取用户信息
+    """
+    users = get_users_by_ids(db, user_ids=payload.user_ids)
+    return users
+
+@router.post('/request-password-reset')
+def request_password_reset(data: RequestPasswordReset, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == data.account).first()
+    if not user:
+        raise HTTPException(status_code=404, detail='用户不存在')
+    code = ''.join(random.choices(string.digits, k=6))
+    reset_codes[data.account] = (code, time.time())
+    background_tasks.add_task(send_email_code, data.account, code)
+    return {'msg': '验证码已发送'}
+
+@router.post('/reset-password')
+def reset_password(data: DoResetPassword, db: Session = Depends(get_db)):
+    code_tuple = reset_codes.get(data.account)
+    if not code_tuple or code_tuple[0] != data.code or time.time() - code_tuple[1] > 300:
+        raise HTTPException(status_code=400, detail='验证码错误或已过期')
+    user = db.query(User).filter(User.email == data.account).first()
+    if not user:
+        raise HTTPException(status_code=404, detail='用户不存在')
+    from core.pwd_util import get_password_hash
+    user.hashed_password = get_password_hash(data.new_password)
+    db.commit()
+    reset_codes.pop(data.account, None)
+    return {'msg': '密码重置成功'}

@@ -9,5 +9,11 @@ export default defineConfig({
       // 配置 '@' 指向项目的 src 目录
       '@': path.resolve(__dirname, 'src')  
     }
+  },
+  server: {
+    proxy: {
+      '/api': 'http://8.138.47.159:8000',
+      '/static': 'http://8.138.47.159:8000',
+    }
   }
 })

@@ -1,5 +1,5 @@
 from datetime import timedelta, datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Form
 from sqlalchemy.orm import Session
 from db.session import get_db
 from core.security import (
@@ -46,28 +46,17 @@ def register(
                 detail="手机号已注册"
             )
     
-    # 创建用户
-    hashed_password = get_password_hash(user_in.password)
-    # 注意：UserCreate模型已经包含phone，所以我们直接传递
-    db_user = User(
-        username=user_in.username,
-        email=user_in.email,
-        phone=user_in.phone,
-        hashed_password=hashed_password,
-        avatar=user_in.avatar or "default_avatar.png",
-        is_active=True  # 新注册用户默认激活
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+    # 使用create_user函数创建用户
+    db_user = create_user(db, user_in)
     return db_user
 
 @router.post("/login", response_model=Token)
 def login(
-    login_data: UserLogin,  # 使用自定义的登录模型
+    identifier: str = Form(...),  # 使用Form接收表单数据
+    password: str = Form(...),    # 使用Form接收表单数据
     db: Session = Depends(get_db)
 ):
-    user = authenticate_user(db, login_data.identifier, login_data.password)
+    user = authenticate_user(db, identifier, password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -83,9 +72,12 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # 确定token的sub字段：优先使用username，如果为空则使用邮箱
+    token_subject = user.username if user.username else user.email
+    
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": token_subject}, expires_delta=access_token_expires
     )
     
     # 更新最后登录时间

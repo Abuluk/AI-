@@ -4,172 +4,436 @@
       <router-link to="/messages" class="back-btn">
         <i class="fas fa-arrow-left"></i>
       </router-link>
-      <img :src="currentUser.avatar" class="avatar">
-      <div class="user-info">
-        <div class="username">{{ currentUser.username }}</div>
-        <div class="status">在线</div>
+      <div v-if="chatType === 'user'" class="user-info-header">
+        <img :src="getUserAvatar(otherUserId)" class="product-avatar">
+        <div class="product-info">
+          <div class="product-title">{{ usersInfo[otherUserId]?.username || '用户' }}</div>
+        </div>
+      </div>
+      <div v-else class="product-info-header">
+        <img :src="getItemImage(item?.images)" class="product-avatar" v-if="chatType === 'item'">
+        <img :src="'/static/images/default_avatar.png'" class="product-avatar" v-else>
+        <div class="product-info">
+          <div class="product-title">
+            {{ chatType === 'item' ? (item?.title || '加载中...') : (item?.title || '加载中...') }}
+          </div>
+          <div class="product-price">
+            <template v-if="chatType === 'item'">¥{{ item?.price || 0 }}</template>
+            <template v-else>预算：¥{{ item?.budget || 0 }}</template>
+          </div>
+        </div>
       </div>
       <div class="header-actions">
-        <button class="action-btn">
-          <i class="fas fa-phone-alt"></i>
-        </button>
-        <button class="action-btn">
-          <i class="fas fa-ellipsis-v"></i>
-        </button>
+        <router-link v-if="chatType === 'item'" :to="`/item/${itemId}`" class="action-btn" title="查看商品">
+          <i class="fas fa-external-link-alt"></i>
+        </router-link>
+        <router-link v-else :to="`/buy-request/${itemId}`" class="action-btn" title="查看求购">
+          <i class="fas fa-external-link-alt"></i>
+        </router-link>
       </div>
     </div>
     
     <div class="chat-container card">
-      <div class="chat-messages">
+      <div v-if="loading" class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>加载消息中...</p>
+      </div>
+      
+      <div v-else class="chat-messages" ref="messagesContainer">
         <div 
-          v-for="(message, index) in messages" 
-          :key="index"
+          v-for="message in messages" 
+          :key="message.id"
           class="message"
           :class="{
-            'sent': message.sender === 'me',
-            'received': message.sender === 'other'
+            'sent': message.user_id === currentUserId,
+            'received': message.user_id !== currentUserId,
+            'system': message.is_system
           }"
         >
-          <img v-if="message.sender === 'other'" :src="currentUser.avatar" class="avatar">
-          <div class="message-content">
-            <div class="message-text">{{ message.content }}</div>
-            <div class="message-time">{{ message.time }}</div>
+          <div v-if="!message.is_system" class="message-avatar">
+            <img :src="getUserAvatar(message.user_id)" class="avatar" @error="handleAvatarError">
           </div>
+          <div class="message-content">
+            <div v-if="message.is_system" class="system-message">
+              <i class="fas fa-bullhorn"></i>
+              <span>{{ message.title || '系统消息' }}</span>
+            </div>
+            <div v-else-if="isImageMessage(message.content)" class="message-image">
+              <img :src="getImageUrl(message.content)" style="max-width:180px;max-height:180px;border-radius:8px;cursor:zoom-in;" @click="handlePreview(getImageUrl(message.content))" />
+            </div>
+            <div v-else-if="isLizhiEmoji(message.content) || isOnlyEmoji(message.content)" class="message-lizhi">
+              <template v-for="part in parseLizhiContent(message.content)" :key="part.key">
+                <img v-if="part.type === 'lizhi'" :src="lizhiUrl" alt="荔枝" style="width:32px;vertical-align:middle;" />
+                <span v-else>{{ part.text }}</span>
+              </template>
+            </div>
+            <div v-else class="message-text">{{ message.content }}</div>
+            <div class="message-time">{{ formatDateTime(message.created_at) }}</div>
+          </div>
+        </div>
+        
+        <!-- 空状态 -->
+        <div v-if="messages.length === 0" class="empty-state">
+          <i class="fas fa-comments"></i>
+          <p>暂无消息，开始对话吧！</p>
         </div>
       </div>
       
       <div class="chat-input">
-        <button class="input-btn">
-          <i class="fas fa-plus"></i>
+        <button class="input-btn" @click="showEmojiPicker = !showEmojiPicker">
+          <i class="fas fa-smile"></i>
         </button>
+        <button class="input-btn" @click="triggerImageUpload">
+          <i class="fas fa-image"></i>
+        </button>
+        <input type="file" ref="imageInput" accept="image/*" style="display:none" @change="handleImageChange">
+        <img v-if="imagePreview" :src="imagePreview" class="preview-image" />
         <input 
           type="text" 
           v-model="newMessage" 
           placeholder="输入消息..." 
           @keyup.enter="sendMessage"
+          :disabled="!canSendMessage"
         >
         <button 
           class="input-btn send-btn"
-          :disabled="!newMessage.trim()"
+          :disabled="!canSendMessage || (!newMessage.trim() && !imageFile)"
           @click="sendMessage"
         >
           <i class="fas fa-paper-plane"></i>
         </button>
-      </div>
-    </div>
-    
-    <div class="product-info card">
-      <div class="product-header">
-        <h3>相关商品</h3>
-        <router-link :to="`/item/${product.id}`">查看商品</router-link>
-      </div>
-      <div class="product-details">
-        <img :src="product.image" class="product-image">
-        <div class="product-text">
-          <div class="product-title">{{ product.title }}</div>
-          <div class="product-price">¥{{ product.price }}</div>
+        <div v-if="showEmojiPicker" class="emoji-picker">
+          <span v-for="emoji in emojiList" :key="emoji" class="emoji-item" @click="insertEmoji(emoji)">{{ emoji }}</span>
+          <img :src="lizhiUrl" alt="荔枝" class="emoji-item" style="width:28px;vertical-align:middle;cursor:pointer" @click="insertEmoji('[[lizhi]]')">
         </div>
       </div>
     </div>
+    <button @click="handleDeleteConversation" class="delete-btn">删除对话</button>
+    <ImagePreview :url="previewImgUrl" :visible="showPreview" @close="showPreview=false" />
   </div>
 </template>
 
 <script>
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/store/auth'
+import api from '@/services/api'
+import ImagePreview from '@/components/ImagePreview.vue'
+
 export default {
   props: {
     id: {
       type: [String, Number],
       required: true
+    },
+    other_user_id: {
+      type: [String, Number],
+      required: true
+    },
+    type: {
+      type: String,
+      required: false
     }
   },
-  data() {
-    return {
-      newMessage: '',
-      currentUser: {
-        id: 2,
-        username: '李四',
-        avatar: 'https://randomuser.me/api/portraits/women/44.jpg'
-      },
-      product: {
-        id: 1,
-        title: 'Apple iPhone 13 128GB 蓝色',
-        price: 4299,
-        image: 'https://picsum.photos/300/300?random=1'
-      },
-      messages: [
-        {
-          content: '你好，请问手机还在吗？',
-          time: '10:28',
-          sender: 'other'
-        },
-        {
-          content: '还在的，您感兴趣吗？',
-          time: '10:29',
-          sender: 'me'
-        },
-        {
-          content: '是的，最低多少钱能出？',
-          time: '10:30',
-          sender: 'other'
-        },
-        {
-          content: '最低4200，几乎全新，还有半年保修',
-          time: '10:32',
-          sender: 'me'
-        },
-        {
-          content: '能再便宜点吗？4000可以吗？',
-          time: '10:33',
-          sender: 'other'
-        },
-        {
-          content: '不好意思，这个价格已经是最低了',
-          time: '10:35',
-          sender: 'me'
-        }
-      ]
-    }
-  },
-  methods: {
-    sendMessage() {
-      if (!this.newMessage.trim()) return
-      
-      this.messages.push({
-        content: this.newMessage,
-        time: '刚刚',
-        sender: 'me'
-      })
-      
-      this.newMessage = ''
-      
-      // 模拟回复
-      setTimeout(() => {
-        this.messages.push({
-          content: '那好吧，4200我要了',
-          time: '刚刚',
-          sender: 'other'
-        })
-        
-        // 滚动到底部
-        this.$nextTick(() => {
-          const container = this.$el.querySelector('.chat-messages')
-          container.scrollTop = container.scrollHeight
-        })
-      }, 1000)
-      
-      // 滚动到底部
-      this.$nextTick(() => {
-        const container = this.$el.querySelector('.chat-messages')
-        container.scrollTop = container.scrollHeight
-      })
-    }
-  },
-  mounted() {
-    // 滚动到底部
-    this.$nextTick(() => {
-      const container = this.$el.querySelector('.chat-messages')
-      container.scrollTop = container.scrollHeight
+  components: { ImagePreview },
+  setup(props) {
+    const router = useRouter()
+    const authStore = useAuthStore()
+    const route = useRoute()
+
+    const chatType = computed(() => props.type || route.params.type || 'item')
+    const itemId = computed(() => props.id)
+    const otherUserId = computed(() => props.other_user_id)
+    const currentUserId = computed(() => authStore.user?.id)
+
+    const messages = ref([])
+    const item = ref(null)
+    const usersInfo = ref({})
+    const newMessage = ref('')
+    const loading = ref(false)
+    const sending = ref(false)
+    const messagesContainer = ref(null)
+    const showEmojiPicker = ref(false)
+    const imageInput = ref(null)
+    const imageFile = ref(null)
+    const imagePreview = ref('')
+    const previewImgUrl = ref('')
+    const showPreview = ref(false)
+    const emojiList = [
+      '😀','😂','😍','😎','😭','😡','👍','🎉','❤️','🥳','🤔','😅','😏','😳','😱','😴','😇','😜','😋','😢'
+    ]
+    
+    const canSendMessage = computed(() => {
+      if (chatType.value === 'user') return authStore.isAuthenticated && !sending.value
+      return authStore.isAuthenticated && item.value && !sending.value
     })
+    
+    // 统一图片URL处理
+    const resolveUrl = (path) => {
+      if (!path) {
+        path = '/static/images/default_avatar.png';
+      }
+      if (path.startsWith('http')) {
+        return path;
+      }
+      const baseUrl = 'http://8.138.47.159:8000';
+      const cleanedPath = path.startsWith('/') ? path.substring(1) : path;
+      return `${baseUrl}/${cleanedPath.replace(/\\/g, '/')}`;
+    }
+
+    // 获取商品或求购信息
+    const loadItem = async () => {
+      if (chatType.value === 'item') {
+        try {
+          const response = await api.getItem(itemId.value)
+          item.value = response.data
+        } catch (error) {
+          item.value = null
+        }
+      } else if (chatType.value === 'buy_request') {
+        try {
+          const response = await api.getBuyRequest(itemId.value)
+          item.value = response.data
+        } catch (error) {
+          item.value = null
+        }
+      } else {
+        item.value = null
+      }
+    }
+
+    // 获取对话双方用户信息
+    const loadUsersInfo = async () => {
+      const userIds = [currentUserId.value, otherUserId.value].filter(id => id);
+      if (userIds.length > 0) {
+        try {
+          const res = await api.getUsersByIds(userIds);
+          res.data.forEach(user => {
+            usersInfo.value[user.id] = user;
+          });
+        } catch (e) {
+          console.error('获取用户信息失败', e);
+        }
+      }
+    }
+    
+    const loadMessages = async () => {
+      if (!authStore.isAuthenticated) {
+        router.push('/login')
+        return
+      }
+      loading.value = true
+      try {
+        const response = await api.getConversationMessages({ type: chatType.value, id: itemId.value, other_user_id: otherUserId.value })
+        messages.value = response.data
+        scrollToBottom()
+      } catch (error) {
+        console.error('加载消息失败:', error)
+        messages.value = []
+      } finally {
+        loading.value = false
+      }
+    }
+    
+    const triggerImageUpload = () => {
+      imageInput.value && imageInput.value.click()
+    }
+    const handleImageChange = (e) => {
+      const file = e.target.files[0]
+      if (file) {
+        imageFile.value = file
+        imagePreview.value = URL.createObjectURL(file)
+      }
+    }
+    const insertEmoji = (emoji) => {
+      if (emoji === '[[lizhi]]') {
+        newMessage.value += '[[lizhi]]'
+      } else {
+        newMessage.value += emoji
+      }
+      showEmojiPicker.value = false
+    }
+    const isImageMessage = (content) => {
+      return typeof content === 'string' && (
+        content.startsWith('/static/images/') ||
+        (content.startsWith('http') && (
+          content.endsWith('.jpg') || content.endsWith('.png') || content.endsWith('.jpeg') || content.endsWith('.gif')))
+      )
+    }
+    const isLizhiEmoji = (content) => {
+      return typeof content === 'string' && content.includes('[[lizhi]]')
+    }
+    const isOnlyEmoji = (content) => {
+      // 只包含emoji或空格
+      return typeof content === 'string' && /^[\p{Emoji}\s]+$/u.test(content)
+    }
+    const sendMessage = async () => {
+      if ((!newMessage.value.trim() && !imageFile.value) || !canSendMessage.value) return
+      let messageContent = newMessage.value.trim()
+      if (imageFile.value) {
+        const formData = new FormData()
+        formData.append('file', imageFile.value)
+        const res = await api.uploadChatImage(formData)
+        messageContent = res.data.url
+        imageFile.value = null
+        imagePreview.value = ''
+        imageInput.value.value = ''
+      }
+      newMessage.value = ''
+      sending.value = true
+      try {
+        const response = await api.sendMessage({
+          content: messageContent,
+          other_user_id: otherUserId.value,
+          type: chatType.value,
+          id: itemId.value
+        })
+        messages.value.push(response.data)
+        scrollToBottom()
+      } catch (error) {
+        console.error('发送消息失败:', error)
+        alert('发送失败，请重试')
+        newMessage.value = messageContent
+      } finally {
+        sending.value = false
+      }
+    }
+    
+    const scrollToBottom = () => {
+      nextTick(() => {
+        if (messagesContainer.value) {
+          messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+        }
+      })
+    }
+    
+    const formatDateTime = (timestamp) => {
+      const date = new Date(timestamp)
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      const h = String(date.getHours()).padStart(2, '0');
+      const min = String(date.getMinutes()).padStart(2, '0');
+      return `${y}-${m}-${d} ${h}:${min}`;
+    }
+    
+    const getItemImage = (images) => {
+      if (!images) return '';
+      return resolveUrl(images.split(',')[0]);
+    }
+    
+    const getUserAvatar = (userId) => {
+      const user = usersInfo.value[userId];
+      if (user && user.avatar) {
+        return user.avatar.startsWith('http') ? user.avatar : (user.avatar ? (user.avatar.startsWith('/') ? user.avatar : '/static/images/' + user.avatar.replace(/^.*[\\/]/, '')) : '/static/images/default_avatar.png');
+      }
+      return '/static/images/default_avatar.png';
+    };
+    
+    const handleAvatarError = (event) => {
+      event.target.src = '/static/images/default_avatar.png';
+      event.target.onerror = null;
+    };
+    
+    const handleDeleteConversation = async () => {
+      if (confirm('确定要删除该对话吗？此操作不可恢复！')) {
+        try {
+          await api.deleteConversation({ type: chatType.value, id: itemId.value, other_user_id: otherUserId.value })
+          alert('对话已删除')
+          router.push('/messages')
+        } catch (e) {
+          alert('删除失败，请重试')
+        }
+      }
+    }
+    
+    const lizhiUrl = window.location.origin + '/static/images/lizhi.png'
+    
+    const getImageUrl = (content) => {
+      if (content.startsWith('/static/')) {
+        return window.location.origin + content
+      }
+      return content
+    }
+    
+    const parseLizhiContent = (content) => {
+      // 将内容按[[lizhi]]分割，保留顺序，支持emoji
+      const parts = []
+      let idx = 0
+      const arr = content.split('[[lizhi]]')
+      arr.forEach((txt, i) => {
+        if (txt) {
+          // 拆分emoji和文本，逐字符处理
+          for (const char of Array.from(txt)) {
+            // 判断是否emoji（利用unicode范围）
+            if (/\p{Emoji}/u.test(char)) {
+              parts.push({ type: 'text', text: char, key: idx++ })
+            } else {
+              parts.push({ type: 'text', text: char, key: idx++ })
+            }
+          }
+        }
+        if (i < arr.length - 1) parts.push({ type: 'lizhi', key: idx++ })
+      })
+      return parts
+    }
+    
+    function handlePreview(url) {
+      previewImgUrl.value = url
+      showPreview.value = true
+    }
+    
+    onMounted(async () => {
+      await loadItem();
+      await loadUsersInfo();
+      await loadMessages();
+      
+      // 触发全局未读消息计数更新
+      window.dispatchEvent(new CustomEvent('updateUnreadCount'));
+    })
+    
+    // 监听消息变化，自动滚动到底部
+    watch(messages, () => {
+      scrollToBottom()
+    }, { deep: true })
+    
+    return {
+      itemId,
+      otherUserId,
+      currentUserId,
+      messages,
+      item,
+      newMessage,
+      loading,
+      sending,
+      messagesContainer,
+      showEmojiPicker,
+      canSendMessage,
+      sendMessage,
+      formatDateTime,
+      getItemImage,
+      getUserAvatar,
+      handleAvatarError,
+      usersInfo,
+      handleDeleteConversation,
+      chatType,
+      imageInput,
+      imageFile,
+      imagePreview,
+      emojiList,
+      triggerImageUpload,
+      handleImageChange,
+      insertEmoji,
+      isImageMessage,
+      isLizhiEmoji,
+      isOnlyEmoji,
+      lizhiUrl,
+      getImageUrl,
+      parseLizhiContent,
+      previewImgUrl,
+      showPreview,
+      handlePreview
+    }
   }
 }
 </script>
@@ -264,8 +528,8 @@ export default {
 }
 
 .message.sent .message-content {
-  background-color: var(--primary);
-  color: white;
+  background-color: #fff !important;
+  color: #333;
   border-radius: 18px 18px 0 18px;
 }
 
@@ -361,11 +625,213 @@ export default {
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
 }
 
 .product-price {
   color: var(--danger);
   font-weight: bold;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.loading-spinner {
+  border: 4px solid rgba(0, 0, 0, 0.1);
+  border-top: 4px solid var(--primary);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 10px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.empty-state i {
+  font-size: 2rem;
+  color: var(--text-light);
+  margin-bottom: 10px;
+}
+
+.empty-state p {
+  color: var(--text-light);
+  font-size: 1rem;
+}
+
+.product-info-header {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.product-avatar {
+  width: 45px;
+  height: 45px;
+  border-radius: 8px;
+  object-fit: cover;
+  margin-right: 15px;
+}
+
+.product-info {
+  flex: 1;
+}
+
+.product-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.product-price {
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.message-avatar {
+  margin-right: 10px;
+}
+
+.message-avatar .avatar {
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.system-message {
+  background: rgba(52, 152, 219, 0.1);
+  color: #3498db;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.system-message i {
+  font-size: 0.8rem;
+}
+
+.message.sent {
+  flex-direction: row-reverse;
+}
+
+.message.sent .message-avatar {
+  margin-right: 0;
+  margin-left: 10px;
+}
+
+.message.sent .message-content {
+  align-items: flex-end;
+}
+
+.message.sent .message-text {
+  background: #fff;
+  color: #333;
+}
+
+.message.sent .message-time {
+  text-align: right;
+}
+
+.message.system {
+  justify-content: center;
+  margin: 20px 0;
+}
+
+.message.system .message-content {
+  max-width: 80%;
+  text-align: center;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: var(--danger);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 10px;
+  margin-top: 10px;
+}
+
+.preview-image {
+  max-width: 80px;
+  max-height: 80px;
+  border-radius: 8px;
+  margin: 0 8px;
+  vertical-align: middle;
+}
+
+.emoji-picker {
+  position: absolute;
+  bottom: 60px;
+  left: 20px;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  padding: 8px 12px;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.emoji-item {
+  font-size: 22px;
+  cursor: pointer;
+  margin: 2px;
+}
+
+.user-info-header {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.user-info-header img {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-right: 15px;
+}
+
+.user-info-header .product-info {
+  flex: 1;
+}
+
+.user-info-header .product-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.message.received .message-text {
+  background: #fff;
+  color: #333;
 }
 </style>

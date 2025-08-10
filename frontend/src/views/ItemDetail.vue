@@ -6,13 +6,13 @@
         <div class="product-meta">
           <span>{{ product.location }}</span>
           <span>浏览: {{ product.views }}</span>
-          <span>发布时间: {{ product.createdAt }}</span>
+          <span>发布时间: {{ formatDateTime(product.created_at) }}</span>
         </div>
       </div>
       
       <div class="detail-content">
         <div class="detail-images">
-          <img :src="mainImage" class="main-image">
+          <img :src="mainImage" class="main-image" @click="handlePreview(mainImage)" style="cursor:zoom-in;">
           <div class="thumbnail-container">
             <img 
               v-for="(img, index) in product.images" 
@@ -20,7 +20,8 @@
               :src="img" 
               class="thumbnail"
               :class="{ active: mainImage === img }"
-              @click="mainImage = img"
+              @click="mainImage = img; handlePreview(img)"
+              style="cursor:zoom-in;"
             >
           </div>
         </div>
@@ -32,43 +33,74 @@
             <h3>商品描述</h3>
             <p>{{ product.description }}</p>
           </div>
+          <!-- 新增：商品状态展示 -->
+          <div class="detail-condition" v-if="product.condition">
+            <strong>商品状态：</strong>{{ getConditionText(product.condition) }}
+          </div>
           
           <div class="seller-info">
             <h3>卖家信息</h3>
             <div class="seller-card">
-              <img :src="seller.avatar" class="seller-avatar">
+              <div class="seller-header">
+                <img :src="seller.avatar || '/static/images/default_avatar.png'" class="seller-avatar" @error="handleAvatarError" @click="goToUserProfile(seller.id)" style="cursor: pointer;">
+                <div class="seller-basic-info">
+                  <div class="seller-name" @click="goToUserProfile(seller.id)" style="cursor: pointer;">{{ seller.username }}</div>
+                  <div class="seller-stats">
+                    <span class="stat-item">
+                      <i class="fas fa-box"></i>
+                      {{ seller.items_count || 0 }} 件商品
+                    </span>
+                    <span class="stat-item">
+                      <i class="fas fa-calendar-alt"></i>
+                      {{ formatJoinDate(seller.created_at) }} 加入
+                    </span>
+                  </div>
+                </div>
+                <button class="btn btn-outline" @click="startChat" :disabled="isOwner">
+                  <i class="fas fa-comment"></i> 联系卖家
+                </button>
+              </div>
+              
               <div class="seller-details">
-                <div class="seller-name">{{ seller.username }}</div>
-                <div class="seller-rating">
-                  <i class="fas fa-star"></i>
-                  <span>4.8 (256评价)</span>
+                <div v-if="seller.bio" class="seller-bio">
+                  <h4>个人简介</h4>
+                  <p>{{ seller.bio }}</p>
+                </div>
+                
+                <div class="seller-contact-info">
+                  <div v-if="seller.location" class="contact-item">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <span>所在地：{{ seller.location }}</span>
+                  </div>
+                  <div v-if="seller.contact" class="contact-item">
+                    <i class="fas fa-envelope"></i>
+                    <span>联系方式：{{ seller.contact }}</span>
+                  </div>
+                </div>
+                
+                <div class="seller-activity">
+                  <div class="activity-item">
+                    <i class="fas fa-eye"></i>
+                    <span>最近活跃：{{ formatLastActive(seller.last_login) }}</span>
+                  </div>
                 </div>
               </div>
-              <button class="btn btn-outline" @click="startChat">
-                <i class="fas fa-comment"></i> 联系卖家
-              </button>
             </div>
-          </div>
-          
-          <div class="action-buttons">
-            <button class="btn btn-outline">
-              <i class="fas fa-heart"></i> 收藏
-            </button>
-            <button class="btn btn-primary">
-              <i class="fas fa-shopping-cart"></i> 立即购买
-            </button>
           </div>
         </div>
       </div>
     </div>
     <!-- 操作按钮区域 -->
     <div class="action-buttons">
+      <!-- 点赞按钮 -->
+      <button class="btn btn-outline like-btn" :class="{ liked: product.liked_by_me }" @click="toggleLike" :disabled="likeLoading">
+        <i class="fas fa-thumbs-up"></i> {{ product.liked_by_me ? '已点赞' : '点赞' }} ({{ product.like_count || 0 }})
+      </button>
       <!-- 收藏按钮 -->
       <button class="btn btn-outline" @click="toggleFavorite">
         <i :class="['fas', isFavorited ? 'fa-heart text-danger' : 'fa-heart']"></i> 
             {{ isFavorited ? '已收藏' : '收藏' }}
       </button>
-            
       <!-- 购买按钮（仅显示给非所有者） -->
       <button 
         class="btn btn-primary" 
@@ -77,7 +109,6 @@
           >
             <i class="fas fa-shopping-cart"></i> 立即购买
       </button>
-            
       <!-- 下架按钮（仅显示给所有者） -->
       <button 
         v-if="isOwner && !product.sold && product.status !== 'offline'"
@@ -86,7 +117,6 @@
             >
           <i class="fas fa-ban"></i> 下架商品
       </button>
-            
       <!-- 重新上架按钮（仅显示给所有者） -->
       <button 
         v-if="isOwner && product.status === 'offline'"
@@ -97,8 +127,10 @@
       </button>
     </div>
 
-    <div class="related-products card">
-      <h2>推荐商品</h2>
+    <!-- 评论区 -->
+    <CommentSection :itemId="product.id" :currentUser="user" :isOwner="isOwner" />
+    <div class="related-products">
+      <h2 class="section-title">推荐商品</h2>
       <div class="products-grid">
         <ProductCard 
           v-for="product in relatedProducts" 
@@ -107,18 +139,23 @@
         />
       </div>
     </div>
+    <ImagePreview :url="previewImgUrl" :visible="showPreview" @close="showPreview=false" />
   </div>
 </template>
 
 <script>
 import ProductCard from '@/components/ProductCard.vue'
+import CommentSection from '@/components/CommentSection.vue'
 import api from '@/services/api'
 import { mapState } from 'pinia'
 import { useAuthStore } from '@/store/auth'
+import ImagePreview from '@/components/ImagePreview.vue'
 
 export default {
   components: {
-    ProductCard
+    ProductCard,
+    CommentSection,
+    ImagePreview
   },
   props: {
     id: {
@@ -130,162 +167,276 @@ export default {
     return {
       mainImage: '',
       product: {
-        id: 1,
-        title: 'Apple iPhone 13 128GB 蓝色 国行在保',
-        price: 4299,
-        description: '国行在保，99新，全套包装配件齐全，无任何划痕。购买于2022年10月，还有半年保修期。因换新机转让，支持验机。',
-        location: '北京',
-        views: 129,
-        createdAt: '2023-06-10',
-        images: [
-          'https://picsum.photos/600/600?random=1',
-          'https://picsum.photos/600/600?random=2',
-          'https://picsum.photos/600/600?random=3',
-          'https://picsum.photos/600/600?random=4'
-        ]
+        id: this.id,
+        title: '',
+        price: 0,
+        description: '',
+        location: '',
+        views: 0,
+        createdAt: '',
+        images: [],
+        status: 'online',
+        sold: false,
+        favorited_count: 0,
+        owner_id: null
       },
       seller: {
-        id: 1,
-        username: '张三',
-        avatar: 'https://randomuser.me/api/portraits/men/32.jpg'
+        id: null,
+        username: '',
+        avatar: '',
+        bio: '',
+        location: '',
+        contact: '',
+        phone: '',
+        created_at: '',
+        last_login: '',
+        items_count: 0
       },
-      relatedProducts: [
-        { 
-          id: 7, 
-          title: 'Apple iPhone 12 64GB 黑色', 
-          price: 3299, 
-          image: 'https://picsum.photos/300/300?random=7', 
-          location: '北京', 
-          views: 98 
-        },
-        { 
-          id: 8, 
-          title: 'Apple Watch Series 7 GPS版', 
-          price: 2499, 
-          image: 'https://picsum.photos/300/300?random=8', 
-          location: '上海', 
-          views: 45 
-        },
-        { 
-          id: 9, 
-          title: 'AirPods Pro 第二代', 
-          price: 1499, 
-          image: 'https://picsum.photos/300/300?random=9', 
-          location: '广州', 
-          views: 78 
-        }
-      ]
+      relatedProducts: [],
+      isFavorited: false,
+      isOwner: false,
+      likeLoading: false,
+      previewImgUrl: '',
+      showPreview: false,
     }
   },
-  created() {
-    this.mainImage = this.product.images[0]
-  },
-  methods: {
-    startChat() {
-      this.$router.push({ name: 'Chat', params: { id: this.seller.id } })
-    }
-  },
-
-  computed: {
-  user() {
-    return useAuthStore().user
-  },
-  isOwner() {
-    return this.user && this.user.id === this.product.owner_id
-  }
-},
-  async created() {
+  async mounted() {
     await this.fetchItemData()
+    if (this.user) {
+      this.isOwner = this.user.id === this.product.owner_id
+    }
     this.checkFavoriteStatus()
+  },
+  computed: {
+    user() {
+      return useAuthStore().user
+    },
+    isOwner() {
+      return this.user && this.user.id === this.product.owner_id;
+    }
+  },
+  watch: {
+    async id(newId, oldId) {
+      if (newId && newId !== oldId) {
+        window.scrollTo(0, 0);
+        await this.fetchItemData();
+        if (this.user) {
+          this.isOwner = this.user.id === this.product.owner_id;
+        }
+        this.checkFavoriteStatus();
+      }
+    }
   },
   methods: {
     async fetchItemData() {
       try {
-        // 实际项目中替换为API调用
-        // const response = await api.getItem(this.id)
-        // this.product = response.data
-        
-        // 模拟API调用
-        await new Promise(resolve => setTimeout(resolve, 500))
+        const response = await api.getItem(this.id)
+        this.product = response.data
+        this.isOwner = this.user && this.user.id === this.product.owner_id
+
+        // 只做简单图片路径处理
+        if (this.product.images) {
+          const images = this.product.images.split(',')
+          this.product.images = images.map(img => {
+            if (!img) return '/static/images/default_product.png'
+            let path = img.trim().replace(/\\/g, '/')
+            if (!path.startsWith('/')) {
+              path = '/' + path
+            }
+            return path
+          })
+        } else {
+          this.product.images = ['/static/images/default_product.png']
+        }
+
+        this.mainImage = this.product.images[0]
+
+        // 卖家头像
+        if (this.product.owner_id) {
+          try {
+            const sellerResponse = await api.getUser(this.product.owner_id)
+            this.seller = sellerResponse.data;
+            if (this.seller.avatar && !this.seller.avatar.startsWith('/')) {
+              this.seller.avatar = '/static/images/' + this.seller.avatar.replace(/^.*[\\/]/, '');
+            }
+            if (!this.seller.avatar) {
+              this.seller.avatar = '/static/images/default_avatar.png';
+            }
+          } catch (error) {
+            this.seller = { ...this.seller, username: '未知用户', avatar: '/static/images/default_avatar.png' };
+          }
+        }
         
         // 更新浏览量
-        // await api.updateItem(this.id, { views: this.product.views + 1 })
-        this.product.views += 1
+        try {
+          await api.updateItemViews(this.id)
+          this.product.views += 1
+        } catch (error) {
+          console.warn('更新浏览量失败:', error)
+        }
         
-        // 获取卖家信息
-        // const sellerResponse = await api.getUser(this.product.owner_id)
-        // this.seller = sellerResponse.data
+        await this.fetchRelatedProducts()
+        
       } catch (error) {
-        console.error('获取商品数据失败:', error)
+        console.error('获取商品详情失败:', error)
       }
     },
     async checkFavoriteStatus() {
-      if (!this.user) return
+      if (!this.user) return;
       try {
-        // 实际项目中替换为API调用
-        // const response = await api.checkFavorite(this.user.id, this.id)
-        // this.isFavorited = response.data.isFavorited
-        
-        // 模拟检查收藏状态
-        this.isFavorited = Math.random() > 0.5
+        const response = await api.checkFavorite(this.user.id, this.id);
+        this.isFavorited = response.data.is_favorited;
       } catch (error) {
-        console.error('检查收藏状态失败:', error)
+        console.error('检查收藏状态失败:', error);
       }
     },
     async toggleFavorite() {
       if (!this.user) {
-        this.$router.push('/login')
-        return
+        return;
       }
-      
       try {
         if (this.isFavorited) {
-          // await api.removeFavorite(this.user.id, this.id)
-          console.log(`移除收藏: 用户 ${this.user.id}, 商品 ${this.id}`)
+          await api.removeFavorite(this.user.id, this.id);
+          this.product.favorited_count = Math.max(0, (this.product.favorited_count || 1) - 1);
         } else {
-          // await api.addFavorite(this.user.id, this.id)
-          console.log(`添加收藏: 用户 ${this.user.id}, 商品 ${this.id}`)
+          await api.addFavorite(this.user.id, this.id);
+          this.product.favorited_count = (this.product.favorited_count || 0) + 1;
         }
-        this.isFavorited = !this.isFavorited
+        this.isFavorited = !this.isFavorited;
       } catch (error) {
-        console.error('收藏操作失败:', error)
+        console.error('切换收藏状态失败:', error);
       }
     },
     async offlineItem() {
-      if (confirm('确定要下架该商品吗？下架后其他用户将无法看到此商品。')) {
-        try {
-          // 实际项目中调用API
-          // await api.updateItemStatus(this.product.id, 'offline')
-          
-          // 更新本地状态
-          this.product.status = 'offline'
-          alert('商品已成功下架')
-        } catch (error) {
-          console.error('下架商品失败:', error)
-          alert('操作失败，请重试')
-        }
+      try {
+        await api.updateItemStatus(this.id, 'offline');
+        this.product.status = 'offline';
+      } catch (error) {
+        console.error('下架商品失败:', error);
       }
     },
     async onlineItem() {
       try {
-        // 实际项目中调用API
-        // await api.updateItemStatus(this.product.id, 'online')
-        
-        // 更新本地状态
-        this.product.status = 'online'
-        alert('商品已重新上架')
+        await api.updateItemStatus(this.id, 'online');
+        this.product.status = 'online';
       } catch (error) {
-        console.error('上架商品失败:', error)
-        alert('操作失败，请重试')
+        console.error('上架商品失败:', error);
       }
     },
-    purchaseItem() {
-      // 购买商品逻辑
-      alert('购买流程开始...')
+    async purchaseItem() {
+      this.$message && this.$message.info
+        ? this.$message.info('请联系卖家购买')
+        : alert('请联系卖家购买');
     },
     startChat() {
-      this.$router.push({ name: 'Chat', params: { id: this.seller.id } })
-    }
+      if (this.isOwner) {
+        return;
+      }
+      if (!this.user) {
+        this.$router.push('/login');
+        return;
+      }
+      this.$router.push(`/chat/${this.product.id}/${this.product.owner_id}`);
+    },
+    formatTime(time) {
+      if (!time) return '未知';
+      return new Date(time).toLocaleDateString();
+    },
+    formatJoinDate(time) {
+      if (!time) return '未知';
+      return new Date(time).toLocaleDateString();
+    },
+    formatLastActive(time) {
+      if (!time) return '未知';
+      const lastLogin = new Date(time);
+      const now = new Date();
+      const diff = Math.floor((now - lastLogin) / (1000 * 60 * 60 * 24));
+      if (diff === 0) return '今天';
+      if (diff < 30) return `${diff}天前`;
+      return '很久以前';
+    },
+    handleAvatarError(event) {
+      event.target.src = '/static/images/default_avatar.png';
+      event.target.onerror = null;
+    },
+    async fetchRelatedProducts() {
+      try {
+        // 优先获取管理员设置的推荐商品
+        const recommendedResponse = await api.getRecommendedItems(this.id, 4)
+        if (recommendedResponse.data && recommendedResponse.data.length > 0) {
+          this.relatedProducts = recommendedResponse.data
+        } else {
+          // 如果没有设置推荐商品，使用默认的推荐逻辑
+          const response = await api.getItems({ limit: 5, order_by: 'created_at_desc' });
+          this.relatedProducts = response.data.filter(p => p.id !== this.product.id).slice(0, 4);
+        }
+      } catch (error) {
+        console.error('获取推荐商品失败:', error);
+        // 如果获取推荐商品失败，使用默认逻辑
+        try {
+          const response = await api.getItems({ limit: 5, order_by: 'created_at_desc' });
+          this.relatedProducts = response.data.filter(p => p.id !== this.product.id).slice(0, 4);
+        } catch (fallbackError) {
+          console.error('获取默认推荐商品也失败:', fallbackError);
+        }
+      }
+    },
+    formatDateTime(datetime) {
+      const date = new Date(datetime);
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      const h = String(date.getHours()).padStart(2, '0');
+      const min = String(date.getMinutes()).padStart(2, '0');
+      return `${y}-${m}-${d} ${h}:${min}`;
+    },
+    getConditionText(condition) {
+      const conditionMap = {
+        'new': '全新',
+        'like_new': '几乎全新',
+        'good': '轻微使用痕迹',
+        'fair': '使用痕迹明显'
+      };
+      return conditionMap[condition] || condition || '未知状态';
+    },
+    async toggleLike() {
+      if (!this.user) {
+        console.log('用户未登录，无法点赞');
+        return;
+      }
+      
+      console.log('开始点赞操作，商品ID:', this.product.id, '当前点赞状态:', this.product.liked_by_me);
+      this.likeLoading = true;
+      
+      try {
+        if (!this.product.liked_by_me) {
+          console.log('发送点赞请求...');
+          const res = await api.likeItem(this.product.id);
+          console.log('点赞成功，返回数据:', res.data);
+          this.product.like_count = res.data.like_count;
+          this.product.liked_by_me = true;
+        } else {
+          console.log('发送取消点赞请求...');
+          const res = await api.unlikeItem(this.product.id);
+          console.log('取消点赞成功，返回数据:', res.data);
+          this.product.like_count = res.data.like_count;
+          this.product.liked_by_me = false;
+        }
+      } catch (error) {
+        console.error('点赞操作失败:', error);
+        // 可以在这里添加用户提示
+        alert('点赞操作失败，请稍后重试');
+      } finally {
+        this.likeLoading = false;
+      }
+    },
+    goToUserProfile(userId) {
+      this.$router.push(`/user/${userId}`);
+    },
+    handlePreview(url) {
+      this.previewImgUrl = url
+      this.showPreview = true
+    },
   }
 }
 </script>
@@ -379,39 +530,110 @@ export default {
 
 .seller-card {
   display: flex;
-  align-items: center;
-  padding: 15px;
-  background-color: var(--secondary);
+  flex-direction: column;
+  padding: 20px;
+  border: 1px solid var(--border);
   border-radius: 8px;
+  background: #f9f9f9;
   margin-bottom: 20px;
 }
 
-.seller-avatar {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  object-fit: cover;
-  margin-right: 15px;
+.seller-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border);
 }
 
-.seller-details {
+.seller-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border);
+}
+
+.seller-basic-info {
   flex: 1;
 }
 
 .seller-name {
+  font-size: 1.2rem;
   font-weight: 600;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
+  color: var(--text-dark);
 }
 
-.seller-rating {
+.seller-stats {
   color: var(--text-light);
+  display: flex;
+  gap: 15px;
+  font-size: 0.9rem;
+}
+
+.stat-item {
   display: flex;
   align-items: center;
   gap: 5px;
 }
 
-.seller-rating i {
-  color: #ffc107;
+.stat-item i {
+  color: var(--primary);
+}
+
+.seller-details {
+  width: 100%;
+}
+
+.seller-bio {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.seller-bio h4 {
+  margin-bottom: 10px;
+  font-size: 1.1rem;
+  color: var(--text-dark);
+}
+
+.seller-bio p {
+  color: var(--text-light);
+  line-height: 1.5;
+}
+
+.seller-contact-info {
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  color: var(--text-light);
+}
+
+.contact-item i {
+  margin-right: 8px;
+  width: 16px;
+  color: var(--primary);
+}
+
+.seller-activity {
+  text-align: left;
+}
+
+.activity-item {
+  color: var(--text-light);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-item i {
+  color: var(--primary);
 }
 
 .action-buttons {
@@ -420,30 +642,64 @@ export default {
   margin-top: 20px;
 }
 
-.related-products h2 {
-  margin-bottom: 15px;
+.related-products {
+  margin-top: 32px;
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
 }
-
-.related-products .products-grid {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+.related-products .section-title {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: #223;
 }
-
+.products-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+}
 @media (max-width: 768px) {
   .detail-content {
     flex-direction: column;
-  }
-  
-  .detail-images, .detail-info {
-    width: 100%;
-    padding: 0;
   }
   
   .detail-images {
     margin-bottom: 20px;
   }
   
+  .main-image {
+    height: 300px;
+  }
+  
+  .thumbnail-container {
+    justify-content: center;
+  }
+  
+  .seller-header {
+    flex-direction: column;
+    text-align: center;
+    gap: 10px;
+  }
+  
+  .seller-stats {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  
   .action-buttons {
     flex-direction: column;
+    gap: 10px;
+  }
+  
+  .action-buttons .btn {
+    width: 100%;
+  }
+  
+  .products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 15px;
   }
 }
 /* 状态标签样式 */
@@ -469,5 +725,17 @@ export default {
 .status-sold {
   background-color: #fff3cd;
   color: #856404;
+}
+
+.like-btn {
+  margin-right: 10px;
+  color: #888;
+  border-color: #e67e22;
+  transition: color 0.2s, border-color 0.2s;
+}
+.like-btn.liked {
+  color: #e67e22;
+  border-color: #e67e22;
+  font-weight: bold;
 }
 </style>

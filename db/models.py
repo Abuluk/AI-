@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Text, Boolean, DateTime, ForeignKey, func, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, Text, Boolean, DateTime, ForeignKey, func, UniqueConstraint, DECIMAL
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from db.base import Base
@@ -18,6 +18,7 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)  # 添加管理员字段
     last_login = Column(DateTime, nullable=True)
     followers = Column(Integer, default=0)
     following = Column(Integer, default=0)
@@ -26,6 +27,7 @@ class User(Base):
     items = relationship("Item", back_populates="owner")
     messages = relationship("Message", back_populates="user")
     favorites = relationship("Favorite", back_populates="user")
+    buy_requests = relationship("BuyRequest", back_populates="user")  # 新增
 
 class Item(Base):
     __tablename__ = "items"
@@ -40,10 +42,11 @@ class Item(Base):
     location = Column(String(100))
     images = Column(String(500))  # 存储图片路径，多个用逗号分隔
     owner_id = Column(Integer, ForeignKey("users.id"))
-    created_at = Column(DateTime, server_default=func.now())  # 使用数据库函数
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
     sold = Column(Boolean, default=False)
     views = Column(Integer, default=0)  # 添加浏览量字段
     favorited_count = Column(Integer, default=0)  # 添加收藏计数
+    like_count = Column(Integer, default=0)  # 新增点赞数
     
     favorited_by = relationship("Favorite", back_populates="item")
     owner = relationship("User", back_populates="items")
@@ -55,11 +58,20 @@ class Message(Base):
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    item_id = Column(Integer, ForeignKey("items.id"), nullable=False)
+    item_id = Column(Integer, ForeignKey("items.id"), nullable=True)
+    buy_request_id = Column(Integer, ForeignKey("buy_requests.id"), nullable=True)  # 新增
+    target_user = Column(String(50), nullable=True)  # 新增：目标用户ID（用于用户私聊）
     created_at = Column(DateTime, server_default=func.now())  # 使用数据库函数
+    is_read = Column(Boolean, default=False)  # 添加已读状态
+    is_system = Column(Boolean, default=False)  # 添加系统消息标识
+    title = Column(String(200), nullable=True)  # 系统消息标题
+    target_users = Column(String(500), nullable=True)  # 目标用户（系统消息）
+    deleted_by_sender = Column(Boolean, default=False)  # 发送方删除
+    deleted_by_receiver = Column(Boolean, default=False)  # 接收方删除
     
     user = relationship("User", back_populates="messages")
     item = relationship("Item", back_populates="messages")
+    buy_request = relationship("BuyRequest", back_populates="messages")
 
 # 在Favorite模型中添加唯一约束
 class Favorite(Base):
@@ -76,3 +88,92 @@ class Favorite(Base):
     
     user = relationship("User", back_populates="favorites")
     item = relationship("Item", back_populates="favorited_by")
+
+class BuyRequest(Base):
+    __tablename__ = 'buy_requests'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    title = Column(String(100), nullable=False)
+    description = Column(Text)
+    budget = Column(DECIMAL(10, 2))
+    images = Column(String(500))  # 新增，存储图片路径，多个用逗号分隔
+    created_at = Column(DateTime, server_default=func.now())
+    like_count = Column(Integer, default=0)  # 新增点赞数
+
+    user = relationship('User', back_populates='buy_requests')
+    messages = relationship("Message", back_populates="buy_request")
+
+class SiteConfig(Base):
+    __tablename__ = 'site_config'
+    id = Column(Integer, primary_key=True)
+    key = Column(String(100), unique=True, nullable=False)
+    value = Column(Text, nullable=True)
+
+class Comment(Base):
+    __tablename__ = 'comments'
+    id = Column(Integer, primary_key=True, index=True)
+    content = Column(String(500), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    item_id = Column(Integer, ForeignKey('items.id'), nullable=True)
+    buy_request_id = Column(Integer, ForeignKey('buy_requests.id'), nullable=True)
+    parent_id = Column(Integer, ForeignKey('comments.id'), nullable=True)
+    reply_to_user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    like_count = Column(Integer, default=0)  # 新增点赞数
+
+    user = relationship('User', foreign_keys=[user_id], lazy='joined')
+    item = relationship('Item', foreign_keys=[item_id])
+    buy_request = relationship('BuyRequest', foreign_keys=[buy_request_id])
+    parent = relationship('Comment', remote_side=[id], backref='children')
+    reply_to_user = relationship('User', foreign_keys=[reply_to_user_id])
+
+class CommentLike(Base):
+    __tablename__ = 'comment_likes'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    comment_id = Column(Integer, ForeignKey('comments.id'))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint('user_id', 'comment_id', name='_user_comment_uc'),)
+
+class ItemLike(Base):
+    __tablename__ = 'item_likes'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    item_id = Column(Integer, ForeignKey('items.id'))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint('user_id', 'item_id', name='_user_item_uc'),)
+
+class BuyRequestLike(Base):
+    __tablename__ = 'buy_request_likes'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    buy_request_id = Column(Integer, ForeignKey('buy_requests.id'))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint('user_id', 'buy_request_id', name='_user_buyreq_uc'),)
+
+class Friend(Base):
+    __tablename__ = 'friends'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    friend_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint('user_id', 'friend_id', name='uq_user_friend'),)
+
+class Blacklist(Base):
+    __tablename__ = 'blacklist'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    blocked_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint('user_id', 'blocked_user_id', name='uq_user_blocked'),)
+
+class Feedback(Base):
+    __tablename__ = 'feedbacks'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    content = Column(String(1000), nullable=False)
+    status = Column(String(20), default='pending')  # pending/solved
+    created_at = Column(DateTime, default=datetime.utcnow)
+    solved_at = Column(DateTime, nullable=True)
+
+    user = relationship('User', foreign_keys=[user_id])

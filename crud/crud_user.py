@@ -3,9 +3,18 @@ from db.models import User
 from schemas.user import UserCreate, UserUpdate
 from core.pwd_util import get_password_hash
 from datetime import datetime
+from typing import List
 
 def get_user(db: Session, user_id: int):
     return db.query(User).filter(User.id == user_id).first()
+
+def get_users_by_ids(db: Session, user_ids: List[int]):
+    """
+    根据用户ID列表批量获取用户
+    """
+    if not user_ids:
+        return []
+    return db.query(User).filter(User.id.in_(user_ids)).all()
 
 def get_user_by_username(db: Session, username: str):
     return db.query(User).filter(User.username == username).first()
@@ -23,7 +32,7 @@ def create_user(db: Session, user: UserCreate):
         email=user.email,
         phone=user.phone,  # 添加手机号
         hashed_password=hashed_password,
-        avatar=user.avatar or "default_avatar.png",
+        avatar=getattr(user, "avatar", None) or "default_avatar.png",
         is_active=True  # 默认激活用户
     )
     db.add(db_user)
