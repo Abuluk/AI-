@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from schemas.item import ItemInDB
 
 class FavoriteBase(BaseModel):
@@ -19,6 +19,15 @@ class FavoriteInDB(FavoriteBase):
 
 class FavoriteWithItem(FavoriteInDB):
     item: ItemInDB
+    
+    class Config:
+        from_attributes = True
+
+class FavoriteListResponse(BaseModel):
+    favorites: List[FavoriteWithItem]
+    total: int
+    page: int
+    size: int
     
     class Config:
         from_attributes = True

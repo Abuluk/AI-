@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 from db.session import get_db
 from crud import crud_item
 from schemas.item import ItemCreate, ItemInDB, SiteConfigSchema
-from core.security import get_current_user, get_current_active_user
+from core.security import get_current_user, get_current_active_user, get_current_user_optional
 from db.models import User, SiteConfig
 import os
 import uuid
@@ -15,6 +15,7 @@ import json
 from fastapi.encoders import jsonable_encoder
 from crud.crud_item import like_item, unlike_item
 from db.models import ItemLike
+from config import get_image_base_url, get_full_image_url
 
 router = APIRouter()
 
@@ -124,10 +125,12 @@ def get_promoted_items(db: Session = Depends(get_db)):
                     images = item.images.split(',')
                     processed_images = []
                     for img in images:
-                        if img.strip():
-                            if not img.startswith('/'):
-                                img = '/' + img
-                            processed_images.append(img)
+                        img = img.strip()
+                        if img:
+                            # 使用统一的图片URL处理函数
+                            full_url = get_full_image_url(img)
+                            if full_url:
+                                processed_images.append(full_url)
                     item.images = ','.join(processed_images)
                 
                 result.append(item)
@@ -144,32 +147,248 @@ def get_activity_banner(db: Session = Depends(get_db)):
         return SiteConfigSchema(key="activity_banner", value=None)
     return SiteConfigSchema(key="activity_banner", value=json.loads(config.value))
 
+@router.get("/with_promoted")
+def get_items_with_promoted(
+    page: int = Query(1, ge=1, description="页码"),
+    size: int = Query(10, ge=1, le=100, description="每页数量"),
+    category: Optional[str] = Query(None, description="商品分类"),
+    search: Optional[str] = Query(None, description="搜索关键词"),
+    location: Optional[str] = Query(None, description="地区过滤"),
+    order_by: Optional[str] = Query("created_at_desc", description="排序方式"),
+    db: Session = Depends(get_db)
+):
+    """获取商品列表，支持间隔显示推广商品"""
+    # 获取推广商品配置
+    promoted_config = db.query(SiteConfig).filter(SiteConfig.key == "promoted_items").first()
+    interval_config = db.query(SiteConfig).filter(SiteConfig.key == "promoted_interval").first()
+    
+    promoted_items = []
+    interval = 5  # 默认间隔
+    
+    if interval_config and interval_config.value:
+        try:
+            interval = int(interval_config.value)
+        except ValueError:
+            interval = 5
+    
+    if promoted_config and promoted_config.value:
+        try:
+            promoted_ids = json.loads(promoted_config.value)
+            if promoted_ids:
+                # 获取推广商品详情
+                promoted_items = db.query(Item).filter(
+                    Item.id.in_(promoted_ids),
+                    Item.status == "online",
+                    Item.sold == False
+                ).all()
+                
+                # 处理推广商品图片路径
+                for item in promoted_items:
+                    if item.images:
+                        images = item.images.split(',')
+                        processed_images = []
+                        for img in images:
+                            img = img.strip()
+                            if img:
+                                full_url = get_full_image_url(img)
+                                if full_url:
+                                    processed_images.append(full_url)
+                        item.images = ','.join(processed_images)
+        except Exception as e:
+            print(f"获取推广商品配置失败: {e}")
+    
+    # 构建查询条件
+    query = db.query(Item).filter(Item.status == "online", Item.sold == False)
+    
+    # 分类过滤
+    if category is not None and category != "":
+        try:
+            category_id = int(category)
+            query = query.filter(Item.category == category_id)
+        except ValueError:
+            pass
+    
+    # 搜索过滤
+    if search is not None and search != "":
+        query = query.filter(
+            or_(
+                Item.title.ilike(f"%{search}%"),
+                Item.description.ilike(f"%{search}%")
+            )
+        )
+    
+    # 地区过滤
+    if location is not None and location != "":
+        query = query.filter(Item.location.ilike(f"%{location}%"))
+    
+    # 排序
+    if order_by == "created_at_desc":
+        query = query.order_by(Item.created_at.desc())
+    elif order_by == "price_asc":
+        query = query.order_by(Item.price.asc())
+    elif order_by == "price_desc":
+        query = query.order_by(Item.price.desc())
+    elif order_by == "views_desc":
+        query = query.order_by(Item.views.desc())
+    else:
+        query = query.order_by(Item.created_at.desc())
+    
+    # 获取普通商品，排除推广商品
+    skip = (page - 1) * size
+    if promoted_items:
+        promoted_ids = [item.id for item in promoted_items]
+        query = query.filter(~Item.id.in_(promoted_ids))
+    
+    normal_items = query.offset(skip).limit(size * 2).all()  # 获取更多商品以便插入推广商品
+    
+    # 处理普通商品图片路径
+    for item in normal_items:
+        if item.images:
+            images = item.images.split(',')
+            processed_images = []
+            for img in images:
+                img = img.strip()
+                if img:
+                    full_url = get_full_image_url(img)
+                    if full_url:
+                        processed_images.append(full_url)
+            item.images = ','.join(processed_images)
+    
+    # 插入推广商品
+    result = []
+    promoted_index = 0
+    normal_index = 0
+    items_added = 0
+    
+    # 第一个位置总是推广商品（如果有的话）
+    if promoted_items and promoted_index < len(promoted_items):
+        promoted_item = promoted_items[promoted_index]
+        promoted_item.is_promoted = True
+        result.append(promoted_item)
+        promoted_index += 1
+        items_added += 1
+    
+    # 按间隔插入推广商品
+    while items_added < size and normal_index < len(normal_items):
+        # 添加普通商品
+        result.append(normal_items[normal_index])
+        normal_index += 1
+        items_added += 1
+        
+        # 检查是否需要插入推广商品（每隔interval个普通商品后插入一个推广商品）
+        if (items_added % interval == 0 and promoted_items and promoted_index < len(promoted_items)):
+            promoted_item = promoted_items[promoted_index % len(promoted_items)]
+            # 创建新的对象避免重复引用
+            import copy
+            new_promoted_item = copy.deepcopy(promoted_item)
+            new_promoted_item.is_promoted = True
+            result.append(new_promoted_item)
+            promoted_index += 1
+            items_added += 1
+            
+            # 如果已经达到目标数量，跳出循环
+            if items_added >= size:
+                break
+    
+    # 如果还有剩余位置，继续添加普通商品
+    while items_added < size and normal_index < len(normal_items):
+        result.append(normal_items[normal_index])
+        normal_index += 1
+        items_added += 1
+    
+    # 限制返回数量
+    return result[:size]
+
 # 公共端点 - 获取所有商品（无需认证）
 @router.get("", response_model=List[ItemInDB])
 def get_all_items(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=100),
-    order_by: str = Query("created_at_desc", description="排序方式: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎)"),
-    category: Optional[int] = Query(None, description="商品分类ID"),
-    exclude_promoted: Optional[bool] = Query(False, description="是否排除推广商品"),
+    # 支持小程序前端的参数格式
+    page: Optional[int] = Query(None, ge=1, description="页码（小程序前端）"),
+    size: Optional[int] = Query(None, ge=1, le=100, description="每页数量（小程序前端）"),
+    sort_by: Optional[str] = Query(None, description="排序方式（小程序前端）: created_at(最新发布), price(价格), views(最受欢迎)"),
+    category: Optional[str] = Query(None, description="商品分类（小程序前端）"),
+    search: Optional[str] = Query(None, description="搜索关键词（小程序前端）"),
+    location: Optional[str] = Query(None, description="地区过滤（小程序前端）"),
+    # 支持web前端的原有参数格式
+    skip: Optional[int] = Query(None, ge=0, description="跳过数量（web前端）"),
+    limit: Optional[int] = Query(None, ge=1, le=100, description="限制数量（web前端）"),
+    order_by: Optional[str] = Query(None, description="排序方式（web前端）: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎)"),
+    exclude_promoted: Optional[bool] = Query(None, description="是否排除推广商品"),
     status: Optional[str] = Query(None, description="商品状态: online, offline"),
     sold: Optional[bool] = Query(None, description="是否已售出"),
     db: Session = Depends(get_db)
 ):
-    """获取所有商品列表，支持分页、排序和分类过滤"""
+    """获取所有商品列表，支持分页、排序和分类过滤
+    
+    支持两种参数格式：
+    1. 小程序前端：page, size, sort_by, category, search
+    2. web前端：skip, limit, order_by, exclude_promoted, status, sold
+    """
+    # 参数转换：优先使用web前端参数，如果没有则转换小程序前端参数
+    if skip is None and page is not None:
+        skip = (page - 1) * (size or 10)
+    if limit is None and size is not None:
+        limit = size
+    
+    # 设置默认值
+    if skip is None:
+        skip = 0
+    if limit is None:
+        limit = 100
+    
+    # 排序参数转换：优先使用web前端参数，如果没有则转换小程序前端参数
+    if order_by is None and sort_by is not None:
+        if sort_by == "created_at":
+            order_by = "created_at_desc"
+        elif sort_by == "price":
+            order_by = "price_asc"
+        elif sort_by == "views":
+            order_by = "views_desc"
+        else:
+            order_by = "created_at_desc"
+    
+    # 设置默认排序
+    if order_by is None:
+        order_by = "created_at_desc"
+    
     query = db.query(Item)
     
     # 状态过滤
     if status is not None:
         query = query.filter(Item.status == status)
+    else:
+        # 默认只显示在线商品
+        query = query.filter(Item.status == "online")
     
     # 售出状态过滤
     if sold is not None:
         query = query.filter(Item.sold == sold)
+    else:
+        # 默认只显示未售出商品
+        query = query.filter(Item.sold == False)
     
     # 分类过滤
-    if category is not None:
-        query = query.filter(Item.category == category)
+    if category is not None and category != "":
+        try:
+            category_id = int(category)
+            query = query.filter(Item.category == category_id)
+        except ValueError:
+            # 如果category不是数字，忽略此过滤条件
+            pass
+    
+    # 搜索过滤
+    if search is not None and search != "":
+        query = query.filter(
+            or_(
+                Item.title.ilike(f"%{search}%"),
+                Item.description.ilike(f"%{search}%")
+            )
+        )
+    
+    # 地区过滤
+    if location is not None and location != "":
+        # 使用模糊匹配，忽略大小写
+        query = query.filter(Item.location.ilike(f"%{location}%"))
     
     # 排除推广商品
     if exclude_promoted:
@@ -204,11 +423,12 @@ def get_all_items(
             images = item.images.split(',')
             processed_images = []
             for img in images:
-                if img.strip():
-                    # 确保路径格式正确
-                    if not img.startswith('/'):
-                        img = '/' + img
-                    processed_images.append(img)
+                img = img.strip()
+                if img:
+                    # 使用统一的图片URL处理函数
+                    full_url = get_full_image_url(img)
+                    if full_url:
+                        processed_images.append(full_url)
             item.images = ','.join(processed_images)
     
     return items
@@ -263,17 +483,59 @@ def search_items(
 
 # 公共端点 - 获取单个商品（无需认证）
 @router.get("/{item_id}", response_model=ItemInDB)
-def read_item(item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    item = db.query(Item).filter(Item.id == item_id).first()
+def read_item(item_id: int, db: Session = Depends(get_db), current_user: Optional[User] = Depends(get_current_user_optional)):
+    item = db.query(Item).options(joinedload(Item.owner)).filter(Item.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="商品不存在")
     
-    # 检查当前用户是否已点赞
+    # 自动增加浏览量（不管是否登录）
+    item.views = (item.views or 0) + 1
+    db.commit()
+    db.refresh(item)
+    
+    # 检查当前用户是否已点赞（只有登录用户才检查）
     liked_by_me = False
     if current_user:
         liked_by_me = db.query(ItemLike).filter_by(item_id=item_id, user_id=current_user.id).first() is not None
     
-    # 构建返回数据，包含点赞信息
+    # 处理图片路径
+    processed_images = ""
+    if item.images:
+        images = item.images.split(',')
+        processed_image_list = []
+        for img in images:
+            img = img.strip()
+            if img:
+                # 使用统一的图片URL处理函数
+                full_url = get_full_image_url(img)
+                if full_url:
+                    processed_image_list.append(full_url)
+        processed_images = ','.join(processed_image_list)
+    
+    # 获取卖家信息
+    owner_info = None
+    if item.owner:
+        # 动态计算卖家的商品数量
+        items_count = db.query(Item).filter(Item.owner_id == item.owner.id).count()
+        
+        # 处理头像URL
+        avatar_url = get_full_image_url(item.owner.avatar)
+        
+        owner_info = {
+            "id": item.owner.id,
+            "username": item.owner.username,
+            "avatar": avatar_url,
+            "location": item.owner.location,
+            "bio": item.owner.bio,
+            "contact": item.owner.contact,
+            "created_at": item.owner.created_at,
+            "last_login": item.owner.last_login,
+            "items_count": items_count,
+            "followers": item.owner.followers or 0,
+            "following": item.owner.following or 0
+        }
+    
+    # 构建返回数据，包含点赞信息和卖家信息
     item_data = {
         "id": item.id,
         "title": item.title,
@@ -282,7 +544,7 @@ def read_item(item_id: int, db: Session = Depends(get_db), current_user: User = 
         "category": item.category,
         "location": item.location,
         "condition": item.condition,
-        "images": item.images,
+        "images": processed_images,
         "status": item.status,
         "sold": item.sold,
         "created_at": item.created_at,
@@ -290,6 +552,7 @@ def read_item(item_id: int, db: Session = Depends(get_db), current_user: User = 
         "like_count": item.like_count or 0,
         "liked_by_me": liked_by_me,
         "owner_id": item.owner_id,
+        "owner": owner_info,
         "favorited_count": item.favorited_count or 0
     }
     
@@ -478,6 +741,55 @@ def mark_item_sold(
     return {"message": "商品已标记为已售", "item": item}
 
 # AI自动补全商品信息（图片识别）
+@router.post("/upload_image")
+async def upload_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    上传商品图片
+    """
+    try:
+        # 检查文件类型
+        if not file.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="只支持图片文件")
+        
+        # 检查文件大小（限制为5MB）
+        file_size = 0
+        file_content = await file.read()
+        file_size = len(file_content)
+        
+        if file_size > 5 * 1024 * 1024:  # 5MB
+            raise HTTPException(status_code=400, detail="图片文件大小不能超过5MB")
+        
+        # 生成唯一文件名
+        file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
+        unique_filename = f"{uuid.uuid4()}.{file_extension}"
+        
+        # 确保上传目录存在
+        upload_dir = os.path.join("static", "uploads", "items")
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # 保存文件
+        file_path = os.path.join(upload_dir, unique_filename)
+        with open(file_path, "wb") as f:
+            f.write(file_content)
+        
+        # 返回图片URL
+        image_url = f"/static/uploads/items/{unique_filename}"
+        
+        return {
+            "success": True,
+            "image_url": image_url,
+            "filename": unique_filename,
+            "size": file_size
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"图片上传失败: {str(e)}")
+
 @router.post("/ai-auto-complete")
 async def ai_auto_complete_item_by_image(
     files: Optional[List[UploadFile]] = File(None),

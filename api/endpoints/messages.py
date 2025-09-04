@@ -19,8 +19,20 @@ from crud.crud_message import (
     get_message,
     mark_all_as_read
 )
+from pydantic import BaseModel
 import os
 from datetime import datetime
+
+# 消息列表响应模型
+class MessageListResponse(BaseModel):
+    messages: List[MessageResponse]
+    unread_count: int
+    page: int
+    size: int
+    total: int
+    
+    class Config:
+        from_attributes = True
 
 router = APIRouter()
 
@@ -46,6 +58,23 @@ def read_public_system_messages(
     获取系统消息列表，包括发送给所有用户的和发送给当前用户的。
     """
     messages = get_public_system_messages(db, skip=skip, limit=limit, user_id=current_user.id)
+    return messages
+
+@router.get("/system/public/guest", response_model=List[MessageResponse])
+def read_public_system_messages_for_guest(
+    skip: int = 0,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    """
+    获取发送给所有用户的公开系统消息（无需登录）
+    """
+    # 只获取发送给所有用户的系统消息
+    messages = db.query(Message).filter(
+        Message.is_system == True,
+        Message.target_users == "all"
+    ).order_by(Message.created_at.desc()).offset(skip).limit(limit).all()
+    
     return messages
 
 @router.get("/system/{message_id}", response_model=MessageResponse)
@@ -103,6 +132,55 @@ def read_conversation_messages(
         if msg.user_id != current_user.id and not msg.is_read:
             mark_as_read(db, message_id=msg.id)
     return messages
+
+@router.get("/", response_model=MessageListResponse)
+def get_user_messages_list(
+    page: int = 1,
+    size: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """获取用户的消息列表（支持分页）"""
+    try:
+        skip = (page - 1) * size
+        
+        # 获取用户的所有消息（包括系统消息和私聊消息）
+        messages_query = db.query(Message).filter(
+            or_(
+                Message.user_id == current_user.id,  # 用户发送的消息
+                Message.target_user == str(current_user.id),  # 用户接收的消息
+                and_(Message.is_system == True, Message.target_users == "all"),  # 系统广播消息
+                and_(Message.is_system == True, Message.target_users == str(current_user.id))  # 发送给特定用户的系统消息
+            )
+        ).order_by(Message.created_at.desc())
+        
+        # 获取总数
+        total = messages_query.count()
+        
+        # 分页查询
+        messages = messages_query.offset(skip).limit(size).all()
+        
+        # 获取未读消息数量
+        unread_count = get_unread_count(db, user_id=current_user.id)
+        
+        # 返回符合小程序期望的格式
+        return MessageListResponse(
+            messages=messages,
+            unread_count=unread_count,
+            page=page,
+            size=size,
+            total=total
+        )
+    except Exception as e:
+        print(f"获取消息列表时发生错误: {e}")
+        # 返回空结果而不是抛出异常
+        return MessageListResponse(
+            messages=[],
+            unread_count=0,
+            page=page,
+            size=size,
+            total=0
+        )
 
 @router.post("/", response_model=MessageResponse)
 def create_new_message(

@@ -12,8 +12,8 @@ from typing import List
 
 router = APIRouter()
 
-# 添加PUT路由路径
-@router.put("/avatar", response_model=UserInDB)
+# 添加POST路由路径（文件上传通常使用POST方法）
+@router.post("/avatar")
 async def update_avatar(
     request: Request,
     # 将 file 改为 avatar，与前端发送的字段名一致
@@ -53,16 +53,15 @@ async def update_avatar(
     with open(file_path, "wb") as f:
         f.write(contents)
     
-   # 返回完整的可访问URL
-    base_url = str(request.base_url)
-    avatar_url = f"{base_url}static/images/{filename}"
+    # 构建正确的头像URL，确保没有双斜杠
+    avatar_url = f"https://127.0.0.1:8000/static/images/{filename}"
     
-    # 确保URL以http开头
-    if not avatar_url.startswith("http"):
-        avatar_url = f"http://8.138.47.159:8000{avatar_url}"
-    
+    # 更新用户头像
     user_update = UserUpdate(avatar=avatar_url)
-    return update_user(db, user_id=current_user.id, user_update=user_update)
+    updated_user = update_user(db, user_id=current_user.id, user_update=user_update)
+    
+    # 返回包含头像URL的响应
+    return {"avatar": avatar_url}
 
 @router.put("/", response_model=UserInDB)
 def update_profile(

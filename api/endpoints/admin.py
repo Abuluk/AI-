@@ -585,6 +585,43 @@ def update_promoted_items(
     db.commit()
     return {"message": "推广商品设置已更新", "item_ids": item_ids}
 
+@router.put("/promoted_items/interval")
+def update_promoted_interval(
+    interval: int = Body(..., ge=1, le=20, description="推广商品间隔，每多少个商品显示一个推广商品"),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """更新推广商品间隔设置"""
+    # 保存到SiteConfig
+    config = db.query(SiteConfig).filter(SiteConfig.key == "promoted_interval").first()
+    if config:
+        config.value = str(interval)
+    else:
+        config = SiteConfig(
+            key="promoted_interval",
+            value=str(interval)
+        )
+        db.add(config)
+    
+    db.commit()
+    return {"message": "推广商品间隔设置已更新", "interval": interval}
+
+@router.get("/promoted_items/interval")
+def get_promoted_interval(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """获取推广商品间隔设置"""
+    config = db.query(SiteConfig).filter(SiteConfig.key == "promoted_interval").first()
+    if not config or not config.value:
+        return {"interval": 5}  # 默认间隔为5
+    
+    try:
+        interval = int(config.value)
+        return {"interval": interval}
+    except ValueError:
+        return {"interval": 5}
+
 @router.put("/items/{item_id}/recommendations")
 def update_item_recommendations(
     item_id: int,

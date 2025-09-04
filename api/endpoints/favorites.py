@@ -6,6 +6,7 @@ from db.models import Favorite, User, Item
 from schemas.favorite import FavoriteCreate, FavoriteInDB, FavoriteWithItem
 from core.security import get_current_user
 from datetime import datetime
+from schemas.favorite import FavoriteListResponse
 
 router = APIRouter()
 
@@ -14,6 +15,41 @@ def get_favorite(db: Session, favorite_id: int):
 
 def get_favorites_by_user(db: Session, user_id: int):
     return db.query(Favorite).filter(Favorite.user_id == user_id).all()
+
+@router.get("/", response_model=FavoriteListResponse)
+def read_favorites(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """获取当前用户的收藏列表（支持分页）"""
+    skip = (page - 1) * size
+    
+    # 获取收藏记录，并关联商品信息
+    favorites_query = db.query(Favorite).join(Item).filter(
+        Favorite.user_id == current_user.id,
+        Item.id.isnot(None)  # 确保商品存在
+    )
+    
+    # 获取总数
+    total = favorites_query.count()
+    
+    # 分页查询
+    favorites = favorites_query.offset(skip).limit(size).all()
+    
+    # 处理created_at为None的情况
+    for favorite in favorites:
+        if favorite.created_at is None:
+            favorite.created_at = datetime.now()
+    
+    # 返回符合前端期望的格式
+    return FavoriteListResponse(
+        favorites=favorites,
+        total=total,
+        page=page,
+        size=size
+    )
 
 @router.get("/user/{user_id}", response_model=list[FavoriteWithItem])
 def read_user_favorites(

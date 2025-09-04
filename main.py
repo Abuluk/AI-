@@ -12,6 +12,7 @@ import traceback
 from dotenv import load_dotenv
 from api.api_v1 import api_router
 from api.endpoints import items, users
+from config import HOST, PORT, USE_HTTPS, SSL_CERT_FILE, SSL_KEY_FILE, STATIC_DIR
 
 # 加载环境变量
 load_dotenv()
@@ -58,11 +59,10 @@ def home():
 
 # 获取当前文件所在目录的绝对路径
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "static")
 print(f"项目根目录: {BASE_DIR}")
 print(f"静态文件目录: {STATIC_DIR}")
 
-# 恢复静态文件挂载点到原始路径
+# 挂载静态文件
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # 添加测试路由
@@ -75,7 +75,7 @@ async def test_static():
         f.write("静态文件服务测试 - 成功!")
     
     return {
-        "static_dir": STATIC_DIR,
+        "static_dir": str(STATIC_DIR),
         "test_file_path": test_file_path,
         "test_file_url": "/static/images/test.txt"
     }
@@ -105,5 +105,17 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 if __name__ == "__main__":
     import uvicorn
     print("正在启动 Uvicorn 服务器...")
-    # 注意：为了让reload生效，app必须以字符串形式传入
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    
+    if USE_HTTPS and SSL_CERT_FILE.exists() and SSL_KEY_FILE.exists():
+        print("使用HTTPS模式启动...")
+        uvicorn.run(
+            "main:app", 
+            host=HOST, 
+            port=PORT, 
+            reload=True,
+            ssl_certfile=str(SSL_CERT_FILE),
+            ssl_keyfile=str(SSL_KEY_FILE)
+        )
+    else:
+        print("使用HTTP模式启动...")
+        uvicorn.run("main:app", host=HOST, port=PORT, reload=True)

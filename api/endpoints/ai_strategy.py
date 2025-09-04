@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from core.security import get_current_user
 from db.models import User, Item, Feedback
-from typing import Any, Dict
+from typing import Any, Dict, List
 import os
 import json
 import base64
@@ -114,6 +114,56 @@ async def call_xunfei_v3_chat_async(app_id, api_key, api_secret, spark_url, prom
         print(f"AI调用异常: {e}")
         traceback.print_exc(file=sys.stdout)
         raise Exception(f"AI调用失败: {str(e)}")
+
+@router.get("/recommendations", response_model=List[Dict[str, Any]])
+def get_ai_recommendations(
+    limit: int = 5,
+    db: Session = Depends(get_db)
+):
+    """获取AI推荐商品列表 - 公开接口，无需认证"""
+    try:
+        # 获取热门商品作为推荐
+        recommended_items = db.query(Item).filter(
+            Item.status == "online",
+            Item.sold == False
+        ).order_by(Item.views.desc(), Item.like_count.desc()).limit(limit).all()
+        
+        # 转换为字典格式
+        result = []
+        for item in recommended_items:
+            # 处理图片路径
+            processed_images = []
+            if item.images:
+                images = item.images.split(',')
+                for img in images:
+                    img = img.strip()
+                    if img:
+                        # 使用统一的图片URL处理函数
+                        from config import get_full_image_url
+                        full_url = get_full_image_url(img)
+                        if full_url:
+                            processed_images.append(full_url)
+            
+            result.append({
+                "id": item.id,
+                "title": item.title,
+                "description": item.description,
+                "price": item.price,
+                "category": item.category,
+                "condition": item.condition,
+                "location": item.location,
+                "like_count": item.like_count,
+                "views": item.views,
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+                "image_urls": processed_images
+            })
+        
+        return result
+        
+    except Exception as e:
+        print(f"获取AI推荐失败: {e}")
+        # 返回空列表而不是抛出异常
+        return []
 
 @router.post("/", response_model=Dict[str, Any])
 def ai_strategy(

@@ -180,7 +180,7 @@ const getUserAvatar = (avatar) => {
   if (avatar.startsWith('http')) {
     return avatar
   }
-  return `http://8.138.47.159:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`
+  return `http://127.0.0.1:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`
 }
 
 const goToChat = (friendId) => {

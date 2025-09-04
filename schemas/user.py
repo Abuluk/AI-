@@ -19,6 +19,8 @@ class UserUpdate(UserBase):
     location: Optional[str] = None
     password: Optional[str] = None  # 可选密码更新
 
+
+
 class UserInDB(UserBase):
     id: int
     avatar: str

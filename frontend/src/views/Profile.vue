@@ -6,7 +6,7 @@
         <div class="avatar-container">
           <!-- 头像上传区域 -->
           <div class="avatar-wrapper" :class="{ 'loading': avatarLoading }">
-            <img :src="user.avatar || '/static/images/default_avatar.png'" class="user-avatar" @error="handleImageError">
+            <img :src="avatarUrl" class="user-avatar" @error="handleImageError">
             <div class="avatar-overlay" v-if="avatarLoading">
               <i class="fas fa-spinner fa-spin"></i>
             </div>
@@ -369,7 +369,7 @@ const authStore = useAuthStore();
 
 // 使用计算属性确保响应式更新
 const avatarUrl = computed(() => {
-  if (!authStore.user?.avatar) return 'default_avatar.png';
+  if (!authStore.user?.avatar) return '/static/images/default_avatar.png';
   
   // 添加时间戳强制刷新
   return `${authStore.user.avatar}?t=${avatarTimestamp.value}`;
@@ -384,6 +384,7 @@ watch(() => authStore.user?.avatar, (newAvatar) => {
 });
 
 const handleImageError = (event) => {
+  console.log('头像加载失败，使用默认头像');
   event.target.src = '/static/images/default_avatar.png';
 };
 
@@ -461,6 +462,7 @@ const saveProfile = async () => {
       location: editForm.location,
       contact: editForm.contact,
     };
+    
     await authStore.updateUserProfile(profileData);
     
     alert('资料更新成功！');
@@ -510,12 +512,13 @@ const handleAvatarUpload = async (e, isProfileHeader = false) => {
 
   // 创建预览
   const previewUrl = URL.createObjectURL(file)
-  
+
   // 页面顶部的头像上传
   if (isProfileHeader) {
     avatarLoading.value = true
     avatarUploadProgress.value = 0
     avatarTimestamp.value = Date.now()
+    
     try {
       // 模拟上传进度
       const interval = setInterval(() => {
@@ -1306,9 +1309,9 @@ const getBuyRequestImage = (images) => {
   // 如果是完整URL，直接返回
   if (img.startsWith('http')) return img
   // 如果是以/static开头，补全域名
-  if (img.startsWith('/static')) return 'http://8.138.47.159:8000' + img
+  if (img.startsWith('/static')) return 'http://127.0.0.1:8000' + img
   // 否则拼成 /static/images/xxx
-  return 'http://8.138.47.159:8000/static/images/' + img
+  return 'http://127.0.0.1:8000/static/images/' + img
 }
 
 </script>

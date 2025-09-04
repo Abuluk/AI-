@@ -343,6 +343,29 @@
         </div>
       </div>
 
+      <!-- 推广间隔设置 -->
+      <div class="promotion-settings">
+        <h3>推广设置</h3>
+        <div class="form-group">
+          <label>推广商品间隔</label>
+          <div class="interval-controls">
+            <input 
+              v-model.number="promotionInterval" 
+              type="number" 
+              min="1" 
+              max="20" 
+              class="form-input"
+              style="width: 100px; margin-right: 10px;"
+            >
+            <span>每 {{ promotionInterval }} 个商品显示一个推广商品</span>
+            <button @click="updatePromotionInterval" class="btn btn-sm btn-primary" style="margin-left: 10px;">
+              保存设置
+            </button>
+          </div>
+          <p class="help-text">设置推广商品在商品列表中的显示间隔，范围：1-20</p>
+        </div>
+      </div>
+
       <!-- 推广商品设置模态框 -->
       <div v-if="showPromotionModal" class="modal-overlay" @click="showPromotionModal = false">
         <div class="modal-content promotion-modal" @click.stop>

@@ -1,5 +1,5 @@
 from datetime import timedelta, datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Form, Body
 from sqlalchemy.orm import Session
 from db.session import get_db
 from core.security import (
@@ -13,6 +13,12 @@ from db.models import User
 from crud.crud_user import create_user, get_user_by_username, get_user_by_email, get_user_by_phone  # 导入get_user_by_phone
 from schemas.user import UserCreate, UserInDB, UserLogin  # 导入UserLogin
 from schemas.token import Token
+from pydantic import BaseModel
+
+# 登录请求模型
+class LoginRequest(BaseModel):
+    identifier: str
+    password: str
 
 router = APIRouter()
 
@@ -52,11 +58,10 @@ def register(
 
 @router.post("/login", response_model=Token)
 def login(
-    identifier: str = Form(...),  # 使用Form接收表单数据
-    password: str = Form(...),    # 使用Form接收表单数据
+    login_data: LoginRequest = Body(...),  # 使用Body接收JSON数据
     db: Session = Depends(get_db)
 ):
-    user = authenticate_user(db, identifier, password)
+    user = authenticate_user(db, login_data.identifier, login_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -95,3 +100,10 @@ def logout(
     # 在实际应用中，您可能想将令牌加入黑名单
     # 这里我们只是返回成功消息
     return {"message": "成功退出登录"}
+
+@router.get("/me", response_model=UserInDB)
+def get_current_user_info(
+    current_user: User = Depends(get_current_active_user)
+):
+    """获取当前登录用户信息"""
+    return current_user

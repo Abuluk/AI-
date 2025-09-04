@@ -40,7 +40,7 @@ class SparkAIService:
 async aiAutoCompleteItemByImage(files) {
     const formData = new FormData();
     files.forEach(file => formData.append('files', file));
-    return axios.post('http://8.138.47.159:8000/api/v1/items/ai-auto-complete', formData, {
+    return axios.post('http://127.0.0.1:8000/api/v1/items/ai-auto-complete', formData, {
         headers: {
             Authorization: localStorage.getItem('access_token') ? `Bearer ${localStorage.getItem('access_token')}` : undefined
         }

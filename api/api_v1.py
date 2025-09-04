@@ -46,12 +46,11 @@ api_router.include_router(
     tags=["站点配置"]
 )
 
-# 受保护路由 - 需要认证
+# 消息路由 - 部分需要认证
 api_router.include_router(
     messages.router, 
     prefix="/messages", 
-    tags=["消息"],
-    dependencies=[Depends(oauth2_scheme)]
+    tags=["消息"]
 )
 api_router.include_router(
     profile.router,

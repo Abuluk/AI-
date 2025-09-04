@@ -6,6 +6,14 @@ class UserBase(BaseModel):
     id: int
     username: str
     avatar: Optional[str] = None
+    location: Optional[str] = None
+    bio: Optional[str] = None
+    contact: Optional[str] = None
+    created_at: Optional[datetime] = None
+    last_login: Optional[datetime] = None
+    items_count: Optional[int] = 0
+    followers: Optional[int] = 0
+    following: Optional[int] = 0
     class Config:
         from_attributes = True
 

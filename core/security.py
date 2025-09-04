@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from db.models import User
 from core.pwd_util import verify_password
@@ -15,6 +15,7 @@ ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
+http_bearer = HTTPBearer(auto_error=False)  # auto_error=False允许没有token的情况
 
 def authenticate_user(db: Session, identifier: str, password: str):
     """验证用户凭据，支持用户名/邮箱/手机号"""
@@ -48,7 +49,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        # 使用配置文件中的过期时间，而不是硬编码的15分钟
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -89,6 +91,41 @@ async def get_current_user(
     
     if user is None:
         raise credentials_exception
+    return user
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(http_bearer)
+):
+    """可选用户认证，没有token时返回None"""
+    if not credentials:
+        return None
+    
+    # 避免循环导入，在函数内部导入
+    from crud.crud_user import get_user_by_username, get_user_by_email, get_user_by_phone
+    from db.session import get_db
+    
+    db = next(get_db())
+    
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        subject: str = payload.get("sub")
+        if not subject:
+            return None
+        token_data = TokenData(username=subject)
+    except JWTError:
+        return None
+    
+    # 尝试通过用户名查找用户
+    user = get_user_by_username(db, token_data.username)
+    
+    # 如果用户名查找失败，尝试通过邮箱查找
+    if user is None:
+        user = get_user_by_email(db, token_data.username)
+    
+    # 如果邮箱查找也失败，尝试通过手机号查找
+    if user is None:
+        user = get_user_by_phone(db, token_data.username)
+    
     return user
 
 async def get_current_active_user(

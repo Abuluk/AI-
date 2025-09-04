@@ -176,7 +176,7 @@ export default {
       if (path.startsWith('http')) {
         return path;
       }
-      const baseUrl = 'http://8.138.47.159:8000';
+      const baseUrl = 'http://127.0.0.1:8000';
       const cleanedPath = path.startsWith('/') ? path.substring(1) : path;
       return `${baseUrl}/${cleanedPath.replace(/\\/g, '/')}`;
     }

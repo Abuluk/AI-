@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from db.models import Item, ItemLike, User
 from schemas.item import ItemCreate
@@ -6,7 +6,7 @@ from datetime import datetime
 from crud.crud_message import create_system_message
 
 def get_item(db: Session, item_id: int):
-    return db.query(Item).filter(Item.id == item_id).first()
+    return db.query(Item).options(joinedload(Item.owner)).filter(Item.id == item_id).first()
 
 def get_items(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Item).offset(skip).limit(limit).all()
@@ -39,6 +39,8 @@ def update_item(db: Session, item_id: int, item_update: dict):
             setattr(db_item, key, value)
         db.commit()
         db.refresh(db_item)
+        # 重新加载以确保包含 owner 信息
+        return get_item(db, item_id)
     return db_item
 
 def delete_item(db: Session, item_id: int):

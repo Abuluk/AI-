@@ -336,7 +336,7 @@ const getUserAvatar = (avatar) => {
   if (avatar.startsWith('http')) {
     return avatar
   }
-  return `http://8.138.47.159:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`
+  return `http://127.0.0.1:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`
 }
 
 const handleAvatarError = (event) => {
@@ -364,8 +364,8 @@ const getBuyRequestImage = (images) => {
   }
   if (!img) return '/static/images/default_product.png'
   if (img.startsWith('http')) return img
-  if (img.startsWith('/static')) return 'http://8.138.47.159:8000' + img
-  return 'http://8.138.47.159:8000/static/images/' + img
+  if (img.startsWith('/static')) return 'http://127.0.0.1:8000' + img
+  return 'http://127.0.0.1:8000/static/images/' + img
 }
 
 // 监听路由参数变化
