@@ -325,7 +325,12 @@ export default {
     const getUserAvatar = (userId) => {
       const user = usersInfo.value[userId];
       if (user && user.avatar) {
-        return user.avatar.startsWith('http') ? user.avatar : (user.avatar ? (user.avatar.startsWith('/') ? user.avatar : '/static/images/' + user.avatar.replace(/^.*[\\/]/, '')) : '/static/images/default_avatar.png');
+        let avatar = user.avatar.startsWith('http') ? user.avatar : (user.avatar ? (user.avatar.startsWith('/') ? user.avatar : '/static/images/' + user.avatar.replace(/^.*[\\/]/, '')) : '/static/images/default_avatar.png');
+        // 修复HTTPS协议问题
+        if (avatar.startsWith('https://127.0.0.1:8000')) {
+          avatar = avatar.replace('https://127.0.0.1:8000', 'http://127.0.0.1:8000');
+        }
+        return avatar;
       }
       return '/static/images/default_avatar.png';
     };

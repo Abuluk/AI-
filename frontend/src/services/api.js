@@ -34,7 +34,8 @@ api.interceptors.response.use(response => {
   if (error.response && error.response.status === 401) {
     // 未授权错误处理
     localStorage.removeItem('access_token')
-    window.location.href = '/login'
+    // 不直接跳转，让路由守卫处理
+    console.warn('Token已过期或无效，请重新登录')
   }
   
   // 网络错误处理
@@ -76,14 +77,13 @@ const apiService = {
   
   async login(credentials) {
     return retryRequest(async () => {
-      // 用 URLSearchParams 构造表单数据
-      const formData = new URLSearchParams();
-      formData.append('identifier', credentials.identifier);
-      formData.append('password', credentials.password);
-
-      const response = await api.post('/auth/login', formData, {
+      // 发送 JSON 格式数据
+      const response = await api.post('/auth/login', {
+        identifier: credentials.identifier,
+        password: credentials.password
+      }, {
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
+          'Content-Type': 'application/json'
         }
       });
       if (response.data.access_token) {

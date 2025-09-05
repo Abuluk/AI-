@@ -364,7 +364,30 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
             'last_message_time': last_message.created_at,
             'unread_count': unread_count
         })
+    # 去重：如果同一个用户既有商品对话又有私聊，合并为一条对话
+    unique_conversations = {}
+    for conv in output:
+        # 使用用户ID作为唯一键，合并同一用户的所有对话
+        user_key = conv['other_user_id']
+        
+        if user_key not in unique_conversations:
+            # 第一次遇到这个用户，直接添加
+            unique_conversations[user_key] = conv
+        else:
+            # 已经存在这个用户的对话，比较最后消息时间，保留最新的
+            existing_conv = unique_conversations[user_key]
+            if conv['last_message_time'] > existing_conv['last_message_time']:
+                # 新对话时间更近，替换
+                unique_conversations[user_key] = conv
+            elif conv['last_message_time'] == existing_conv['last_message_time']:
+                # 时间相同，优先保留商品对话（更具体）
+                if conv['type'] == 'item' and existing_conv['type'] != 'item':
+                    unique_conversations[user_key] = conv
+                elif conv['type'] == 'buy_request' and existing_conv['type'] not in ['item', 'buy_request']:
+                    unique_conversations[user_key] = conv
+    
     # 按最后消息时间排序
+    output = list(unique_conversations.values())
     output.sort(key=lambda x: x['last_message_time'], reverse=True)
     return output
 

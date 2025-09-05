@@ -88,7 +88,13 @@ export const useAuthStore = defineStore('auth', {
         this.isAuthenticated = true;
         return this.user;
       } catch (error) {
-        // ...错误处理...
+        // 如果获取用户信息失败，清除认证状态
+        console.error('获取用户信息失败:', error);
+        this.user = null;
+        this.isAuthenticated = false;
+        this.token = null;
+        localStorage.removeItem('access_token');
+        throw error;
       }
     },
     

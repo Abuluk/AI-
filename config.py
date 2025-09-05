@@ -13,7 +13,7 @@ HOST = "0.0.0.0"
 PORT = 8000
 
 # HTTPS配置
-USE_HTTPS = True
+USE_HTTPS = False
 SSL_CERT_FILE = BASE_DIR / "ssl" / "cert.pem"
 SSL_KEY_FILE = BASE_DIR / "ssl" / "key.pem"
 
@@ -51,8 +51,8 @@ def get_full_image_url(image_path):
         
     # 如果已经是完整URL，检查是否需要修正域名
     if image_path.startswith('http'):
-        # 修正错误的localhost和http协议
-        if 'localhost:8000' in image_path or 'http://' in image_path:
+        # 修正错误的localhost和协议
+        if 'localhost:8000' in image_path or '127.0.0.1:8000' in image_path:
             # 提取文件名部分
             if '/static/images/' in image_path:
                 filename = image_path.split('/static/images/')[-1]
@@ -67,7 +67,12 @@ def get_full_image_url(image_path):
     if clean_path.startswith('static/images/'):
         clean_path = clean_path[13:]
     
-    # 构建完整URL
+    # 构建完整URL，确保没有双斜杠
     base_url = get_image_base_url()
-    return f"{base_url}/{clean_path}"
+    if base_url.endswith('/') and clean_path.startswith('/'):
+        return f"{base_url}{clean_path[1:]}"
+    elif not base_url.endswith('/') and not clean_path.startswith('/'):
+        return f"{base_url}/{clean_path}"
+    else:
+        return f"{base_url}{clean_path}"
 

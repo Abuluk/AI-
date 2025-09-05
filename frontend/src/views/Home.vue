@@ -6,7 +6,7 @@
       <div class="user-area">
         <div v-if="authStore.user" class="user-info">
           <div class="profile-link" @click="goToProfile">
-            <img :src="authStore.user?.avatar || '/static/images/default_avatar.png'" alt="用户头像" class="user-avatar" @error="handleImageError">
+            <img :src="getUserAvatar(authStore.user?.avatar)" alt="用户头像" class="user-avatar" @error="handleImageError">
             <span class="user-name">{{ authStore.user.username }}</span>
           </div>
           <button @click="handleLogout" class="logout-btn">退出</button>
@@ -287,18 +287,6 @@ export default {
     sortedProducts() {
       let products = [...this.products];
       
-      // 首先按推广商品优先排序
-      products.sort((a, b) => {
-        if (a.is_promoted && !b.is_promoted) return -1;
-        if (!a.is_promoted && b.is_promoted) return 1;
-        return 0;
-      });
-      
-      // 只在用户选择了排序时才排序，否则保持现有顺序
-      if (this.sortOption === 'default') {
-        return products
-      }
-      
       const parseTime = (t) => {
         if (!t) return 0
         let date
@@ -311,16 +299,27 @@ export default {
         }
         return isNaN(date.getTime()) ? 0 : date.getTime()
       }
-      switch(this.sortOption) {
-        case 'price_asc':
-          return products.sort((a, b) => a.price - b.price)
-        case 'price_desc':
-          return products.sort((a, b) => b.price - a.price)
-        case 'newest':
-          return products.sort((a, b) => parseTime(b.created_at) - parseTime(a.created_at))
-        default:
-          return products
-      }
+      
+      // 先按推广商品优先排序，然后在每个组内按选择的排序方式排序
+      products.sort((a, b) => {
+        // 首先按推广商品优先排序
+        if (a.is_promoted && !b.is_promoted) return -1;
+        if (!a.is_promoted && b.is_promoted) return 1;
+        
+        // 如果都是推广商品或都不是推广商品，则按选择的排序方式排序
+        switch(this.sortOption) {
+          case 'price_asc':
+            return a.price - b.price
+          case 'price_desc':
+            return b.price - a.price
+          case 'newest':
+            return parseTime(b.created_at) - parseTime(a.created_at)
+          default:
+            return 0
+        }
+      });
+      
+      return products;
     }
   },
   mounted() {
@@ -385,14 +384,17 @@ export default {
         
         // 如果是第一页且没有搜索条件，优先获取推广商品
         if (this.pagination.page === 1 && !q && !this.selectedLocation && !this.selectedCategory) {
+          console.log('尝试获取推广商品...');
           try {
             const promotedResponse = await api.getPromotedItems();
+            console.log('推广商品API响应:', promotedResponse.data);
             if (promotedResponse.data && promotedResponse.data.length > 0) {
               // 将推广商品放在前面
               const promotedItems = promotedResponse.data.map(item => ({
                 ...item,
                 is_promoted: true
               }));
+              console.log('处理后的推广商品:', promotedItems);
               const remainingLimit = this.pagination.limit - promotedItems.length;
               
               if (remainingLimit > 0) {
@@ -402,25 +404,37 @@ export default {
                   limit: remainingLimit,
                   exclude_promoted: true // 排除已推广的商品
                 };
+                console.log('获取剩余商品参数:', remainingParams);
                 const remainingResponse = await api.getItems(remainingParams);
                 const remainingItems = remainingResponse.data.map(item => ({
                   ...item,
                   is_promoted: false
                 }));
+                console.log('剩余商品:', remainingItems);
                 
                 // 合并推广商品和普通商品
                 this.products = [...promotedItems, ...remainingItems];
                 this.hasMore = remainingItems.length === remainingLimit;
                 this.hasPromotedItems = true;
                 // 调试：输出products首位
+                console.log('合并后的商品列表:', this.products);
                 console.log('首页products首位：', this.products[0]);
                 this.loading = false;
                 return;
               }
+            } else {
+              console.log('没有推广商品');
             }
           } catch (promotedError) {
             console.warn('获取推广商品失败，使用默认商品:', promotedError);
           }
+        } else {
+          console.log('不满足推广商品获取条件:', {
+            page: this.pagination.page,
+            q: q,
+            location: this.selectedLocation,
+            category: this.selectedCategory
+          });
         }
         
         // 如果没有推广商品或获取失败，使用原来的逻辑
@@ -610,6 +624,14 @@ export default {
     },
     handleImageError(e) {
       e.target.src = '/static/images/default_avatar.png';
+    },
+    getUserAvatar(avatar) {
+      if (!avatar) return '/static/images/default_avatar.png';
+      // 修复HTTPS协议问题
+      if (avatar.startsWith('https://127.0.0.1:8000')) {
+        return avatar.replace('https://127.0.0.1:8000', 'http://127.0.0.1:8000');
+      }
+      return avatar;
     },
   }
 }

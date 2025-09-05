@@ -42,7 +42,7 @@
             <h3>卖家信息</h3>
             <div class="seller-card">
               <div class="seller-header">
-                <img :src="seller.avatar || '/static/images/default_avatar.png'" class="seller-avatar" @error="handleAvatarError" @click="goToUserProfile(seller.id)" style="cursor: pointer;">
+                <img :src="getUserAvatar(seller.avatar)" class="seller-avatar" @error="handleAvatarError" @click="goToUserProfile(seller.id)" style="cursor: pointer;">
                 <div class="seller-basic-info">
                   <div class="seller-name" @click="goToUserProfile(seller.id)" style="cursor: pointer;">{{ seller.username }}</div>
                   <div class="seller-stats">
@@ -234,12 +234,15 @@ export default {
         this.product = response.data
         this.isOwner = this.user && this.user.id === this.product.owner_id
 
-        // 只做简单图片路径处理
+        // 处理图片路径
         if (this.product.images) {
           const images = this.product.images.split(',')
           this.product.images = images.map(img => {
             if (!img) return '/static/images/default_product.png'
             let path = img.trim().replace(/\\/g, '/')
+            // 如果已经是完整URL（包含http），直接返回
+            if (path.startsWith('http')) return path
+            // 如果是相对路径，添加/前缀
             if (!path.startsWith('/')) {
               path = '/' + path
             }
@@ -358,6 +361,14 @@ export default {
     handleAvatarError(event) {
       event.target.src = '/static/images/default_avatar.png';
       event.target.onerror = null;
+    },
+    getUserAvatar(avatar) {
+      if (!avatar) return '/static/images/default_avatar.png';
+      // 修复HTTPS协议问题
+      if (avatar.startsWith('https://127.0.0.1:8000')) {
+        return avatar.replace('https://127.0.0.1:8000', 'http://127.0.0.1:8000');
+      }
+      return avatar;
     },
     async fetchRelatedProducts() {
       try {

@@ -60,7 +60,7 @@
         <div v-else-if="filteredConversations.length > 0" class="conversations-list">
           <div 
             v-for="conv in filteredConversations" 
-            :key="`${conv.item_id}-${conv.other_user_id}`"
+            :key="`${conv.type}-${conv.item_id || conv.buy_request_id || 'user'}-${conv.other_user_id}`"
             class="conversation-item"
             :class="{ unread: conv.unread_count > 0 }"
             @click="selectConversation(conv)"

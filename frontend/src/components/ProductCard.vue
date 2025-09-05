@@ -125,6 +125,11 @@ export default {
         return this.defaultImage;
       }
       const firstImage = product.images.split(',')[0].trim();
+      // 如果已经是完整URL（包含http），直接返回
+      if (firstImage.startsWith('http')) {
+        return firstImage;
+      }
+      // 如果是相对路径，添加/前缀
       if (firstImage.startsWith('/')) {
         return firstImage;
       }

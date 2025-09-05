@@ -106,4 +106,8 @@ def get_current_user_info(
     current_user: User = Depends(get_current_active_user)
 ):
     """获取当前登录用户信息"""
+    # 处理头像URL
+    if current_user.avatar:
+        from config import get_full_image_url
+        current_user.avatar = get_full_image_url(current_user.avatar)
     return current_user

@@ -334,6 +334,10 @@ const getUserAvatar = (avatar) => {
     return '/static/images/default_avatar.png'
   }
   if (avatar.startsWith('http')) {
+    // 修复HTTPS协议问题
+    if (avatar.startsWith('https://127.0.0.1:8000')) {
+      return avatar.replace('https://127.0.0.1:8000', 'http://127.0.0.1:8000');
+    }
     return avatar
   }
   return `http://127.0.0.1:8000/static/images/${avatar.replace(/^static[\\/]images[\\/]/, '')}`

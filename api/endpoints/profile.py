@@ -53,8 +53,9 @@ async def update_avatar(
     with open(file_path, "wb") as f:
         f.write(contents)
     
-    # 构建正确的头像URL，确保没有双斜杠
-    avatar_url = f"https://127.0.0.1:8000/static/images/{filename}"
+    # 构建正确的头像URL，使用统一的图片URL处理函数
+    from config import get_full_image_url
+    avatar_url = get_full_image_url(f"static/images/{filename}")
     
     # 更新用户头像
     user_update = UserUpdate(avatar=avatar_url)
