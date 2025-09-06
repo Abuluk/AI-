@@ -13,6 +13,7 @@ from crud import crud_message, crud_buy_request
 import schemas.message
 from schemas.token import Token
 import json
+from config import get_full_image_url
 
 router = APIRouter()
 
@@ -106,11 +107,29 @@ def get_all_users(
     query = db.query(User)
     # 搜索过滤
     if search:
-        query = query.filter(
+        # 构建搜索条件：ID精确匹配 OR 用户名/邮箱/手机号模糊匹配
+        search_conditions = []
+        
+        # 添加文本字段模糊搜索
+        text_search = (
             User.username.ilike(f"%{search}%") |
             User.email.ilike(f"%{search}%") |
             User.phone.ilike(f"%{search}%")
         )
+        search_conditions.append(text_search)
+        
+        # 如果搜索词是数字，也添加ID精确搜索
+        try:
+            user_id = int(search)
+            id_search = User.id == user_id
+            search_conditions.append(id_search)
+        except ValueError:
+            pass  # 不是数字，跳过ID搜索
+        
+        # 使用OR连接所有搜索条件
+        if search_conditions:
+            from sqlalchemy import or_
+            query = query.filter(or_(*search_conditions))
     # 状态过滤
     if is_active is not None:
         query = query.filter(User.is_active == is_active)
@@ -123,12 +142,7 @@ def get_all_users(
     result = []
     for user in users:
         items_count = db.query(func.count(Item.id)).filter(Item.owner_id == user.id).scalar()
-        avatar = user.avatar or ''
-        if avatar:
-            if avatar.startswith('http') or avatar.startswith('https'):
-                pass  # 保持原样
-            else:
-                avatar = avatar.replace('/static/images/', '').replace('static/images/', '')
+        avatar = get_full_image_url(user.avatar)
         result.append({
             "id": user.id,
             "username": user.username,

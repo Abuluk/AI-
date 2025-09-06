@@ -35,6 +35,9 @@ class UserInDB(UserBase):
     followers: int
     following: int
     items_count: int
+    is_merchant: bool = False
+    is_pending_merchant: bool = False
+    is_pending_verification: bool = False
     class Config:
         from_attributes = True
 

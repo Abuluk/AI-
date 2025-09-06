@@ -51,6 +51,8 @@ class ItemInDB(ItemBase):
     favorited_count: Optional[int] = 0  # 添加收藏计数字段
     liked_by_me: Optional[bool] = False  # 添加当前用户是否已点赞字段
     owner: Optional[UserBase] = None  # 新增：嵌套用户信息
+    is_merchant_item: Optional[bool] = False  # 是否为商家商品
+    is_promoted: Optional[bool] = False  # 是否为推广商品
     
     class Config:
         from_attributes = True

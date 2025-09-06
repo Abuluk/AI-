@@ -179,6 +179,290 @@
       </div>
     </div>
 
+    <!-- 商家管理 -->
+    <div v-if="activeTab === 'merchants'" class="tab-content">
+      <div class="section-header">
+        <h2>商家管理</h2>
+        <!-- 商家展示频率设置 -->
+        <div class="merchant-frequency-settings">
+          <label>展示频率：</label>
+          <input 
+            v-model.number="defaultDisplayFrequency" 
+            type="number" 
+            min="1" 
+            max="20" 
+            class="form-input frequency-input"
+          >
+          <span>每 {{ defaultDisplayFrequency }} 个普通商品展示1个商家商品</span>
+          <button @click="updateDefaultDisplayFrequency" class="btn btn-primary btn-sm">
+            保存
+          </button>
+        </div>
+      </div>
+
+      <!-- 商家管理子标签页 -->
+      <div class="merchant-sub-tabs">
+        <div class="sub-tab-nav">
+          <button 
+            :class="['sub-tab-btn', { active: merchantSubTab === 'certified' }]"
+            @click="changeMerchantSubTab('certified')"
+          >
+            <i class="fas fa-check-circle"></i> 认证商家
+          </button>
+          <button 
+            :class="['sub-tab-btn', { active: merchantSubTab === 'pending_verification' }]"
+            @click="changeMerchantSubTab('pending_verification')"
+          >
+            <i class="fas fa-exclamation-triangle"></i> 待认证商家
+          </button>
+        </div>
+
+        <!-- 认证商家内容 -->
+        <div v-if="merchantSubTab === 'certified'" class="sub-tab-content">
+          <div class="filters">
+            <input 
+              v-model="merchantFilters.search" 
+              placeholder="搜索商家名称/联系人"
+              class="search-input"
+            >
+            <select v-model="merchantFilters.status" class="filter-select">
+              <option value="">全部状态</option>
+              <option value="pending">待审核</option>
+              <option value="approved">已通过</option>
+              <option value="rejected">已拒绝</option>
+            </select>
+            <button @click="loadMerchants(true)" class="btn btn-outline">刷新</button>
+          </div>
+
+          <!-- 商家列表 -->
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>用户信息</th>
+                  <th>店铺名称</th>
+                  <th>联系人</th>
+                  <th>联系电话</th>
+                  <th>状态</th>
+                  <th>申请时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="loading.merchants">
+                  <td colspan="8" class="text-center">加载中...</td>
+                </tr>
+                <tr v-else-if="merchants.length === 0">
+                  <td colspan="8" class="text-center">暂无商家数据</td>
+                </tr>
+                <tr v-else v-for="merchant in merchants" :key="merchant.id">
+                  <td>{{ merchant.id }}</td>
+                  <td>
+                    <div class="user-info">
+                      <img :src="getUserAvatar(merchant.user)" :alt="merchant.user?.username" class="user-avatar">
+                      <div>
+                        <div>{{ merchant.user?.username || '未知用户' }}</div>
+                        <div class="user-id">ID: {{ merchant.user_id }}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{{ merchant.business_name }}</td>
+                  <td>{{ merchant.contact_person }}</td>
+                  <td>{{ merchant.contact_phone }}</td>
+                  <td>
+                    <span class="status-badge" :class="getMerchantStatusClass(merchant.status)">
+                      {{ getMerchantStatusText(merchant.status) }}
+                    </span>
+                  </td>
+                  <td>{{ formatTime(merchant.created_at) }}</td>
+                  <td>
+                    <div class="action-buttons">
+                      <button @click="showMerchantDetails(merchant)" class="btn btn-sm btn-outline">
+                        详情
+                      </button>
+                      <button 
+                        v-if="merchant.status === 'pending'"
+                        @click="approveMerchant(merchant)"
+                        class="btn btn-sm btn-success"
+                      >
+                        通过
+                      </button>
+                      <button 
+                        v-if="merchant.status === 'pending'"
+                        @click="showRejectModal(merchant)"
+                        class="btn btn-sm btn-danger"
+                      >
+                        拒绝
+                      </button>
+                      <button 
+                        v-if="merchant.status === 'approved'"
+                        @click="setPendingVerification(merchant)"
+                        class="btn btn-sm btn-warning"
+                      >
+                        设为待认证
+                      </button>
+                      <button @click="openDeleteMerchantModal(merchant)" class="btn btn-sm btn-danger">
+                        删除
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 待认证商家内容 -->
+        <div v-if="merchantSubTab === 'pending_verification'" class="sub-tab-content">
+          <div class="filters">
+            <input 
+              v-model="pendingVerificationFilters.search" 
+              placeholder="搜索用户名/邮箱/手机号"
+              class="search-input"
+            >
+            <button @click="loadPendingVerificationUsers(true)" class="btn btn-outline">刷新</button>
+          </div>
+
+          <!-- 商家识别区域 -->
+          <div class="merchant-identification-section">
+            <h3>商家识别</h3>
+            <div class="identification-controls">
+              <div class="search-user">
+                <label>搜索用户：</label>
+                <input 
+                  v-model="userSearchQuery" 
+                  placeholder="输入用户名、邮箱或手机号"
+                  class="form-input"
+                  @keyup.enter="searchUser"
+                >
+                <button @click="searchUser" class="btn btn-primary">
+                  <i class="fas fa-search"></i> 搜索
+                </button>
+              </div>
+              
+              <div v-if="searchedUsers.length > 0" class="search-results">
+                <div class="search-results-header">
+                  <h4>搜索结果 ({{ searchedUsers.length }}个用户)</h4>
+                </div>
+                <div class="search-results-list">
+                  <div v-for="user in searchedUsers" :key="user.id" class="user-result">
+                    <div class="user-info">
+                      <div class="user-avatar">
+                        <img :src="getUserAvatar(user)" :alt="user.username">
+                      </div>
+                      <div class="user-details">
+                        <h4>{{ user.username }}</h4>
+                        <p>ID: {{ user.id }}</p>
+                        <p>邮箱: {{ user.email }}</p>
+                        <p>手机: {{ user.phone }}</p>
+                        <div class="user-status">
+                          <span class="status-badge" :class="getUserStatusClass(user)">
+                            {{ getUserStatusText(user) }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="user-actions">
+                      <button 
+                        v-if="!user.is_pending_verification"
+                        @click="setUserPendingVerification(user)"
+                        class="btn btn-danger"
+                      >
+                        <i class="fas fa-exclamation-triangle"></i> 设为待认证
+                      </button>
+                      <button 
+                        v-else
+                        @click="removeUserPendingVerification(user)"
+                        class="btn btn-success"
+                      >
+                        <i class="fas fa-check"></i> 解除待认证
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 待认证用户列表 -->
+          <div v-if="loading.pendingVerificationUsers" class="loading-state">
+            <div class="skeleton-row" v-for="n in 5" :key="n"></div>
+          </div>
+
+          <div v-else class="pending-verification-table" @scroll="onScroll($event, 'pendingVerificationUsers')">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>用户信息</th>
+                  <th>联系方式</th>
+                  <th>状态</th>
+                  <th>设置时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="user in pendingVerificationUsers" :key="user.id">
+                  <td>{{ user.id }}</td>
+                  <td>
+                    <div class="user-cell">
+                      <img :src="getUserAvatar(user)" :alt="user.username" class="user-avatar-small">
+                      <div>
+                        <div class="user-name">{{ user.username }}</div>
+                        <div class="user-id">ID: {{ user.id }}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="contact-info">
+                      <div v-if="user.email">{{ user.email }}</div>
+                      <div v-if="user.phone">{{ user.phone }}</div>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="status-badge danger">待认证</span>
+                  </td>
+                  <td>{{ formatTime(user.updated_at) }}</td>
+                  <td>
+                    <div class="action-buttons">
+                      <button 
+                        @click="showPendingUserMerchantDetails(user)"
+                        class="btn btn-sm btn-info"
+                      >
+                        详情
+                      </button>
+                      <button 
+                        @click="approvePendingVerificationUser(user)"
+                        class="btn btn-sm btn-success"
+                      >
+                        通过
+                      </button>
+                      <button 
+                        @click="showRejectPendingUserModalFunc(user)"
+                        class="btn btn-sm btn-danger"
+                      >
+                        不通过
+                      </button>
+                      <button 
+                        @click="removeUserPendingVerification(user)"
+                        class="btn btn-sm btn-warning"
+                      >
+                        解除
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+
+
+    </div>
+
     <!-- 商品管理 -->
     <div v-if="activeTab === 'items'" class="tab-content">
       <div class="section-header">
@@ -762,6 +1046,209 @@
       <div v-else class="empty-state">点击上方按钮生成AI策略报告</div>
     </div>
 
+    <!-- 拒绝商家模态框 -->
+    <div v-if="showRejectMerchantModal" class="modal-overlay" @click="showRejectMerchantModal = false">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>拒绝商家认证</h3>
+          <button @click="showRejectMerchantModal = false" class="close-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>拒绝原因</label>
+            <textarea 
+              v-model="rejectReason" 
+              placeholder="请输入拒绝原因"
+              class="form-textarea" 
+              rows="4"
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="showRejectMerchantModal = false" class="btn btn-outline">取消</button>
+          <button @click="rejectMerchant" class="btn btn-danger" :disabled="!rejectReason.trim()">
+            确认拒绝
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除商家模态框 -->
+    <div v-if="showDeleteMerchantModal" class="modal-overlay" @click="showDeleteMerchantModal = false">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>删除商家认证</h3>
+          <button @click="showDeleteMerchantModal = false" class="close-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>删除原因</label>
+            <textarea 
+              v-model="deleteReason" 
+              placeholder="请输入删除原因"
+              class="form-textarea" 
+              rows="4"
+            ></textarea>
+          </div>
+          <div class="warning-message">
+            <i class="fas fa-exclamation-triangle"></i>
+            <p>删除后该用户的商家资格将被取消，用户可以重新申请商家认证。</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="showDeleteMerchantModal = false" class="btn btn-outline">取消</button>
+          <button @click="deleteMerchant" class="btn btn-danger" :disabled="!deleteReason.trim()">
+            确认删除
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 商家详情模态框 -->
+    <div v-if="showMerchantDetailModal" class="modal-overlay" @click="showMerchantDetailModal = false">
+      <div class="modal-content merchant-detail-modal" @click.stop>
+        <div class="modal-header">
+          <h3>商家详情</h3>
+          <button @click="showMerchantDetailModal = false" class="close-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body" v-if="selectedMerchant">
+          <div class="merchant-detail">
+            <div class="detail-row">
+              <label>店铺名称：</label>
+              <span>{{ selectedMerchant.business_name }}</span>
+            </div>
+            <div class="detail-row">
+              <label>联系人：</label>
+              <span>{{ selectedMerchant.contact_person }}</span>
+            </div>
+            <div class="detail-row">
+              <label>联系电话：</label>
+              <span>{{ selectedMerchant.contact_phone }}</span>
+            </div>
+            <div class="detail-row">
+              <label>营业地址：</label>
+              <span>{{ selectedMerchant.business_address }}</span>
+            </div>
+            <div class="detail-row" v-if="selectedMerchant.business_license">
+              <label>营业执照号：</label>
+              <span>{{ selectedMerchant.business_license }}</span>
+            </div>
+            <div class="detail-row" v-if="selectedMerchant.business_description">
+              <label>商家描述：</label>
+              <span>{{ selectedMerchant.business_description }}</span>
+            </div>
+            <div class="detail-row">
+              <label>申请时间：</label>
+              <span>{{ formatTime(selectedMerchant.created_at) }}</span>
+            </div>
+            <div class="detail-row">
+              <label>当前状态：</label>
+              <span :class="['status-badge', getMerchantStatusClass(selectedMerchant.status)]">
+                {{ getMerchantStatusText(selectedMerchant.status) }}
+              </span>
+            </div>
+            <div class="detail-row" v-if="selectedMerchant.reject_reason">
+              <label>拒绝原因：</label>
+              <span class="reject-reason">{{ selectedMerchant.reject_reason }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="showMerchantDetailModal = false" class="btn btn-outline">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 待认证用户商家详情模态框 -->
+    <div v-if="showPendingUserMerchantDetailModal" class="modal-overlay" @click="showPendingUserMerchantDetailModal = false">
+      <div class="modal-content merchant-detail-modal" @click.stop>
+        <div class="modal-header">
+          <h3>待认证用户商家详情</h3>
+          <button @click="showPendingUserMerchantDetailModal = false" class="close-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body" v-if="selectedPendingUserMerchant">
+          <div class="merchant-detail">
+            <div class="detail-row">
+              <label>用户信息：</label>
+              <span>{{ selectedPendingUserMerchant.user?.username }} (ID: {{ selectedPendingUserMerchant.user?.id }})</span>
+            </div>
+            <div class="detail-row">
+              <label>店铺名称：</label>
+              <span>{{ selectedPendingUserMerchant.business_name }}</span>
+            </div>
+            <div class="detail-row">
+              <label>联系人：</label>
+              <span>{{ selectedPendingUserMerchant.contact_person }}</span>
+            </div>
+            <div class="detail-row">
+              <label>联系电话：</label>
+              <span>{{ selectedPendingUserMerchant.contact_phone }}</span>
+            </div>
+            <div class="detail-row">
+              <label>营业地址：</label>
+              <span>{{ selectedPendingUserMerchant.business_address }}</span>
+            </div>
+            <div class="detail-row" v-if="selectedPendingUserMerchant.business_license">
+              <label>营业执照号：</label>
+              <span>{{ selectedPendingUserMerchant.business_license }}</span>
+            </div>
+            <div class="detail-row" v-if="selectedPendingUserMerchant.business_description">
+              <label>商家描述：</label>
+              <span>{{ selectedPendingUserMerchant.business_description }}</span>
+            </div>
+            <div class="detail-row">
+              <label>申请时间：</label>
+              <span>{{ formatTime(selectedPendingUserMerchant.created_at) }}</span>
+            </div>
+            <div class="detail-row">
+              <label>当前状态：</label>
+              <span class="status-badge danger">待认证</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="approvePendingVerificationUser(selectedPendingUser)" class="btn btn-success">通过</button>
+          <button @click="showRejectPendingUserModalFunc(selectedPendingUser)" class="btn btn-danger">不通过</button>
+          <button @click="showPendingUserMerchantDetailModal = false" class="btn btn-outline">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 拒绝待认证用户模态框 -->
+    <div v-if="showRejectPendingUserModal" class="modal-overlay" @click="showRejectPendingUserModal = false">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h3>拒绝待认证用户</h3>
+          <button @click="showRejectPendingUserModal = false" class="close-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>拒绝原因：</label>
+            <textarea 
+              v-model="rejectReason" 
+              placeholder="请输入拒绝原因（可选）"
+              rows="4"
+              class="form-control"
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="rejectPendingVerificationUser" class="btn btn-danger">确认拒绝</button>
+          <button @click="showRejectPendingUserModal = false" class="btn btn-outline">取消</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 活动页管理 -->
     <div v-if="activeTab === 'activity'" class="tab-content">
       <h2>活动页管理</h2>
@@ -801,15 +1288,18 @@ const activeTab = ref('users')
 const loading = reactive({
   users: false,
   items: false,
+  merchants: false,
   messages: false,
   buy_requests: false,
   promotions: false,
-  feedbacks: false
+  feedbacks: false,
+  pendingVerificationUsers: false
 })
 
 const stats = ref({})
 const users = ref([])
 const items = ref([])
+const merchants = ref([])
 const systemMessages = ref([])
 const buyRequests = ref([])
 const promotedItems = ref([])
@@ -839,6 +1329,42 @@ const buyRequestFilters = reactive({
   search: ''
 })
 
+// 待认证用户相关变量
+const showPendingUserMerchantDetailModal = ref(false)
+const showRejectPendingUserModal = ref(false)
+const selectedPendingUser = ref(null)
+const selectedPendingUserMerchant = ref(null)
+const rejectReason = ref('')
+
+const merchantFilters = reactive({
+  search: '',
+  status: ''
+})
+
+// 商家管理相关
+const defaultDisplayFrequency = ref(5)
+const showRejectMerchantModal = ref(false)
+const showDeleteMerchantModal = ref(false)
+const showMerchantDetailModal = ref(false)
+const selectedMerchant = ref(null)
+const deleteReason = ref('')
+
+// 商家识别相关
+const userSearchQuery = ref('')
+const searchedUsers = ref([])
+const searchingUser = ref(false)
+
+// 商家管理子标签页
+const merchantSubTab = ref('certified')
+const pendingVerificationUsers = ref([])
+const pendingVerificationFilters = reactive({
+  search: ''
+})
+const pendingVerificationPage = ref(1)
+const pendingVerificationLimit = 50
+const hasMorePendingVerificationUsers = ref(true)
+const loadingMorePendingVerificationUsers = ref(false)
+
 // 系统消息相关
 const showSystemMessageModal = ref(false)
 const publishing = ref(false)
@@ -856,6 +1382,7 @@ const currentUserId = computed(() => user.value.id)
 const tabs = [
   { id: 'users', label: '用户管理', icon: 'fas fa-users' },
   { id: 'items', label: '商品管理', icon: 'fas fa-box' },
+  { id: 'merchants', label: '商家管理', icon: 'fas fa-store' },
   { id: 'buy_requests', label: '求购管理', icon: 'fas fa-shopping-cart' },
   { id: 'promotions', label: '推广位管理', icon: 'fas fa-star' },
   { id: 'messages', label: '消息管理', icon: 'fas fa-bullhorn' },
@@ -894,6 +1421,11 @@ const messagePage = ref(1)
 const messageLimit = ref(50)
 const hasMoreMessages = ref(true)
 const loadingMoreMessages = ref(false)
+
+const merchantPage = ref(1)
+const merchantLimit = 50
+const hasMoreMerchants = ref(true)
+const loadingMoreMerchants = ref(false)
 
 // 用户管理自动加载
 const loadUsers = async (reset = false) => {
@@ -982,6 +1514,44 @@ const loadItems = async (reset = false) => {
   }
 }
 
+// 商家管理自动加载（加载所有商家，用于其他地方的调用）
+const loadMerchants = async (reset = false) => {
+  if (loading.merchants || loadingMoreMerchants.value) return
+  if (reset) {
+    merchantPage.value = 1
+    hasMoreMerchants.value = true
+    merchants.value = []
+  }
+  if (!hasMoreMerchants.value) return
+  loading.merchants = merchantPage.value === 1
+  loadingMoreMerchants.value = merchantPage.value > 1
+  try {
+    const params = {
+      skip: (merchantPage.value - 1) * merchantLimit,
+      limit: merchantLimit
+    }
+    if (merchantFilters.search) params.search = merchantFilters.search
+    if (merchantFilters.status) params.status = merchantFilters.status
+    const response = await api.getAllMerchants(params)
+    const merchantsData = response.data || response
+    if (merchantPage.value === 1) {
+      merchants.value = merchantsData
+    } else {
+      merchants.value.push(...merchantsData)
+    }
+    if (merchantsData.length < merchantLimit) {
+      hasMoreMerchants.value = false
+    } else {
+      merchantPage.value++
+    }
+  } catch (error) {
+    alert('获取商家列表失败')
+  } finally {
+    loading.merchants = false
+    loadingMoreMerchants.value = false
+  }
+}
+
 // 求购管理自动加载
 const loadBuyRequests = async (reset = false) => {
   if (loading.buy_requests || loadingMoreBuyRequests.value) return
@@ -1058,6 +1628,7 @@ const onScroll = (e, type) => {
   if (el.scrollTop + el.clientHeight >= el.scrollHeight - 10) {
     if (type === 'users') loadUsers(false)
     if (type === 'items') loadItems(false)
+    if (type === 'merchants') loadMerchants(false)
     if (type === 'buy_requests') loadBuyRequests(false)
     if (type === 'messages') loadSystemMessages(false)
   }
@@ -1074,11 +1645,16 @@ watch(buyRequestFilters, () => {
   if (activeTab.value === 'buy_requests') loadBuyRequests(true)
 }, { deep: true })
 
+watch(merchantFilters, () => {
+  if (activeTab.value === 'merchants' && merchantSubTab.value === 'certified') loadCertifiedMerchants(true)
+}, { deep: true })
+
 // tab切换时重置分页
 const changeTab = (tabId) => {
   activeTab.value = tabId
   if (tabId === 'users') loadUsers(true)
   else if (tabId === 'items') loadItems(true)
+  else if (tabId === 'merchants') loadCertifiedMerchants(true)
   else if (tabId === 'messages') loadSystemMessages(true)
   else if (tabId === 'buy_requests') loadBuyRequests(true)
   else if (tabId === 'promotions') loadPromotedItems()
@@ -1093,14 +1669,14 @@ const formatTime = (time) => {
 }
 
 const getFirstImage = (item) => {
-  if (!item.images) return '/static/images/default_product.png'
+  if (!item.images) return 'http://127.0.0.1:8000/static/images/default_product.png'
   const images = item.images.split(',')
   const img = images[0]
-  if (!img) return '/static/images/default_product.png'
+  if (!img) return 'http://127.0.0.1:8000/static/images/default_product.png'
   if (img.startsWith('http')) return img
-  if (img.startsWith('/static/images/')) return img
-  if (img.startsWith('static/images/')) return `/${img}`
-  return `/static/images/${img}`
+  if (img.startsWith('/static/images/')) return `http://127.0.0.1:8000${img}`
+  if (img.startsWith('static/images/')) return `http://127.0.0.1:8000/${img}`
+  return `http://127.0.0.1:8000/static/images/${img}`
 }
 
 const logout = () => {
@@ -1200,6 +1776,7 @@ onMounted(() => {
   loadStats()
   loadUsers(true)
   loadActivityBanners()
+  loadDefaultDisplayFrequency()
 })
 
 // 活动页管理相关
@@ -1251,18 +1828,18 @@ const removeBanner = (idx) => {
 
 const getUserAvatar = (user) => {
   if (!user || !user.avatar) {
-    return '/static/images/default_avatar.png'
+    return 'http://127.0.0.1:8000/static/images/default_avatar.png'
   }
   if (user.avatar.startsWith('http')) {
     return user.avatar
   }
   if (user.avatar.startsWith('/static/images/')) {
-    return user.avatar
+    return `http://127.0.0.1:8000${user.avatar}`
   }
   if (user.avatar.startsWith('static/images/')) {
-    return `/${user.avatar}`
+    return `http://127.0.0.1:8000/${user.avatar}`
   }
-  return `/static/images/${user.avatar}`
+  return `http://127.0.0.1:8000/static/images/${user.avatar}`
 }
 
 
@@ -1543,6 +2120,381 @@ const getAIStrategy = async () => {
     aiLoading.value = false
   }
 }
+
+// 商家管理相关方法
+const getMerchantStatusText = (status) => {
+  switch (status) {
+    case 'pending': return '待审核'
+    case 'pending_verification': return '待认证'
+    case 'approved': return '已通过'
+    case 'rejected': return '已拒绝'
+    default: return '未知'
+  }
+}
+
+const getMerchantStatusClass = (status) => {
+  switch (status) {
+    case 'pending': return 'warning'
+    case 'pending_verification': return 'danger'
+    case 'approved': return 'active'
+    case 'rejected': return 'inactive'
+    default: return 'inactive'
+  }
+}
+
+const approveMerchant = async (merchant) => {
+  if (!confirm(`确定要通过商家"${merchant.business_name}"的认证申请吗？`)) {
+    return
+  }
+  
+  try {
+    await api.approveMerchant(merchant.id)
+    merchant.status = 'approved'
+    alert('商家认证已通过')
+    loadCertifiedMerchants(true)
+  } catch (error) {
+    console.error('通过商家认证失败:', error)
+    alert('操作失败')
+  }
+}
+
+const showMerchantDetails = (merchant) => {
+  selectedMerchant.value = merchant
+  showMerchantDetailModal.value = true
+}
+
+const showRejectModal = (merchant) => {
+  selectedMerchant.value = merchant
+  rejectReason.value = ''
+  showRejectMerchantModal.value = true
+}
+
+const rejectMerchant = async () => {
+  if (!rejectReason.value.trim()) {
+    alert('请输入拒绝原因')
+    return
+  }
+  
+  try {
+    await api.rejectMerchant(selectedMerchant.value.id, rejectReason.value)
+    selectedMerchant.value.status = 'rejected'
+    selectedMerchant.value.reject_reason = rejectReason.value
+    alert('商家认证已拒绝')
+    showRejectMerchantModal.value = false
+    loadCertifiedMerchants(true)
+  } catch (error) {
+    console.error('拒绝商家认证失败:', error)
+    alert('操作失败')
+  }
+}
+
+const setPendingVerification = async (merchant) => {
+  if (!confirm(`确定要将商家"${merchant.business_name}"设为待认证状态吗？\n\n设为待认证后：\n- 该用户的所有商品将被下架\n- 用户无法发布新商品\n- 用户需要完成认证才能恢复正常状态`)) {
+    return
+  }
+  
+  try {
+    await api.setPendingMerchant(merchant.user_id, {
+      business_name: merchant.business_name,
+      contact_person: merchant.contact_person,
+      contact_phone: merchant.contact_phone,
+      business_address: merchant.business_address,
+      business_description: merchant.business_description
+    })
+    alert('已设为待认证状态')
+    loadCertifiedMerchants(true)
+  } catch (error) {
+    console.error('设为待认证失败:', error)
+    alert('操作失败，请重试')
+  }
+}
+
+const openDeleteMerchantModal = (merchant) => {
+  selectedMerchant.value = merchant
+  deleteReason.value = ''
+  showDeleteMerchantModal.value = true
+}
+
+const deleteMerchant = async () => {
+  if (!deleteReason.value.trim()) {
+    alert('请输入删除原因')
+    return
+  }
+  
+  if (!selectedMerchant.value) return
+  
+  try {
+    await api.deleteMerchant(selectedMerchant.value.id, deleteReason.value)
+    merchants.value = merchants.value.filter(m => m.id !== selectedMerchant.value.id)
+    alert('商家已删除，系统消息已发送给用户')
+    showDeleteMerchantModal.value = false
+  } catch (error) {
+    console.error('删除商家失败:', error)
+    alert('删除失败')
+  }
+}
+
+const viewMerchantDetail = (merchant) => {
+  selectedMerchant.value = merchant
+  showMerchantDetailModal.value = true
+}
+
+// 商家识别相关方法
+const searchUser = async () => {
+  if (!userSearchQuery.value.trim()) {
+    alert('请输入搜索关键词')
+    return
+  }
+  
+  searchingUser.value = true
+  try {
+    const response = await api.searchUser(userSearchQuery.value)
+    const users = response.data || response
+    if (users && users.length > 0) {
+      searchedUsers.value = users
+    } else {
+      searchedUsers.value = []
+      alert('未找到用户')
+    }
+  } catch (error) {
+    console.error('搜索用户失败:', error)
+    alert('搜索用户失败，请重试')
+    searchedUsers.value = []
+  } finally {
+    searchingUser.value = false
+  }
+}
+
+
+const getUserStatusText = (user) => {
+  if (user.is_pending_verification) return '待认证'
+  if (user.is_merchant) return '已认证商家'
+  if (user.is_pending_merchant) return '申请中'
+  return '普通用户'
+}
+
+const getUserStatusClass = (user) => {
+  if (user.is_pending_verification) return 'danger'
+  if (user.is_merchant) return 'active'
+  if (user.is_pending_merchant) return 'warning'
+  return 'inactive'
+}
+
+const setUserPendingVerification = async (user) => {
+  if (!confirm(`确定要将用户"${user.username}"设为待认证状态吗？\n\n设为待认证后：\n- 该用户的所有商品将被下架\n- 用户无法发布新商品\n- 用户需要完成认证才能恢复正常状态`)) {
+    return
+  }
+  
+  try {
+    await api.setPendingMerchant(user.id, {
+      business_name: `${user.username}的店铺`,
+      contact_person: user.username,
+      contact_phone: user.phone || '13800000000',
+      business_address: '待填写',
+      business_description: '待填写商家信息'
+    })
+    alert('已设为待认证状态')
+    // 更新搜索结果中用户状态
+    const userIndex = searchedUsers.value.findIndex(u => u.id === user.id)
+    if (userIndex !== -1) {
+      searchedUsers.value[userIndex].is_pending_verification = true
+      searchedUsers.value[userIndex].is_merchant = false
+      searchedUsers.value[userIndex].is_pending_merchant = false
+    }
+  } catch (error) {
+    console.error('设为待认证失败:', error)
+    alert('操作失败，请重试')
+  }
+}
+
+const removeUserPendingVerification = async (user) => {
+  if (!confirm(`确定要解除用户"${user.username}"的待认证状态吗？`)) {
+    return
+  }
+  
+  try {
+    await api.removePendingVerification(user.id)
+    alert('已解除待认证状态')
+    // 更新搜索结果中用户状态
+    const userIndex = searchedUsers.value.findIndex(u => u.id === user.id)
+    if (userIndex !== -1) {
+      searchedUsers.value[userIndex].is_pending_verification = false
+    }
+    // 从待认证用户列表中移除
+    pendingVerificationUsers.value = pendingVerificationUsers.value.filter(u => u.id !== user.id)
+  } catch (error) {
+    console.error('解除待认证失败:', error)
+    alert('操作失败，请重试')
+  }
+}
+
+// 显示待认证用户商家详情
+const showPendingUserMerchantDetails = async (user) => {
+  try {
+    selectedPendingUser.value = user
+    const response = await api.getUserMerchantInfo(user.id)
+    selectedPendingUserMerchant.value = response.data || response
+    showPendingUserMerchantDetailModal.value = true
+  } catch (error) {
+    console.error('获取商家信息失败:', error)
+    alert('获取商家信息失败，请重试')
+  }
+}
+
+// 通过待认证用户
+const approvePendingVerificationUser = async (user) => {
+  if (!confirm(`确定要通过用户"${user.username}"的认证吗？`)) {
+    return
+  }
+  
+  try {
+    await api.approvePendingVerificationUser(user.id)
+    alert('用户已通过认证')
+    // 从待认证用户列表中移除
+    pendingVerificationUsers.value = pendingVerificationUsers.value.filter(u => u.id !== user.id)
+    // 关闭模态框
+    showPendingUserMerchantDetailModal.value = false
+  } catch (error) {
+    console.error('通过认证失败:', error)
+    alert('操作失败，请重试')
+  }
+}
+
+// 显示拒绝待认证用户模态框
+const showRejectPendingUserModalFunc = (user) => {
+  selectedPendingUser.value = user
+  rejectReason.value = ''
+  showRejectPendingUserModal.value = true
+}
+
+// 拒绝待认证用户
+const rejectPendingVerificationUser = async () => {
+  if (!selectedPendingUser.value) return
+  
+  try {
+    await api.rejectPendingVerificationUser(selectedPendingUser.value.id, rejectReason.value)
+    alert('用户已被拒绝')
+    // 从待认证用户列表中移除
+    pendingVerificationUsers.value = pendingVerificationUsers.value.filter(u => u.id !== selectedPendingUser.value.id)
+    // 关闭模态框
+    showRejectPendingUserModal.value = false
+    showPendingUserMerchantDetailModal.value = false
+  } catch (error) {
+    console.error('拒绝认证失败:', error)
+    alert('操作失败，请重试')
+  }
+}
+
+// 商家管理子标签页相关方法
+const changeMerchantSubTab = (tab) => {
+  merchantSubTab.value = tab
+  if (tab === 'certified') {
+    loadCertifiedMerchants(true)
+  } else if (tab === 'pending_verification') {
+    loadPendingVerificationUsers(true)
+  }
+}
+
+const loadCertifiedMerchants = async (reset = false) => {
+  if (loading.merchants || loadingMoreMerchants.value) return
+  if (reset) {
+    merchantPage.value = 1
+    hasMoreMerchants.value = true
+    merchants.value = []
+  }
+  if (!hasMoreMerchants.value) return
+  loading.merchants = merchantPage.value === 1
+  loadingMoreMerchants.value = merchantPage.value > 1
+  try {
+    const params = {
+      skip: (merchantPage.value - 1) * merchantLimit,
+      limit: merchantLimit
+    }
+    if (merchantFilters.search) params.search = merchantFilters.search
+    // 始终添加status参数，即使是空字符串
+    params.status = merchantFilters.status
+    const response = await api.getAllMerchants(params)
+    const merchantsData = response.data || response
+    if (merchantPage.value === 1) {
+      merchants.value = merchantsData
+    } else {
+      merchants.value.push(...merchantsData)
+    }
+    if (merchantsData.length < merchantLimit) {
+      hasMoreMerchants.value = false
+    } else {
+      merchantPage.value++
+    }
+  } catch (error) {
+    alert('获取认证商家列表失败')
+  } finally {
+    loading.merchants = false
+    loadingMoreMerchants.value = false
+  }
+}
+
+const loadPendingVerificationUsers = async (reset = false) => {
+  if (loading.pendingVerificationUsers || loadingMorePendingVerificationUsers.value) return
+  if (reset) {
+    pendingVerificationPage.value = 1
+    hasMorePendingVerificationUsers.value = true
+    pendingVerificationUsers.value = []
+  }
+  if (!hasMorePendingVerificationUsers.value) return
+  loading.pendingVerificationUsers = pendingVerificationPage.value === 1
+  loadingMorePendingVerificationUsers.value = pendingVerificationPage.value > 1
+  
+  try {
+    const response = await api.getPendingVerificationUsers({
+      skip: (pendingVerificationPage.value - 1) * pendingVerificationLimit.value,
+      limit: pendingVerificationLimit.value,
+      search: pendingVerificationFilters.search
+    })
+    
+    if (response.data.data.length < pendingVerificationLimit.value) {
+      hasMorePendingVerificationUsers.value = false
+    }
+    
+    if (reset) {
+      pendingVerificationUsers.value = response.data.data
+    } else {
+      pendingVerificationUsers.value = [...pendingVerificationUsers.value, ...response.data.data]
+    }
+    
+    pendingVerificationPage.value += 1
+  } catch (error) {
+    console.error('加载待认证用户失败:', error)
+    alert('加载失败，请重试')
+  } finally {
+    loading.pendingVerificationUsers = false
+    loadingMorePendingVerificationUsers.value = false
+  }
+}
+
+const updateDefaultDisplayFrequency = async () => {
+  if (defaultDisplayFrequency.value < 1 || defaultDisplayFrequency.value > 20) {
+    alert('展示频率必须在1-20之间')
+    return
+  }
+  
+  try {
+    await api.updateDefaultDisplayFrequency(defaultDisplayFrequency.value)
+    alert('默认展示频率已更新')
+  } catch (error) {
+    console.error('更新默认展示频率失败:', error)
+    alert('更新失败')
+  }
+}
+
+// 加载默认展示频率
+const loadDefaultDisplayFrequency = async () => {
+  try {
+    const response = await api.getDefaultDisplayFrequency()
+    defaultDisplayFrequency.value = response.data.frequency || 5
+  } catch (error) {
+    console.error('获取默认展示频率失败:', error)
+  }
+}
 </script>
 
 <style scoped>
@@ -1641,6 +2593,34 @@ const getAIStrategy = async () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+}
+
+.merchant-frequency-settings {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8f9fa;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.merchant-frequency-settings label {
+  font-weight: 500;
+  color: #495057;
+  margin: 0;
+}
+
+.frequency-input {
+  width: 60px !important;
+  margin: 0 !important;
+  text-align: center;
+}
+
+.merchant-frequency-settings span {
+  color: #6c757d;
+  font-size: 14px;
+  white-space: nowrap;
 }
 
 .filters {
@@ -1820,6 +2800,15 @@ th {
   .section-header {
     flex-direction: column;
     gap: 15px;
+  }
+  
+  .merchant-frequency-settings {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .merchant-frequency-settings span {
+    font-size: 13px;
   }
   
   .filters {
@@ -2365,6 +3354,400 @@ th {
   margin-top: 20px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
+
+/* 商家管理样式 */
+.merchant-settings-section {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid #e9ecef;
+}
+
+.merchant-settings-section h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.setting-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* 商家识别样式 */
+.merchant-identification-section {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid #e9ecef;
+}
+
+.merchant-identification-section h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.identification-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.search-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.search-user label {
+  font-weight: 500;
+  color: #555;
+  min-width: 80px;
+}
+
+.search-user input {
+  flex: 1;
+  min-width: 200px;
+}
+
+.search-results {
+  margin-top: 16px;
+}
+
+.search-results-header {
+  margin-bottom: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.search-results-header h4 {
+  margin: 0;
+  color: #333;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.search-results-list {
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  scrollbar-width: thin;
+  scrollbar-color: #ccc #f5f5f5;
+}
+
+.search-results-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.search-results-list::-webkit-scrollbar-track {
+  background: #f5f5f5;
+  border-radius: 3px;
+}
+
+.search-results-list::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+.search-results-list::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+.user-result {
+  background: white;
+  border-bottom: 1px solid #eee;
+  padding: 10px 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  min-height: 100px;
+}
+
+.user-result:last-child {
+  border-bottom: none;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex: 1;
+}
+
+.user-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-details h4 {
+  margin: 0 0 5px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.user-details p {
+  margin: 2px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.user-status {
+  margin-top: 8px;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge.danger {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.status-badge.active {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-badge.warning {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-badge.inactive {
+  background: #e2e3e5;
+  color: #6c757d;
+}
+
+.user-actions {
+  flex-shrink: 0;
+}
+
+/* 商家管理子标签页样式 */
+.merchant-sub-tabs {
+  margin-bottom: 20px;
+}
+
+.sub-tab-nav {
+  display: flex;
+  border-bottom: 2px solid #e9ecef;
+  margin-bottom: 20px;
+}
+
+.sub-tab-btn {
+  background: none;
+  border: none;
+  padding: 12px 24px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6c757d;
+  border-bottom: 2px solid transparent;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sub-tab-btn:hover {
+  color: #495057;
+  background-color: #f8f9fa;
+}
+
+.sub-tab-btn.active {
+  color: #007bff;
+  border-bottom-color: #007bff;
+  background-color: #f8f9fa;
+}
+
+.sub-tab-content {
+  min-height: 400px;
+}
+
+/* 待认证用户表格样式 */
+.pending-verification-table {
+  max-height: 500px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+.pending-verification-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.pending-verification-table th,
+.pending-verification-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.pending-verification-table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  color: #495057;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-avatar-small {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.user-name {
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.user-id {
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.contact-info {
+  font-size: 14px;
+  color: #666;
+}
+
+.contact-info div {
+  margin-bottom: 2px;
+}
+
+.setting-controls label {
+  font-weight: 500;
+  color: #333;
+  margin: 0;
+}
+
+.merchants-table {
+  max-height: 60vh;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+.merchants-table table {
+  min-width: 900px;
+}
+
+.user-id {
+  font-size: 12px;
+  color: #999;
+  margin-top: 2px;
+}
+
+.status-badge.warning {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.merchant-detail-modal {
+  max-width: 600px;
+}
+
+.merchant-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.detail-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.detail-row label {
+  font-weight: 500;
+  color: #333;
+  min-width: 100px;
+  margin: 0;
+}
+
+.detail-row span {
+  color: #666;
+  flex: 1;
+  word-break: break-word;
+}
+
+.reject-reason {
+  color: #e74c3c !important;
+  font-style: italic;
+}
+
+.warning-message {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 4px;
+  padding: 12px;
+  margin-top: 15px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.warning-message i {
+  color: #f39c12;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.warning-message p {
+  margin: 0;
+  color: #856404;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+  .setting-controls {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .detail-row {
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .detail-row label {
+    min-width: auto;
+  }
+}
 .tab-content {
   max-height: 70vh;
   overflow-y: auto;
@@ -2372,6 +3755,7 @@ th {
 }
 .users-table,
 .items-table,
+.merchants-table,
 .buy-requests-table,
 .messages-table {
   max-height: 60vh;
@@ -2380,6 +3764,7 @@ th {
 }
 .users-table table,
 .items-table table,
+.merchants-table table,
 .buy-requests-table table,
 .messages-table table {
   min-width: 900px;

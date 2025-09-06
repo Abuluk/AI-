@@ -583,6 +583,104 @@ const apiService = {
 
   async markAllMessagesAsRead() {
     return api.post('/messages/all-read')
+  },
+
+  // 商家认证相关
+  async createMerchantApplication(data) {
+    return api.post('/merchants/apply', data)
+  },
+
+  async getMerchantInfo() {
+    return api.get('/merchants/my')
+  },
+
+  async updateMerchantInfo(data) {
+    return api.put('/merchants/my', data)
+  },
+
+  async getMerchantDisplayConfig() {
+    return api.get('/merchants/display-config')
+  },
+
+  async updateMerchantDisplayConfig(data) {
+    return api.put('/merchants/display-config', data)
+  },
+
+  async cancelMerchantApplication() {
+    return api.delete('/merchants/cancel-application')
+  },
+
+      // 管理员商家管理
+    async getAllMerchants(params = {}) {
+      return api.get('/merchants/admin/all', { params })
+    },
+
+  async approveMerchant(merchantId) {
+    return api.post(`/merchants/${merchantId}/approve`)
+  },
+
+  async rejectMerchant(merchantId, reason) {
+    return api.post(`/merchants/${merchantId}/reject`, { reason })
+  },
+
+  // 管理员获取用户商家信息
+  async getUserMerchantInfo(userId) {
+    return api.get(`/merchants/admin/user/${userId}`)
+  },
+
+  // 管理员通过待认证用户
+  async approvePendingVerificationUser(userId) {
+    return api.post(`/merchants/admin/user/${userId}/approve`)
+  },
+
+  // 管理员拒绝待认证用户
+  async rejectPendingVerificationUser(userId, reason) {
+    return api.post(`/merchants/admin/user/${userId}/reject`, { reason })
+  },
+
+  async deleteMerchant(merchantId, reason) {
+    return api.delete(`/merchants/admin/${merchantId}`, { data: { reason } })
+  },
+
+  // 用户申请取消商家认证
+  async cancelMerchantApplication(reason) {
+    return api.post('/merchants/cancel-application', { reason })
+  },
+
+  async setPendingMerchant(userId, merchantData = {}) {
+    const params = {
+      user_id: userId,
+      business_name: merchantData.business_name || '默认商家',
+      contact_person: merchantData.contact_person || '默认联系人',
+      contact_phone: merchantData.contact_phone || '13800000000',
+      business_address: merchantData.business_address || '默认地址',
+      business_description: merchantData.business_description || '默认描述'
+    }
+    return api.post(`/merchants/admin/set-pending-verification`, null, { params })
+  },
+
+  async searchUser(keyword) {
+    return api.get(`/admin/users?search=${encodeURIComponent(keyword)}&limit=10`)
+  },
+
+  async getPendingVerificationUsers(params) {
+    const queryParams = new URLSearchParams()
+    if (params.skip) queryParams.append('skip', params.skip)
+    if (params.limit) queryParams.append('limit', params.limit)
+    if (params.search) queryParams.append('search', params.search)
+    return api.get(`/users/pending-verification?${queryParams.toString()}`)
+  },
+
+  async removePendingVerification(userId) {
+    return api.post(`/merchants/remove-pending-verification`, { user_id: userId })
+  },
+
+  async getDefaultDisplayFrequency() {
+    return api.get('/merchants/admin/display-config/default')
+  },
+
+  async updateDefaultDisplayFrequency(frequency) {
+    return api.put('/merchants/admin/display-config/default', { display_frequency: frequency })
   }
 }
 

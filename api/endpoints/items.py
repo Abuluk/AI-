@@ -14,10 +14,60 @@ from core.spark_ai import spark_ai_service
 import json
 from fastapi.encoders import jsonable_encoder
 from crud.crud_item import like_item, unlike_item
-from db.models import ItemLike
+from db.models import ItemLike, MerchantDisplayConfig
 from config import get_image_base_url, get_full_image_url
+from crud.crud_merchant import get_merchant_display_config
 
 router = APIRouter()
+
+def get_items_with_merchant_display(
+    normal_items: List[Item], 
+    merchant_items: List[Item], 
+    display_frequency: int, 
+    target_size: int
+) -> List[Item]:
+    """根据展示频率混合普通商品和商家商品"""
+    result = []
+    normal_index = 0
+    merchant_index = 0
+    items_added = 0
+    
+    # 按展示频率插入商家商品
+    while items_added < target_size and (normal_index < len(normal_items) or merchant_index < len(merchant_items)):
+        # 添加普通商品
+        if normal_index < len(normal_items):
+            result.append(normal_items[normal_index])
+            normal_index += 1
+            items_added += 1
+            
+            # 检查是否需要插入商家商品（每隔display_frequency个普通商品后插入一个商家商品）
+            if (items_added % display_frequency == 0 and merchant_index < len(merchant_items)):
+                merchant_item = merchant_items[merchant_index % len(merchant_items)]
+                # 创建新的对象避免重复引用
+                import copy
+                new_merchant_item = copy.deepcopy(merchant_item)
+                new_merchant_item.is_promoted = True  # 标记为推广商品
+                result.append(new_merchant_item)
+                merchant_index += 1
+                items_added += 1
+                
+                # 如果已经达到目标数量，跳出循环
+                if items_added >= target_size:
+                    break
+        else:
+            # 如果普通商品用完了，继续添加商家商品
+            if merchant_index < len(merchant_items):
+                merchant_item = merchant_items[merchant_index % len(merchant_items)]
+                import copy
+                new_merchant_item = copy.deepcopy(merchant_item)
+                new_merchant_item.is_promoted = True
+                result.append(new_merchant_item)
+                merchant_index += 1
+                items_added += 1
+            else:
+                break
+    
+    return result[:target_size]
 
 # 公共端点 - 获取AI分析的低价好物推荐
 @router.get("/ai-cheap-deals")
@@ -155,9 +205,23 @@ def get_items_with_promoted(
     search: Optional[str] = Query(None, description="搜索关键词"),
     location: Optional[str] = Query(None, description="地区过滤"),
     order_by: Optional[str] = Query("created_at_desc", description="排序方式"),
+    user_id: Optional[int] = Query(None, description="用户ID（用于获取个人展示配置）"),
     db: Session = Depends(get_db)
 ):
-    """获取商品列表，支持间隔显示推广商品"""
+    """获取商品列表，支持间隔显示推广商品和商家商品"""
+    # 获取商家商品展示配置
+    display_frequency = 5  # 默认展示频率
+    if user_id:
+        # 获取用户个人配置
+        user_config = get_merchant_display_config(db, user_id)
+        if user_config:
+            display_frequency = user_config.display_frequency
+    else:
+        # 获取全局默认配置
+        default_config = get_merchant_display_config(db, None)
+        if default_config:
+            display_frequency = default_config.display_frequency
+    
     # 获取推广商品配置
     promoted_config = db.query(SiteConfig).filter(SiteConfig.key == "promoted_items").first()
     interval_config = db.query(SiteConfig).filter(SiteConfig.key == "promoted_interval").first()
@@ -233,16 +297,25 @@ def get_items_with_promoted(
     else:
         query = query.order_by(Item.created_at.desc())
     
-    # 获取普通商品，排除推广商品
+    # 分离普通商品和商家商品
     skip = (page - 1) * size
-    if promoted_items:
-        promoted_ids = [item.id for item in promoted_items]
-        query = query.filter(~Item.id.in_(promoted_ids))
+    all_items = query.offset(skip).limit(size * 3).all()  # 获取更多商品以便混合
     
-    normal_items = query.offset(skip).limit(size * 2).all()  # 获取更多商品以便插入推广商品
+    # 分离普通商品和商家商品
+    normal_items = []
+    merchant_items = []
+    promoted_ids = [item.id for item in promoted_items] if promoted_items else []
     
-    # 处理普通商品图片路径
-    for item in normal_items:
+    for item in all_items:
+        if item.id in promoted_ids:
+            continue  # 跳过推广商品
+        elif item.is_merchant_item:
+            merchant_items.append(item)
+        else:
+            normal_items.append(item)
+    
+    # 处理图片路径
+    for item in normal_items + merchant_items:
         if item.images:
             images = item.images.split(',')
             processed_images = []
@@ -254,10 +327,13 @@ def get_items_with_promoted(
                         processed_images.append(full_url)
             item.images = ','.join(processed_images)
     
+    # 混合普通商品和商家商品
+    mixed_items = get_items_with_merchant_display(normal_items, merchant_items, display_frequency, size)
+    
     # 插入推广商品
     result = []
     promoted_index = 0
-    normal_index = 0
+    mixed_index = 0
     items_added = 0
     
     # 第一个位置总是推广商品（如果有的话）
@@ -269,13 +345,13 @@ def get_items_with_promoted(
         items_added += 1
     
     # 按间隔插入推广商品
-    while items_added < size and normal_index < len(normal_items):
-        # 添加普通商品
-        result.append(normal_items[normal_index])
-        normal_index += 1
+    while items_added < size and mixed_index < len(mixed_items):
+        # 添加混合商品
+        result.append(mixed_items[mixed_index])
+        mixed_index += 1
         items_added += 1
         
-        # 检查是否需要插入推广商品（每隔interval个普通商品后插入一个推广商品）
+        # 检查是否需要插入推广商品（每隔interval个商品后插入一个推广商品）
         if (items_added % interval == 0 and promoted_items and promoted_index < len(promoted_items)):
             promoted_item = promoted_items[promoted_index % len(promoted_items)]
             # 创建新的对象避免重复引用
@@ -290,10 +366,10 @@ def get_items_with_promoted(
             if items_added >= size:
                 break
     
-    # 如果还有剩余位置，继续添加普通商品
-    while items_added < size and normal_index < len(normal_items):
-        result.append(normal_items[normal_index])
-        normal_index += 1
+    # 如果还有剩余位置，继续添加混合商品
+    while items_added < size and mixed_index < len(mixed_items):
+        result.append(mixed_items[mixed_index])
+        mixed_index += 1
         items_added += 1
     
     # 限制返回数量
@@ -316,6 +392,7 @@ def get_all_items(
     exclude_promoted: Optional[bool] = Query(None, description="是否排除推广商品"),
     status: Optional[str] = Query(None, description="商品状态: online, offline"),
     sold: Optional[bool] = Query(None, description="是否已售出"),
+    user_id: Optional[int] = Query(None, description="用户ID（用于获取个人展示配置）"),
     db: Session = Depends(get_db)
 ):
     """获取所有商品列表，支持分页、排序和分类过滤
@@ -350,6 +427,19 @@ def get_all_items(
     # 设置默认排序
     if order_by is None:
         order_by = "created_at_desc"
+    
+    # 获取商家商品展示配置
+    display_frequency = 5  # 默认展示频率
+    if user_id:
+        # 获取用户个人配置
+        user_config = get_merchant_display_config(db, user_id)
+        if user_config:
+            display_frequency = user_config.display_frequency
+    else:
+        # 获取全局默认配置
+        default_config = get_merchant_display_config(db, None)
+        if default_config:
+            display_frequency = default_config.display_frequency
     
     query = db.query(Item)
     
@@ -414,11 +504,21 @@ def get_all_items(
     else:
         query = query.order_by(Item.created_at.desc())
     
-    # 分页
-    items = query.offset(skip).limit(limit).all()
+    # 获取所有商品
+    all_items = query.offset(skip).limit(limit * 2).all()  # 获取更多商品以便混合
+    
+    # 分离普通商品和商家商品
+    normal_items = []
+    merchant_items = []
+    
+    for item in all_items:
+        if item.is_merchant_item:
+            merchant_items.append(item)
+        else:
+            normal_items.append(item)
     
     # 处理图片路径
-    for item in items:
+    for item in normal_items + merchant_items:
         if item.images:
             images = item.images.split(',')
             processed_images = []
@@ -430,6 +530,9 @@ def get_all_items(
                     if full_url:
                         processed_images.append(full_url)
             item.images = ','.join(processed_images)
+    
+    # 混合普通商品和商家商品
+    items = get_items_with_merchant_display(normal_items, merchant_items, display_frequency, limit)
     
     return items
 
@@ -553,7 +656,9 @@ def read_item(item_id: int, db: Session = Depends(get_db), current_user: Optiona
         "liked_by_me": liked_by_me,
         "owner_id": item.owner_id,
         "owner": owner_info,
-        "favorited_count": item.favorited_count or 0
+        "favorited_count": item.favorited_count or 0,
+        "is_merchant_item": item.is_merchant_item or False,
+        "is_promoted": getattr(item, 'is_promoted', False)
     }
     
     return item_data
@@ -572,6 +677,10 @@ async def create_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # 检查用户是否为待认证状态（只有管理员加入待认证名单才限制发布）
+    if current_user.is_pending_verification:
+        raise HTTPException(status_code=403, detail="您处于待认证状态，无法发布商品")
+    
     # 创建商品基础信息
     db_item = Item(
         title=title,
@@ -580,7 +689,8 @@ async def create_item(
         category=category,
         location=location,
         condition=condition,
-        owner_id=current_user.id
+        owner_id=current_user.id,
+        is_merchant_item=current_user.is_merchant  # 设置是否为商家商品
     )
     db.add(db_item)
     db.commit()

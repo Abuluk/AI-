@@ -5,6 +5,7 @@ from core.security import get_current_active_user, get_current_user
 from db.models import User
 from db.models import Item
 from schemas.user import UserInDB, UserUpdate, UserPublic, UserIds
+from config import get_full_image_url
 from db.models import Favorite
 from schemas.item import ItemInDB
 from schemas.favorite import FavoriteInDB
@@ -63,7 +64,7 @@ def read_user_me(
         "username": current_user.username,
         "email": current_user.email,
         "phone": current_user.phone,
-        "avatar": current_user.avatar,
+        "avatar": get_full_image_url(current_user.avatar),
         "bio": current_user.bio,
         "location": current_user.location,
         "contact": current_user.contact,
@@ -74,7 +75,10 @@ def read_user_me(
         "is_admin": current_user.is_admin,
         "followers": current_user.followers,
         "following": current_user.following,
-        "items_count": items_count
+        "items_count": items_count,
+        "is_merchant": current_user.is_merchant or False,
+        "is_pending_merchant": current_user.is_pending_merchant or False,
+        "is_pending_verification": current_user.is_pending_verification or False
     }
 
 @router.put("/me", response_model=UserInDB)
@@ -163,7 +167,60 @@ def get_user_items(
         query = query.order_by(Item.created_at.desc())
     # 分页
     items = query.offset(skip).limit(limit).all()
-    return {"data": items, "total": total}
+    return {"data": items, "total": total    }
+
+@router.get("/pending-verification")
+def get_pending_verification_users(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    search: str = Query(""),
+    db: Session = Depends(get_db)
+):
+    """获取待认证用户列表"""
+    query = db.query(User).filter(User.is_pending_verification == True)
+    
+    if search:
+        query = query.filter(
+            (User.username.contains(search)) |
+            (User.email.contains(search)) |
+            (User.phone.contains(search))
+        )
+    
+    total = query.count()
+    users = query.offset(skip).limit(limit).all()
+    
+    # 计算每个用户的商品数量
+    user_data = []
+    for user in users:
+        items_count = db.query(Item).filter(Item.owner_id == user.id).count()
+        user_data.append({
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "phone": user.phone,
+            "avatar": get_full_image_url(user.avatar),
+            "bio": user.bio,
+            "location": user.location,
+            "contact": user.contact,
+            "is_active": user.is_active,
+            "is_admin": user.is_admin,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at,
+            "last_login": user.last_login,
+            "followers": user.followers,
+            "following": user.following,
+            "items_count": items_count,
+            "is_merchant": user.is_merchant or False,
+            "is_pending_merchant": user.is_pending_merchant or False,
+            "is_pending_verification": user.is_pending_verification or False
+        })
+    
+    return {
+        "data": user_data,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
 
 @router.get("/{user_id}", response_model=UserInDB)
 def get_user(user_id: int, db: Session = Depends(get_db)):
@@ -192,7 +249,9 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
         "is_admin": user.is_admin,
         "followers": user.followers,
         "following": user.following,
-        "items_count": items_count
+        "items_count": items_count,
+        "is_merchant": user.is_merchant or False,
+        "is_pending_merchant": user.is_pending_merchant or False
     }
 
 @router.post("/by_ids", response_model=List[UserPublic])
@@ -229,3 +288,46 @@ def reset_password(data: DoResetPassword, db: Session = Depends(get_db)):
     db.commit()
     reset_codes.pop(data.account, None)
     return {'msg': '密码重置成功'}
+
+@router.get("/search", response_model=UserInDB)
+def search_user(keyword: str = Query(..., min_length=1), db: Session = Depends(get_db)):
+    """搜索用户（通过用户名、邮箱或手机号）"""
+    # 尝试通过用户名查找
+    user = db.query(User).filter(User.username == keyword).first()
+    
+    # 尝试通过邮箱查找
+    if not user:
+        user = db.query(User).filter(User.email == keyword).first()
+    
+    # 尝试通过手机号查找
+    if not user:
+        user = db.query(User).filter(User.phone == keyword).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # 计算用户的商品数量
+    items_count = db.query(Item).filter(Item.owner_id == user.id).count()
+    
+    # 返回用户信息，包含商品数量
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "phone": user.phone,
+        "avatar": user.avatar,
+        "bio": user.bio,
+        "location": user.location,
+        "contact": user.contact,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "last_login": user.last_login,
+        "followers": user.followers,
+        "following": user.following,
+        "items_count": items_count,
+        "is_merchant": user.is_merchant or False,
+        "is_pending_merchant": user.is_pending_merchant or False,
+        "is_pending_verification": user.is_pending_verification or False
+    }

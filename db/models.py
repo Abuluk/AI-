@@ -23,11 +23,16 @@ class User(Base):
     followers = Column(Integer, default=0)
     following = Column(Integer, default=0)
     items_count = Column(Integer, default=0)
+    is_merchant = Column(Boolean, default=False)  # 是否为商家
+    is_pending_merchant = Column(Boolean, default=False)  # 是否为待定商家（申请中）
+    is_pending_verification = Column(Boolean, default=False)  # 是否为待认证商家（管理员判定）
     
     items = relationship("Item", back_populates="owner")
     messages = relationship("Message", back_populates="user")
     favorites = relationship("Favorite", back_populates="user")
     buy_requests = relationship("BuyRequest", back_populates="user")  # 新增
+    merchant = relationship("Merchant", back_populates="user", uselist=False)  # 商家信息
+    merchant_display_config = relationship("MerchantDisplayConfig", back_populates="user", uselist=False)  # 商家展示配置
 
 class Item(Base):
     __tablename__ = "items"
@@ -47,6 +52,7 @@ class Item(Base):
     views = Column(Integer, default=0)  # 添加浏览量字段
     favorited_count = Column(Integer, default=0)  # 添加收藏计数
     like_count = Column(Integer, default=0)  # 新增点赞数
+    is_merchant_item = Column(Boolean, default=False)  # 是否为商家商品
     
     favorited_by = relationship("Favorite", back_populates="item")
     owner = relationship("User", back_populates="items")
@@ -176,4 +182,35 @@ class Feedback(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     solved_at = Column(DateTime, nullable=True)
 
+    user = relationship('User', foreign_keys=[user_id])
+
+class Merchant(Base):
+    __tablename__ = 'merchants'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, unique=True)
+    business_name = Column(String(100), nullable=False)  # 商家名称
+    business_license = Column(String(200), nullable=True)  # 营业执照号
+    contact_person = Column(String(50), nullable=False)  # 联系人
+    contact_phone = Column(String(20), nullable=False)  # 联系电话
+    business_address = Column(String(200), nullable=False)  # 营业地址
+    business_description = Column(Text, nullable=True)  # 商家描述
+    status = Column(String(20), default='pending')  # pending(申请中), pending_verification(待认证), approved(已认证), rejected(已拒绝)
+    is_pending = Column(Boolean, default=False)  # 是否为待定商家
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    approved_at = Column(DateTime, nullable=True)  # 认证通过时间
+    rejected_at = Column(DateTime, nullable=True)  # 拒绝时间
+    reject_reason = Column(Text, nullable=True)  # 拒绝原因
+    
+    user = relationship('User', foreign_keys=[user_id])
+
+class MerchantDisplayConfig(Base):
+    __tablename__ = 'merchant_display_configs'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)  # 用户ID，为NULL表示全局默认配置
+    display_frequency = Column(Integer, default=5)  # 展示频率，每几个商品展示一个商家商品
+    is_default = Column(Boolean, default=False)  # 是否为默认配置
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    
     user = relationship('User', foreign_keys=[user_id])

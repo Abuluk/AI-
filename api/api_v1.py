@@ -15,6 +15,7 @@ from .endpoints import (
     blacklist,  # 新增导入黑名单功能
     feedback,  # 新增
     ai_strategy,  # 新增
+    merchants,  # 新增商家功能
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
@@ -109,4 +110,12 @@ api_router.include_router(
     ai_strategy.router,
     prefix="/ai_strategy",
     tags=["AI策略"]
+)
+
+# 商家功能路由 - 需要认证
+api_router.include_router(
+    merchants.router,
+    prefix="/merchants",
+    tags=["商家"],
+    dependencies=[Depends(oauth2_scheme)]
 )

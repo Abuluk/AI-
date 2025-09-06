@@ -61,12 +61,12 @@
             </div>
             
             <div class="form-group">
-              <label class="form-label">手机号</label>
+              <label class="form-label">{{ isLoginMode ? '用户名/邮箱/手机号' : '手机号' }}</label>
               <input 
-                type="tel" 
+                :type="isLoginMode ? 'text' : 'tel'"
                 class="form-control" 
                 v-model="form.phone" 
-                placeholder="请输入手机号"
+                :placeholder="isLoginMode ? '请输入用户名、邮箱或手机号' : '请输入手机号'"
                 required
               >
             </div>
@@ -239,7 +239,7 @@ const submitForm = async () => {
       
       if (!identifier || !form.password) {
         console.error('Identifier or password is empty.');
-        authStore.error = '手机号和密码不能为空';
+        authStore.error = '用户名/邮箱/手机号和密码不能为空';
         return;
       }
 

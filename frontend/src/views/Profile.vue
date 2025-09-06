@@ -37,6 +37,15 @@
         <div class="user-details">
           <h2 class="username">{{ user.username }}</h2>
           <p class="user-bio">{{ user.bio || '这个人很懒，什么都没留下' }}</p>
+          
+          <!-- 商家状态显示 -->
+          <div class="merchant-status" v-if="user.is_merchant || user.is_pending_merchant">
+            <div class="status-badge" :class="getMerchantStatusClass()">
+              <i class="fas fa-store"></i>
+              {{ getMerchantStatusText() }}
+            </div>
+          </div>
+          
           <div class="user-stats">
             <div class="stat-item">
               <strong>{{ user.followers || 0 }}</strong>
@@ -47,21 +56,68 @@
               <span>关注</span>
             </div>
             <div class="stat-item">
-              <strong>{{ user.items || 0 }}</strong>
+              <strong>{{ user.items_count || 0 }}</strong>
               <span>商品</span>
             </div>
           </div>
         </div>
       </div>
       
-      <div>
+      <div class="profile-actions">
         <button class="btn btn-outline" @click="openEditModal">
           <i class="fas fa-edit"></i> 编辑资料
+        </button>
+        
+        <!-- 商家认证按钮 -->
+        <button 
+          v-if="!user.is_merchant && !user.is_pending_merchant && !user.is_pending_verification" 
+          class="btn btn-primary" 
+          @click="openMerchantModal"
+        >
+          <i class="fas fa-store"></i> 申请商家认证
+        </button>
+        
+        <div v-else-if="user.is_pending_merchant" class="merchant-status-buttons">
+          <button class="btn btn-warning" @click="openMerchantModal">
+            <i class="fas fa-clock"></i> 查看认证状态
+          </button>
+          <button class="btn btn-sm btn-outline-danger ml-2" @click="cancelApplication">
+            <i class="fas fa-times"></i> 取消申请
+          </button>
+        </div>
+        
+        <div v-else-if="user.is_merchant" class="merchant-status-buttons">
+          <button class="btn btn-success" @click="openMerchantModal">
+            <i class="fas fa-store"></i> 商家中心
+          </button>
+          <button class="btn btn-sm btn-outline-danger ml-2" @click="openCancelMerchantModal">
+            <i class="fas fa-times"></i> 取消商家认证
+          </button>
+        </div>
+        
+        <button 
+          v-else-if="user.is_pending_verification" 
+          class="btn btn-danger" 
+          @click="openMerchantModal"
+        >
+          <i class="fas fa-exclamation-triangle"></i> 待认证状态
+        </button>
+        
+        <button 
+          v-else-if="user.is_merchant || user.is_pending_merchant" 
+          class="btn btn-success" 
+          @click="openMerchantSettings"
+        >
+          <i class="fas fa-cog"></i> 商家设置
         </button>
       </div>
     </div>
       <!-- 修改后的按钮区域 - 添加布局类 -->
       <div class="profile-actions actions-right">
+        <!-- 显示设置按钮 - 所有用户都可以设置 -->
+        <button class="btn btn-outline-primary" @click="openDisplaySettings">
+          <i class="fas fa-eye"></i> 显示设置
+        </button>
         <button class="btn btn-primary" @click="navigateToPublish">
           <i class="fas fa-plus"></i> 上传商品
         </button>
@@ -242,6 +298,48 @@
       </div>
     </div>
     
+    <!-- 取消商家认证模态框 -->
+    <div v-if="showCancelMerchantModal" class="modal-overlay" @click.self="closeCancelMerchantModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>取消商家认证</h3>
+          <button class="modal-close" @click="closeCancelMerchantModal">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div class="modal-body">
+          <div class="warning-message">
+            <i class="fas fa-exclamation-triangle"></i>
+            <p>取消商家认证后，您将失去商家特权，包括商品展示频率提升等权益。您可以随时重新申请商家认证。</p>
+          </div>
+          
+          <div class="form-group">
+            <label for="cancel_reason">取消原因 *</label>
+            <textarea 
+              id="cancel_reason" 
+              v-model="cancelMerchantReason" 
+              placeholder="请说明取消商家认证的原因"
+              rows="4"
+              required
+            ></textarea>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button class="btn btn-outline" @click="closeCancelMerchantModal">取消</button>
+          <button 
+            class="btn btn-danger" 
+            @click="cancelMerchantApplication"
+            :disabled="!cancelMerchantReason.trim() || cancelingMerchant"
+          >
+            <i class="fas fa-spinner fa-spin" v-if="cancelingMerchant"></i>
+            {{ cancelingMerchant ? '提交中...' : '确认取消' }}
+          </button>
+        </div>
+      </div>
+    </div>
+    
     <!-- 编辑资料模态框 -->
     <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
       <div class="modal-content">
@@ -341,6 +439,339 @@
         </div>
       </div>
     </div>
+    
+    <!-- 商家认证模态框 -->
+    <div v-if="showMerchantModal" class="modal-overlay" @click.self="closeMerchantModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>{{ getMerchantModalTitle() }}</h3>
+          <button class="modal-close" @click="closeMerchantModal">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div class="modal-body">
+          <!-- 待定商家状态显示（申请中） -->
+          <div v-if="user.is_pending_merchant" class="merchant-status-info">
+            <div class="status-pending">
+              <i class="fas fa-clock"></i>
+              <h4>认证审核中</h4>
+              <p>您的商家认证申请正在审核中，请耐心等待管理员审核。</p>
+              <div class="status-tips">
+                <p><i class="fas fa-check-circle"></i> 您可以正常发布和管理商品</p>
+                <p><i class="fas fa-info-circle"></i> 审核通过后即可享受商家特权</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 待认证状态显示和表单 -->
+          <div v-else-if="user.is_pending_verification" class="merchant-status-info">
+            <div class="status-pending-verification">
+              <i class="fas fa-exclamation-triangle"></i>
+              <h4>待认证状态</h4>
+              <p>管理员判定您为商家，需要完成认证才能解除此状态。</p>
+              <div class="status-tips">
+                <p><i class="fas fa-info-circle"></i> 您的所有商品已自动下架</p>
+                <p><i class="fas fa-info-circle"></i> 无法发布新商品</p>
+                <p><i class="fas fa-info-circle"></i> 请填写以下信息完成认证</p>
+              </div>
+            </div>
+            
+            <!-- 待认证用户填写表单 -->
+            <div class="merchant-verification-form">
+              <h4>完善商家信息</h4>
+              <form @submit.prevent="submitMerchantVerification">
+                <div class="form-group">
+                  <label for="verification_business_name">店铺名称 *</label>
+                  <input 
+                    id="verification_business_name" 
+                    type="text" 
+                    v-model="verificationForm.business_name" 
+                    placeholder="请输入店铺名称"
+                    required
+                  >
+                </div>
+                
+                <div class="form-group">
+                  <label for="verification_contact_person">联系人姓名 *</label>
+                  <input 
+                    id="verification_contact_person" 
+                    type="text" 
+                    v-model="verificationForm.contact_person" 
+                    placeholder="请输入联系人姓名"
+                    required
+                  >
+                </div>
+                
+                <div class="form-group">
+                  <label for="verification_contact_phone">联系电话 *</label>
+                  <input 
+                    id="verification_contact_phone" 
+                    type="tel" 
+                    v-model="verificationForm.contact_phone" 
+                    placeholder="请输入联系电话"
+                    required
+                  >
+                </div>
+                
+                <div class="form-group">
+                  <label for="verification_business_address">店铺地址 *</label>
+                  <input 
+                    id="verification_business_address" 
+                    type="text" 
+                    v-model="verificationForm.business_address" 
+                    placeholder="请输入店铺地址"
+                    required
+                  >
+                </div>
+                
+                <div class="form-group">
+                  <label for="verification_business_license">营业执照号（可选）</label>
+                  <input 
+                    id="verification_business_license" 
+                    type="text" 
+                    v-model="verificationForm.business_license" 
+                    placeholder="请输入营业执照号"
+                  >
+                </div>
+                
+                <div class="form-group">
+                  <label for="verification_business_description">店铺描述</label>
+                  <textarea 
+                    id="verification_business_description" 
+                    v-model="verificationForm.business_description" 
+                    placeholder="请简单描述您的店铺特色"
+                    rows="3"
+                  ></textarea>
+                </div>
+              </form>
+            </div>
+          </div>
+          
+          <!-- 申请商家认证表单 -->
+          <div v-else class="merchant-application-form">
+            <form @submit.prevent="submitMerchantApplication">
+              <div class="form-group">
+                <label for="business_name">店铺名称 *</label>
+                <input 
+                  id="business_name" 
+                  type="text" 
+                  v-model="merchantForm.business_name" 
+                  placeholder="请输入店铺名称"
+                  required
+                >
+              </div>
+              
+              <div class="form-group">
+                <label for="contact_person">联系人姓名 *</label>
+                <input 
+                  id="contact_person" 
+                  type="text" 
+                  v-model="merchantForm.contact_person" 
+                  placeholder="请输入联系人姓名"
+                  required
+                >
+              </div>
+              
+              <div class="form-group">
+                <label for="contact_phone">联系电话 *</label>
+                <input 
+                  id="contact_phone" 
+                  type="tel" 
+                  v-model="merchantForm.contact_phone" 
+                  placeholder="请输入联系电话"
+                  required
+                >
+              </div>
+              
+              <div class="form-group">
+                <label for="business_address">店铺地址 *</label>
+                <input 
+                  id="business_address" 
+                  type="text" 
+                  v-model="merchantForm.business_address" 
+                  placeholder="请输入店铺地址"
+                  required
+                >
+              </div>
+              
+              <div class="form-group">
+                <label for="business_license">营业执照号（可选）</label>
+                <input 
+                  id="business_license" 
+                  type="text" 
+                  v-model="merchantForm.business_license" 
+                  placeholder="请输入营业执照号"
+                >
+              </div>
+              
+              <div class="form-group">
+                <label for="business_description">店铺描述</label>
+                <textarea 
+                  id="business_description" 
+                  v-model="merchantForm.business_description" 
+                  placeholder="请简单描述您的店铺特色"
+                  rows="3"
+                ></textarea>
+              </div>
+              
+              <div class="form-tips">
+                <p><i class="fas fa-info-circle"></i> 申请商家认证后，您将获得以下权益：</p>
+                <ul>
+                  <li>商品展示频率提升</li>
+                  <li>专属商家标识</li>
+                  <li>更多营销工具</li>
+                </ul>
+              </div>
+            </form>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button class="btn btn-outline" @click="closeMerchantModal">
+            {{ user.is_pending_merchant ? '关闭' : '取消' }}
+          </button>
+          <button 
+            v-if="!user.is_pending_merchant && !user.is_pending_verification" 
+            class="btn btn-primary" 
+            @click="submitMerchantApplication"
+            :disabled="submittingMerchant"
+          >
+            <span v-if="submittingMerchant">提交中...</span>
+            <span v-else>提交申请</span>
+          </button>
+          <button 
+            v-if="user.is_pending_verification" 
+            class="btn btn-primary" 
+            @click="submitMerchantVerification"
+            :disabled="submittingMerchant"
+          >
+            <span v-if="submittingMerchant">提交中...</span>
+            <span v-else>提交申请</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 显示设置模态框 - 所有用户都可以设置 -->
+    <div v-if="showDisplaySettingsModal" class="modal-overlay" @click.self="closeDisplaySettingsModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>显示设置</h3>
+          <button class="modal-close" @click="closeDisplaySettingsModal">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div class="modal-body">
+          <div class="display-settings">
+            <div class="setting-group">
+              <h4>商品展示设置</h4>
+              <div class="form-group">
+                <label for="display_frequency">商家商品展示频率</label>
+                <select id="display_frequency" v-model="displaySettings.display_frequency">
+                  <option value="3">每3个普通商品展示1个商家商品</option>
+                  <option value="5">每5个普通商品展示1个商家商品</option>
+                  <option value="10">每10个普通商品展示1个商家商品</option>
+                </select>
+                <p class="form-hint">此设置仅影响您看到的商品展示顺序</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button class="btn btn-outline" @click="closeDisplaySettingsModal">取消</button>
+          <button class="btn btn-primary" @click="saveDisplaySettings" :disabled="savingSettings">
+            <span v-if="savingSettings">保存中...</span>
+            <span v-else>保存设置</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 商家设置模态框 -->
+    <div v-if="showMerchantSettingsModal" class="modal-overlay" @click.self="closeMerchantSettingsModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>商家设置</h3>
+          <button class="modal-close" @click="closeMerchantSettingsModal">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div class="modal-body">
+          <div class="merchant-settings">
+            <div class="setting-group">
+              <h4>商家信息</h4>
+              <div v-if="!isEditingMerchant" class="merchant-info">
+                <!-- 状态显示 -->
+                <div class="merchant-status-display">
+                  <span class="status-badge" :class="getMerchantStatusClass()">
+                    <i class="fas fa-store"></i>
+                    {{ getMerchantStatusText() }}
+                  </span>
+                  <p v-if="user.is_pending_merchant" class="status-note">
+                    <i class="fas fa-info-circle"></i>
+                    您的商家信息已修改，正在等待管理员重新审核
+                  </p>
+                </div>
+                
+                <p><strong>店铺名称：</strong>{{ merchantInfo.business_name }}</p>
+                <p><strong>联系人：</strong>{{ merchantInfo.contact_person }}</p>
+                <p><strong>联系电话：</strong>{{ merchantInfo.contact_phone }}</p>
+                <p><strong>店铺地址：</strong>{{ merchantInfo.business_address }}</p>
+                <p v-if="merchantInfo.business_description"><strong>店铺描述：</strong>{{ merchantInfo.business_description }}</p>
+                <div class="action-buttons">
+                  <button @click="startEditMerchant" class="btn btn-primary">
+                    <i class="fas fa-edit"></i> 修改信息
+                  </button>
+                </div>
+              </div>
+              
+              <div v-else class="merchant-edit-form">
+                <div class="form-group">
+                  <label>店铺名称：</label>
+                  <input v-model="editMerchantForm.business_name" type="text" class="form-input" required>
+                </div>
+                <div class="form-group">
+                  <label>联系人：</label>
+                  <input v-model="editMerchantForm.contact_person" type="text" class="form-input" required>
+                </div>
+                <div class="form-group">
+                  <label>联系电话：</label>
+                  <input v-model="editMerchantForm.contact_phone" type="text" class="form-input" required>
+                </div>
+                <div class="form-group">
+                  <label>店铺地址：</label>
+                  <input v-model="editMerchantForm.business_address" type="text" class="form-input" required>
+                </div>
+                <div class="form-group">
+                  <label>店铺描述：</label>
+                  <textarea v-model="editMerchantForm.business_description" class="form-textarea" rows="3"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer" :class="{ 'vertical-buttons': isEditingMerchant }">
+          <!-- 编辑状态下的按钮 -->
+          <template v-if="isEditingMerchant">
+            <button @click="saveMerchantInfo" class="btn btn-primary" :disabled="savingMerchant">
+              <i class="fas fa-save"></i> {{ savingMerchant ? '提交中...' : '提交' }}
+            </button>
+            <button @click="cancelEditMerchant" class="btn btn-outline">
+              <i class="fas fa-times"></i> 取消
+            </button>
+          </template>
+          <!-- 非编辑状态下的按钮 -->
+          <template v-else>
+            <button class="btn btn-outline" @click="closeMerchantSettingsModal">关闭</button>
+          </template>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -362,7 +793,15 @@ const route = useRoute()
 const activeTab = ref('selling')
 const showEditModal = ref(false)
 const showOfflineModal = ref(false)
+const showMerchantModal = ref(false)
+const showCancelMerchantModal = ref(false)
+const showMerchantSettingsModal = ref(false)
+const showDisplaySettingsModal = ref(false)
 const savingProfile = ref(false)
+const submittingMerchant = ref(false)
+const cancelingMerchant = ref(false)
+const cancelMerchantReason = ref('')
+const savingSettings = ref(false)
 // 添加响应式时间戳
 const avatarTimestamp = ref(Date.now())
 const authStore = useAuthStore();
@@ -411,6 +850,45 @@ const editForm = reactive({
   avatarPreview: '',
   contact: '',
   location: ''
+})
+
+// 商家认证表单
+const merchantForm = reactive({
+  business_name: '',
+  contact_person: '',
+  contact_phone: '',
+  business_address: '',
+  business_license: '',
+  business_description: ''
+})
+
+// 待认证用户验证表单
+const verificationForm = reactive({
+  business_name: '',
+  contact_person: '',
+  contact_phone: '',
+  business_address: '',
+  business_license: '',
+  business_description: ''
+})
+
+// 商家信息
+const merchantInfo = ref({})
+
+// 商家编辑相关
+const isEditingMerchant = ref(false)
+const savingMerchant = ref(false)
+const editMerchantForm = ref({
+  business_name: '',
+  contact_person: '',
+  contact_phone: '',
+  business_address: '',
+  business_description: ''
+})
+
+// 展示设置
+const displaySettings = reactive({
+  display_frequency: 5
 })
 
 // 用于保存新头像文件对象
@@ -643,10 +1121,9 @@ const user = computed(() => {
     bio: '',
     followers: 0,
     following: 0,
-    items: 0,
+    items_count: 0,
     contact: '',
-    location: '',
-    items_count: 0 // 添加默认值
+    location: ''
   }
 });
 
@@ -1030,6 +1507,11 @@ const handleOnlineItem = async (itemId) => {
     // 刷新在售商品列表
     await fetchRealSellingItems()
     
+    // 更新用户商品数量统计
+    if (authStore.user) {
+      authStore.user.items_count = (authStore.user.items_count || 0) + 1;
+    }
+    
     alert('商品已重新上架')
   } catch (error) {
     console.error('上架商品失败:', error)
@@ -1045,6 +1527,11 @@ const handleOfflineItem = async (itemId) => {
       
       // 从在售商品列表中移除
       sellingItems.value = sellingItems.value.filter(item => item.id !== itemId)
+      
+      // 更新用户商品数量统计
+      if (authStore.user) {
+        authStore.user.items_count = Math.max(0, (authStore.user.items_count || 0) - 1);
+      }
       
       // 如果已下架商品模态框是打开的，刷新已下架商品列表
       if (showOfflineModal.value) {
@@ -1114,6 +1601,11 @@ const handleDeleteItem = async (itemId) => {
     // 更新统计数据
     tabs.value[0].count = sellingItems.value.length;
     tabs.value[1].count = soldItems.value.length;
+    
+    // 更新用户商品数量统计
+    if (authStore.user) {
+      authStore.user.items_count = Math.max(0, (authStore.user.items_count || 0) - 1);
+    }
     
     alert('商品已删除');
   } catch (error) {
@@ -1326,23 +1818,315 @@ const getBuyRequestImage = (images) => {
   return 'http://127.0.0.1:8000/static/images/' + img
 }
 
+// 商家认证相关方法
+const getMerchantStatusText = () => {
+  if (user.value.is_merchant) return '已认证商家'
+  if (user.value.is_pending_merchant) return '认证审核中'
+  if (user.value.is_pending_verification) return '待认证状态'
+  return '普通用户'
+}
+
+const getMerchantStatusClass = () => {
+  if (user.value.is_merchant) return 'status-approved'
+  if (user.value.is_pending_merchant) return 'status-pending'
+  if (user.value.is_pending_verification) return 'status-pending-verification'
+  return 'status-normal'
+}
+
+const getMerchantModalTitle = () => {
+  if (user.value.is_pending_merchant) return '商家认证状态'
+  if (user.value.is_pending_verification) return '待认证状态'
+  return '申请商家认证'
+}
+
+const openMerchantModal = () => {
+  showMerchantModal.value = true
+  if (user.value.is_pending_merchant) {
+    // 如果是待定商家，获取商家信息
+    fetchMerchantInfo()
+  } else if (user.value.is_pending_verification) {
+    // 如果是待认证用户，获取商家信息并预填充验证表单
+    fetchMerchantInfoForVerification()
+  }
+}
+
+const closeMerchantModal = () => {
+  showMerchantModal.value = false
+  // 重置表单
+  Object.assign(merchantForm, {
+    business_name: '',
+    contact_person: '',
+    contact_phone: '',
+    business_address: '',
+    business_license: '',
+    business_description: ''
+  })
+}
+
+const openMerchantSettings = () => {
+  showMerchantSettingsModal.value = true
+  fetchMerchantInfo()
+}
+
+const closeMerchantSettingsModal = () => {
+  showMerchantSettingsModal.value = false
+  isEditingMerchant.value = false
+}
+
+// 开始编辑商家信息
+const startEditMerchant = () => {
+  editMerchantForm.value = {
+    business_name: merchantInfo.value.business_name || '',
+    contact_person: merchantInfo.value.contact_person || '',
+    contact_phone: merchantInfo.value.contact_phone || '',
+    business_address: merchantInfo.value.business_address || '',
+    business_description: merchantInfo.value.business_description || ''
+  }
+  isEditingMerchant.value = true
+}
+
+// 取消编辑商家信息
+const cancelEditMerchant = () => {
+  isEditingMerchant.value = false
+  editMerchantForm.value = {
+    business_name: '',
+    contact_person: '',
+    contact_phone: '',
+    business_address: '',
+    business_description: ''
+  }
+}
+
+// 提交商家信息修改
+const saveMerchantInfo = async () => {
+  if (!editMerchantForm.value.business_name.trim()) {
+    alert('请输入店铺名称')
+    return
+  }
+  if (!editMerchantForm.value.contact_person.trim()) {
+    alert('请输入联系人')
+    return
+  }
+  if (!editMerchantForm.value.contact_phone.trim()) {
+    alert('请输入联系电话')
+    return
+  }
+  if (!editMerchantForm.value.business_address.trim()) {
+    alert('请输入店铺地址')
+    return
+  }
+
+  savingMerchant.value = true
+  try {
+    // 更新商家信息
+    await api.updateMerchantInfo(editMerchantForm.value)
+    
+    // 更新本地商家信息
+    Object.assign(merchantInfo.value, editMerchantForm.value)
+    
+    alert('商家信息已修改，需要重新审核')
+    isEditingMerchant.value = false
+    
+    // 重新加载用户信息
+    await authStore.fetchCurrentUser()
+  } catch (error) {
+    console.error('提交商家信息失败:', error)
+    alert('提交失败，请重试')
+  } finally {
+    savingMerchant.value = false
+  }
+}
+
+const openDisplaySettings = () => {
+  showDisplaySettingsModal.value = true
+  fetchDisplaySettings()
+}
+
+const closeDisplaySettingsModal = () => {
+  showDisplaySettingsModal.value = false
+}
+
+const submitMerchantApplication = async () => {
+  if (!merchantForm.business_name || !merchantForm.contact_person || 
+      !merchantForm.contact_phone || !merchantForm.business_address) {
+    alert('请填写所有必填项')
+    return
+  }
+  
+  submittingMerchant.value = true
+  try {
+    await api.createMerchantApplication(merchantForm)
+    alert('商家认证申请已提交，请等待管理员审核')
+    closeMerchantModal()
+    // 刷新用户信息
+    await authStore.fetchCurrentUser()
+  } catch (error) {
+    console.error('提交商家认证申请失败:', error)
+    alert('提交失败，请重试')
+  } finally {
+    submittingMerchant.value = false
+  }
+}
+
+// 待认证用户提交验证信息
+const submitMerchantVerification = async () => {
+  if (!verificationForm.business_name || !verificationForm.contact_person || 
+      !verificationForm.contact_phone || !verificationForm.business_address) {
+    alert('请填写所有必填项')
+    return
+  }
+  
+  submittingMerchant.value = true
+  try {
+    await api.updateMerchantInfo(verificationForm)
+    alert('商家信息已提交，请等待管理员审核')
+    closeMerchantModal()
+    // 刷新用户信息
+    await authStore.fetchCurrentUser()
+  } catch (error) {
+    console.error('提交商家验证信息失败:', error)
+    alert('提交失败，请重试')
+  } finally {
+    submittingMerchant.value = false
+  }
+}
+
+const cancelApplication = async () => {
+  if (!confirm('确定要取消商家认证申请吗？')) {
+    return
+  }
+  
+  try {
+    await api.cancelMerchantApplication()
+    alert('申请已取消')
+    // 刷新用户信息
+    await authStore.fetchCurrentUser()
+  } catch (error) {
+    console.error('取消申请失败:', error)
+    alert('取消失败，请重试')
+  }
+}
+
+// 取消商家认证相关函数
+const openCancelMerchantModal = () => {
+  cancelMerchantReason.value = ''
+  showCancelMerchantModal.value = true
+}
+
+const closeCancelMerchantModal = () => {
+  showCancelMerchantModal.value = false
+  cancelMerchantReason.value = ''
+}
+
+const cancelMerchantApplication = async () => {
+  if (!cancelMerchantReason.value.trim()) {
+    alert('请输入取消原因')
+    return
+  }
+  
+  cancelingMerchant.value = true
+  try {
+    await api.cancelMerchantApplication(cancelMerchantReason.value)
+    alert('取消申请已提交，等待管理员处理')
+    closeCancelMerchantModal()
+    // 刷新用户信息
+    await authStore.fetchCurrentUser()
+  } catch (error) {
+    console.error('取消商家认证失败:', error)
+    alert('提交失败，请重试')
+  } finally {
+    cancelingMerchant.value = false
+  }
+}
+
+const fetchMerchantInfo = async () => {
+  try {
+    const response = await api.getMerchantInfo()
+    merchantInfo.value = response.data || response
+  } catch (error) {
+    console.error('获取商家信息失败:', error)
+  }
+}
+
+// 为待认证用户获取商家信息并预填充验证表单
+const fetchMerchantInfoForVerification = async () => {
+  try {
+    const response = await api.getMerchantInfo()
+    const merchant = response.data || response
+    // 预填充验证表单
+    Object.assign(verificationForm, {
+      business_name: merchant.business_name || '',
+      contact_person: merchant.contact_person || '',
+      contact_phone: merchant.contact_phone || '',
+      business_address: merchant.business_address || '',
+      business_license: merchant.business_license || '',
+      business_description: merchant.business_description || ''
+    })
+  } catch (error) {
+    console.error('获取商家信息失败:', error)
+  }
+}
+
+const fetchDisplaySettings = async () => {
+  try {
+    const response = await api.getMerchantDisplayConfig()
+    if (response.data) {
+      displaySettings.display_frequency = response.data.display_frequency
+    }
+  } catch (error) {
+    console.error('获取展示设置失败:', error)
+  }
+}
+
+const saveDisplaySettings = async () => {
+  savingSettings.value = true
+  try {
+    await api.updateMerchantDisplayConfig({
+      display_frequency: displaySettings.display_frequency
+    })
+    alert('设置已保存')
+    closeMerchantSettingsModal()
+  } catch (error) {
+    console.error('保存展示设置失败:', error)
+    alert('保存失败，请重试')
+  } finally {
+    savingSettings.value = false
+  }
+}
+
 </script>
 
 <style scoped>
-/* 原有样式保持不变 */
+/* 个人资料头部区域优化 */
+.profile-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
 
-/* 头像上传加载状态 */
-/* 固定圆形头像容器（建议根据需求调整尺寸） */
+.user-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  flex: 1;
+}
+
+/* 头像容器优化 */
 .avatar-container {
   position: relative;
-  width: 100px; /* 固定宽度 */
-  height: 100px; /* 固定高度 */
-  margin: 0 auto; /* 水平居中 */
-  margin-left: -20px; /* 向左移动20px，负值为左移，正值为右移 */
-  border-radius: 50%; /* 圆形边框 */
-  overflow: hidden; /* 超出部分隐藏 */
-  background-color: #f5f5f5; /* 背景色（加载时显示） */
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); /* 阴影效果 */
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background-color: #f5f5f5;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 3px solid #fff;
 }
 
 .avatar-wrapper {
@@ -1351,6 +2135,64 @@ const getBuyRequestImage = (images) => {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+/* 用户详情区域优化 */
+.user-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.username {
+  font-size: 24px;
+  font-weight: 700;
+  color: #2c3e50;
+  margin: 0 0 8px 0;
+  line-height: 1.2;
+}
+
+.user-bio {
+  color: #6c757d;
+  font-size: 14px;
+  margin: 0 0 12px 0;
+  line-height: 1.4;
+  max-width: 300px;
+}
+
+/* 商家状态优化 */
+.merchant-status {
+  margin: 8px 0 12px 0;
+}
+
+/* 用户统计优化 */
+.user-stats {
+  display: flex;
+  gap: 24px;
+  margin-top: 12px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 60px;
+}
+
+.stat-item strong {
+  font-size: 20px;
+  font-weight: 700;
+  color: #2c3e50;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-item span {
+  font-size: 12px;
+  color: #6c757d;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .user-avatar {
@@ -1472,6 +2314,17 @@ const getBuyRequestImage = (images) => {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+.modal-footer.vertical-buttons {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.modal-footer.vertical-buttons .btn {
+  width: 100%;
+  justify-content: center;
 }
 
 .form-group {
@@ -1666,6 +2519,69 @@ const getBuyRequestImage = (images) => {
 
 /* 响应式调整 */
 @media (max-width: 768px) {
+  .profile-header {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+    padding: 16px;
+  }
+  
+  .user-info {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+  }
+  
+  .avatar-container {
+    width: 100px;
+    height: 100px;
+  }
+  
+  .user-details {
+    width: 100%;
+  }
+  
+  .username {
+    font-size: 20px;
+  }
+  
+  .user-bio {
+    max-width: none;
+    text-align: center;
+  }
+  
+  .user-stats {
+    justify-content: center;
+    gap: 20px;
+  }
+  
+  .profile-actions {
+    width: 100%;
+    flex-direction: row;
+    justify-content: center;
+    gap: 12px;
+    min-width: auto;
+  }
+  
+  .profile-actions .btn {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+  
+  .actions-right {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .actions-right .btn {
+    width: 100%;
+    min-width: 0;
+  }
+  
   .products-grid {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 15px;
@@ -1692,10 +2608,86 @@ const getBuyRequestImage = (images) => {
   }
 }
 
-/* 添加上传按钮样式 */
+/* 按钮区域优化 */
 .profile-actions {
   display: flex;
-  gap: 10px; /* 按钮间距 */
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-end;
+  flex-shrink: 0;
+  min-width: 140px;
+}
+
+.profile-actions .btn {
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+}
+
+.profile-actions .btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.profile-actions .btn-outline {
+  background: transparent;
+  color: #3498db;
+  border: 2px solid #3498db;
+}
+
+.profile-actions .btn-outline:hover {
+  background: #3498db;
+  color: white;
+}
+
+.profile-actions .btn-primary {
+  background: #3498db;
+  color: white;
+}
+
+.profile-actions .btn-primary:hover {
+  background: #2980b9;
+}
+
+.profile-actions .btn-warning {
+  background: #f39c12;
+  color: white;
+}
+
+.profile-actions .btn-warning:hover {
+  background: #e67e22;
+}
+
+.profile-actions .btn-success {
+  background: #27ae60;
+  color: white;
+}
+
+.profile-actions .btn-success:hover {
+  background: #229954;
+}
+
+/* 右侧操作按钮区域 */
+.actions-right {
+  margin-top: 16px;
+  flex-direction: row;
+  justify-content: flex-end;
+  min-width: auto;
+}
+
+.actions-right .btn {
+  width: auto;
+  min-width: 120px;
 }
 
 .btn-primary {
@@ -2111,5 +3103,264 @@ const getBuyRequestImage = (images) => {
 .buy-request-actions .btn-outline:hover {
   background: #3498db;
   color: white;
+}
+
+/* 商家认证相关样式 */
+.merchant-status {
+  margin: 10px 0;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.status-badge.status-approved {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.status-badge.status-pending {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.status-badge.status-pending-verification {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.status-badge.status-normal {
+  background: #e2e3e5;
+  color: #6c757d;
+  border: 1px solid #d6d8db;
+}
+
+.btn-warning {
+  background-color: #ffc107;
+  color: #212529;
+  border: none;
+}
+
+.btn-warning:hover {
+  background-color: #e0a800;
+}
+
+.btn-success {
+  background-color: #28a745;
+  color: white;
+  border: none;
+}
+
+.btn-success:hover {
+  background-color: #218838;
+}
+
+/* 商家认证模态框样式 */
+.merchant-status-info {
+  text-align: center;
+  padding: 20px;
+}
+
+.warning-message {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 15px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.warning-message i {
+  color: #f39c12;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.warning-message p {
+  margin: 0;
+  color: #856404;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.status-pending {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.status-pending i {
+  font-size: 48px;
+  color: #ffc107;
+  margin-bottom: 16px;
+}
+
+.status-pending h4 {
+  margin: 16px 0 8px 0;
+  color: #856404;
+}
+
+.status-pending p {
+  color: #856404;
+  margin-bottom: 16px;
+}
+
+.status-pending-verification {
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.status-pending-verification i {
+  font-size: 48px;
+  color: #dc3545;
+  margin-bottom: 16px;
+}
+
+.status-pending-verification h4 {
+  margin: 16px 0 8px 0;
+  color: #721c24;
+}
+
+.status-pending-verification p {
+  color: #721c24;
+  margin-bottom: 16px;
+}
+
+.status-tips {
+  text-align: left;
+  background: #f8f9fa;
+  border-radius: 4px;
+  padding: 12px;
+  margin-top: 16px;
+}
+
+.status-tips p {
+  margin: 4px 0;
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.status-tips i {
+  color: #17a2b8;
+  margin-right: 6px;
+}
+
+.merchant-application-form {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.form-tips {
+  background: #e7f3ff;
+  border: 1px solid #b3d7ff;
+  border-radius: 4px;
+  padding: 12px;
+  margin-top: 16px;
+}
+
+.form-tips p {
+  margin: 0 0 8px 0;
+  color: #0066cc;
+  font-weight: 500;
+}
+
+.form-tips ul {
+  margin: 8px 0 0 20px;
+  color: #0066cc;
+}
+
+.form-tips li {
+  margin: 4px 0;
+}
+
+.form-hint {
+  font-size: 12px;
+  color: #6c757d;
+  margin-top: 4px;
+}
+
+/* 商家状态按钮样式 */
+.merchant-status-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.merchant-status-buttons .btn {
+  width: 100%;
+}
+
+/* 商家设置样式 */
+.merchant-settings {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.merchant-status-display {
+  margin-bottom: 16px;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #007bff;
+}
+
+.status-note {
+  margin: 8px 0 0 0;
+  color: #6c757d;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setting-group {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.setting-group:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.setting-group h4 {
+  margin: 0 0 16px 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.merchant-info {
+  background: #f8f9fa;
+  border-radius: 4px;
+  padding: 12px;
+}
+
+.merchant-info p {
+  margin: 8px 0;
+  color: #555;
+  font-size: 14px;
+}
+
+.merchant-info strong {
+  color: #333;
+  font-weight: 600;
 }
 </style>
