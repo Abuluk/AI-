@@ -1462,6 +1462,280 @@
       <div v-else class="empty-state">点击上方按钮生成AI策略报告</div>
     </div>
 
+    <!-- AI推荐管理 -->
+    <div v-if="activeTab === 'ai_recommendation'" class="tab-content">
+      <div class="section-header">
+        <h2>AI推荐管理</h2>
+        <div class="header-actions">
+          <button class="btn btn-outline" @click="loadAIRecommendationStats">
+            <i class="fas fa-sync-alt"></i> 刷新统计
+          </button>
+          <button class="btn btn-secondary" @click="showItemSelectionConfig = true">
+            <i class="fas fa-filter"></i> 商品选择范围
+          </button>
+          <button class="btn btn-primary" @click="showAIRecommendationConfig = true">
+            <i class="fas fa-cog"></i> 配置设置
+          </button>
+        </div>
+      </div>
+
+
+      <!-- 用户行为记录 -->
+      <div class="section">
+        <h3>用户行为记录</h3>
+        <div class="table-controls">
+          <div class="filter-group">
+            <input 
+              v-model="aiUserSearchQuery" 
+              placeholder="搜索用户名/邮箱/手机"
+              class="search-input"
+              @input="searchUsers"
+            >
+            <select v-model="behaviorFilter.behavior_type" @change="loadUserBehaviors">
+              <option value="">所有行为</option>
+              <option value="view">浏览</option>
+              <option value="click">点击</option>
+              <option value="favorite">收藏</option>
+              <option value="like">点赞</option>
+              <option value="search">搜索</option>
+            </select>
+          </div>
+          <button class="btn btn-outline" @click="loadUserBehaviors">
+            <i class="fas fa-search"></i> 搜索
+          </button>
+        </div>
+        
+        <!-- 用户搜索结果 -->
+        <div v-if="userSearchResults.length > 0" class="user-search-results">
+          <h4>搜索结果</h4>
+          <div class="user-list">
+            <div v-for="user in userSearchResults" :key="user.id" class="user-item">
+              <div class="user-info">
+                <img :src="getUserAvatar(user)" :alt="user.username" class="user-avatar-small">
+                <div class="user-details">
+                  <div class="user-name">{{ user.username || '未设置' }}</div>
+                  <div class="user-email">{{ user.email || '未设置' }}</div>
+                </div>
+              </div>
+              <button 
+                @click="addUserToSelection(user)" 
+                class="btn btn-sm btn-primary"
+                :disabled="isUserSelected(user.id)"
+              >
+                <i class="fas fa-plus"></i> 加入
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        
+        <div class="behavior-content">
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>用户</th>
+                  <th>商品</th>
+                  <th>行为类型</th>
+                  <th>行为数据</th>
+                  <th>时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="behavior in filteredUserBehaviors" :key="behavior.id">
+                  <td>{{ behavior.username }}</td>
+                  <td>{{ behavior.item_title || '无' }}</td>
+                  <td>
+                    <span class="behavior-badge" :class="behavior.behavior_type">
+                      {{ getBehaviorTypeLabel(behavior.behavior_type) }}
+                    </span>
+                  </td>
+                  <td>
+                    <div v-if="behavior.behavior_data" class="behavior-data">
+                      {{ JSON.stringify(behavior.behavior_data) }}
+                    </div>
+                    <span v-else>-</span>
+                  </td>
+                  <td>{{ formatDateTime(behavior.created_at) }}</td>
+                  <td>
+                    <button @click="deleteUserBehavior(behavior.id)" class="btn btn-sm btn-danger">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <!-- 已选择用户队列 -->
+          <div class="selected-users-sidebar">
+            <h4>已选择用户 ({{ selectedUsers.length }})</h4>
+            <div v-if="selectedUsers.length === 0" class="no-selected-users">
+              <p>请先搜索并选择用户</p>
+            </div>
+            <div v-else class="selected-user-list">
+              <div v-for="user in selectedUsers" :key="user.id" class="selected-user-item">
+                <div class="user-info">
+                  <img :src="getUserAvatar(user)" :alt="user.username" class="user-avatar-small">
+                  <div class="user-details">
+                    <div class="user-name">{{ user.username || '未设置' }}</div>
+                    <div class="user-email">{{ user.email || '未设置' }}</div>
+                  </div>
+                </div>
+                <button @click="removeUserFromSelection(user.id)" class="btn btn-sm btn-danger">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div v-if="filteredUserBehaviors.length === 0" class="empty-state">
+          <span v-if="selectedUsers.length === 0">请先搜索并选择用户查看行为记录</span>
+          <span v-else>所选用户暂无行为记录</span>
+        </div>
+      </div>
+
+      <!-- 测试功能 -->
+      <div class="section">
+        <h3>AI推荐测试</h3>
+        <div class="test-controls">
+          <div class="form-group">
+            <label>测试用户</label>
+            <div class="test-user-info">
+              <span v-if="selectedUsers.length === 0" class="no-users">请先在上方搜索并选择用户</span>
+              <div v-else class="test-user-list">
+                <div v-for="user in selectedUsers" :key="user.id" class="test-user-item">
+                  <img :src="getUserAvatar(user)" :alt="user.username" class="user-avatar-small">
+                  <span>{{ user.username || '未设置' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>推荐数量</label>
+            <input type="number" v-model.number="testLimit" min="1" max="10" class="form-input">
+          </div>
+          <button @click="testAIRecommendation" class="btn btn-primary" :disabled="selectedUsers.length === 0">
+            <i class="fas fa-play"></i> 测试推荐 ({{ selectedUsers.length }}个用户)
+          </button>
+        </div>
+        
+        <div v-if="testResult" class="test-result">
+          <h4>推荐商品</h4>
+          <div class="recommendations-grid">
+            <div v-for="(userResult, index) in testResult" :key="index">
+              <div v-if="userResult.result.success && userResult.result.recommendations && userResult.result.recommendations.length > 0">
+                <div v-for="(item, itemIndex) in userResult.result.recommendations" :key="itemIndex" class="recommendation-card">
+                  <div class="item-image">
+                    <img :src="getItemImageUrl(item.images)" :alt="item.title" class="item-thumbnail">
+                  </div>
+                  <div class="item-details">
+                    <h6 class="item-title">{{ item.title }}</h6>
+                    <p class="item-category">{{ item.category }}</p>
+                    <p class="item-price">¥{{ item.price }}</p>
+                    <p class="item-condition">{{ getConditionLabel(item.condition) }}</p>
+                  </div>
+                  <div class="item-actions">
+                    <button @click="viewItem(item.id)" class="btn btn-sm btn-primary">
+                      <i class="fas fa-eye"></i> 查看
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div v-else-if="!userResult.result.success" class="no-recommendations">
+                <p>{{ userResult.result.message }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- AI推荐配置模态框 -->
+    <div v-if="showAIRecommendationConfig" class="modal-overlay" @click="showAIRecommendationConfig = false">
+      <div class="modal-content large-modal" @click.stop>
+        <div class="modal-header">
+          <h3>AI推荐配置</h3>
+          <button @click="showAIRecommendationConfig = false" class="close-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="config-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label>行为序列长度</label>
+                <input type="number" v-model.number="aiConfig.sequence_length" min="5" max="50" class="form-input">
+                <small>分析用户最近N个商品浏览行为</small>
+              </div>
+              <div class="form-group">
+                <label>推荐商品数量</label>
+                <input type="number" v-model.number="aiConfig.recommendation_count" min="5" max="20" class="form-input">
+                <small>每次推荐的商品数量</small>
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label>分类权重</label>
+                <input type="number" v-model.number="aiConfig.category_weight" min="0" max="1" step="0.1" class="form-input">
+                <small>商品分类在推荐中的权重</small>
+              </div>
+              <div class="form-group">
+                <label>价格权重</label>
+                <input type="number" v-model.number="aiConfig.price_weight" min="0" max="1" step="0.1" class="form-input">
+                <small>商品价格在推荐中的权重</small>
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label>成色权重</label>
+                <input type="number" v-model.number="aiConfig.condition_weight" min="0" max="1" step="0.1" class="form-input">
+                <small>商品成色在推荐中的权重</small>
+              </div>
+              <div class="form-group">
+                <label>地区权重</label>
+                <input type="number" v-model.number="aiConfig.location_weight" min="0" max="1" step="0.1" class="form-input">
+                <small>商品地区在推荐中的权重</small>
+              </div>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group">
+                <label>最少行为记录数</label>
+                <input type="number" v-model.number="aiConfig.min_behavior_count" min="1" max="20" class="form-input">
+                <small>进行AI推荐所需的最少行为记录数</small>
+              </div>
+              <div class="form-group">
+                <label>行为记录天数</label>
+                <input type="number" v-model.number="aiConfig.behavior_days" min="7" max="365" class="form-input">
+                <small>统计用户行为的天数范围</small>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="aiConfig.enable_ai_analysis">
+                <span class="checkmark"></span>
+                启用AI分析
+              </label>
+              <small>是否启用AI智能分析功能</small>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="showAIRecommendationConfig = false" class="btn btn-outline">取消</button>
+          <button @click="saveAIRecommendationConfig" class="btn btn-primary" :disabled="savingConfig">
+            {{ savingConfig ? '保存中...' : '保存配置' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 拒绝商家模态框 -->
     <div v-if="showRejectMerchantModal" class="modal-overlay" @click="showRejectMerchantModal = false">
       <div class="modal-content" @click.stop>
@@ -1519,6 +1793,162 @@
           <button @click="showDeleteMerchantModal = false" class="btn btn-outline">取消</button>
           <button @click="deleteMerchant" class="btn btn-danger" :disabled="!deleteReason.trim()">
             确认删除
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 商品选择范围配置弹窗 -->
+    <div v-if="showItemSelectionConfig" class="modal-overlay" @click="showItemSelectionConfig = false">
+      <div class="modal-content large-modal" @click.stop>
+        <div class="modal-header">
+          <h3>商品选择范围配置</h3>
+          <button @click="showItemSelectionConfig = false" class="close-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="config-content">
+            <div class="config-tabs">
+              <button 
+                :class="['tab-btn', { active: itemSelectionTab === 'sort' }]"
+                @click="itemSelectionTab = 'sort'"
+              >
+                排序配置
+              </button>
+              <button 
+                :class="['tab-btn', { active: itemSelectionTab === 'category' }]"
+                @click="itemSelectionTab = 'category'"
+              >
+                分类配置
+              </button>
+              <button 
+                :class="['tab-btn', { active: itemSelectionTab === 'general' }]"
+                @click="itemSelectionTab = 'general'"
+              >
+                通用设置
+              </button>
+            </div>
+
+            <!-- 排序配置 -->
+            <div v-if="itemSelectionTab === 'sort'" class="tab-content">
+              <div class="config-header">
+                <h4>排序方式配置</h4>
+                <p>配置AI推荐时按不同排序方式选择的商品数量</p>
+              </div>
+              <div class="sort-configs">
+                <div v-for="(sortConfig, index) in itemSelectionConfig.sort_orders" :key="index" class="sort-config-item">
+                  <div class="config-row">
+                    <div class="config-field">
+                      <label>
+                        <input 
+                          type="checkbox" 
+                          v-model="sortConfig.enabled"
+                          @change="updateItemSelectionConfig"
+                        >
+                        {{ sortConfig.name }}
+                      </label>
+                    </div>
+                    <div class="config-field">
+                      <label>数量限制</label>
+                      <input 
+                        type="number" 
+                        v-model.number="sortConfig.limit" 
+                        min="1" 
+                        max="100"
+                        @change="updateItemSelectionConfig"
+                        class="form-input"
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 分类配置 -->
+            <div v-if="itemSelectionTab === 'category'" class="tab-content">
+              <div class="config-header">
+                <h4>分类限制配置</h4>
+                <p>配置每个分类最多选择的商品数量</p>
+              </div>
+              <div class="category-configs">
+                <div v-for="(category, index) in availableCategories" :key="index" class="category-config-item">
+                  <div class="config-row">
+                    <div class="config-field">
+                      <label>
+                        <input 
+                          type="checkbox" 
+                          v-model="itemSelectionConfig.category_limits[category.id].enabled"
+                          @change="updateItemSelectionConfig"
+                        >
+                        {{ category.name }} ({{ category.count }}个商品)
+                      </label>
+                    </div>
+                    <div class="config-field">
+                      <label>数量限制</label>
+                      <input 
+                        type="number" 
+                        v-model.number="itemSelectionConfig.category_limits[category.id].limit" 
+                        min="1" 
+                        :max="category.count"
+                        @change="updateItemSelectionConfig"
+                        class="form-input"
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 通用设置 -->
+            <div v-if="itemSelectionTab === 'general'" class="tab-content">
+              <div class="config-header">
+                <h4>通用设置</h4>
+                <p>配置商品选择的基本参数</p>
+              </div>
+              <div class="general-configs">
+                <div class="config-row">
+                  <div class="config-field">
+                    <label>
+                      <input 
+                        type="checkbox" 
+                        v-model="itemSelectionConfig.enable_sort_filter"
+                        @change="updateItemSelectionConfig"
+                      >
+                      启用排序过滤
+                    </label>
+                  </div>
+                  <div class="config-field">
+                    <label>
+                      <input 
+                        type="checkbox" 
+                        v-model="itemSelectionConfig.enable_category_filter"
+                        @change="updateItemSelectionConfig"
+                      >
+                      启用分类过滤
+                    </label>
+                  </div>
+                </div>
+                <div class="config-row">
+                  <div class="config-field">
+                    <label>最大总商品数</label>
+                    <input 
+                      type="number" 
+                      v-model.number="itemSelectionConfig.max_total_items" 
+                      min="10" 
+                      max="1000"
+                      @change="updateItemSelectionConfig"
+                      class="form-input"
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="showItemSelectionConfig = false" class="btn btn-outline">
+            关闭
           </button>
         </div>
       </div>
@@ -1824,6 +2254,7 @@ const tabs = [
   { id: 'messages', label: '消息管理', icon: 'fas fa-bullhorn' },
   { id: 'feedbacks', label: '留言管理', icon: 'fas fa-comment-dots' },
   { id: 'ai_strategy', label: 'AI策略', icon: 'fas fa-robot' },
+  { id: 'ai_recommendation', label: 'AI推荐管理', icon: 'fas fa-brain' },
   { id: 'activity', label: '活动页管理', icon: 'fas fa-bullhorn' },
 ]
 
@@ -2373,6 +2804,11 @@ onMounted(() => {
   loadDetectionConfig()
   loadDetectionStats()
   loadDetectionHistories()
+  loadAIRecommendationConfig()
+  loadAIRecommendationStats()
+  loadUserBehaviors()
+  loadItemSelectionConfig()
+  loadAvailableCategories()
 })
 
 // 活动页管理相关
@@ -2680,6 +3116,53 @@ const loadingFeedbacks = ref(false)
 const aiReport = ref('')
 const aiLoading = ref(false)
 
+// AI推荐管理相关变量
+const aiRecommendationStats = ref({})
+const userBehaviors = ref([])
+const behaviorFilter = ref({
+  user_id: '',
+  behavior_type: ''
+})
+const showAIRecommendationConfig = ref(false)
+const aiConfig = ref({
+  sequence_length: 10,
+  recommendation_count: 10,
+  category_weight: 0.4,
+  price_weight: 0.3,
+  condition_weight: 0.2,
+  location_weight: 0.1,
+  enable_ai_analysis: true,
+  min_behavior_count: 3,
+  behavior_days: 30
+})
+const savingConfig = ref(false)
+const testUserId = ref('')
+const testLimit = ref(5)
+const testResult = ref(null)
+
+// AI推荐管理用户搜索相关变量
+const aiUserSearchQuery = ref('')
+const userSearchResults = ref([])
+const selectedUsers = ref([])
+
+// 商品选择范围配置相关
+const showItemSelectionConfig = ref(false)
+const itemSelectionTab = ref('sort')
+const itemSelectionConfig = ref({
+  sort_orders: [
+    { name: "按价格升序", field: "price", order: "asc", limit: 20, enabled: true },
+    { name: "按价格降序", field: "price", order: "desc", limit: 20, enabled: true },
+    { name: "按浏览量", field: "views", order: "desc", limit: 20, enabled: true },
+    { name: "按点赞数", field: "like_count", order: "desc", limit: 20, enabled: true },
+    { name: "按发布时间", field: "created_at", order: "desc", limit: 20, enabled: true }
+  ],
+  category_limits: {},
+  max_total_items: 100,
+  enable_category_filter: true,
+  enable_sort_filter: true
+})
+const availableCategories = ref([])
+
 const loadFeedbacks = async () => {
   loading.feedbacks = true
   try {
@@ -2725,6 +3208,264 @@ const getAIStrategy = async () => {
   } finally {
     aiLoading.value = false
   }
+}
+
+// AI推荐管理相关方法
+const loadAIRecommendationStats = async () => {
+  try {
+    const response = await api.getAIRecommendationStats(30)
+    if (response.data.success) {
+      aiRecommendationStats.value = response.data.stats
+    }
+  } catch (error) {
+    console.error('获取AI推荐统计失败:', error)
+    alert('获取统计信息失败')
+  }
+}
+
+const loadUserBehaviors = async () => {
+  try {
+    const params = {
+      limit: 50,
+      offset: 0
+    }
+    if (behaviorFilter.value.user_id) {
+      params.user_id = behaviorFilter.value.user_id
+    }
+    if (behaviorFilter.value.behavior_type) {
+      params.behavior_type = behaviorFilter.value.behavior_type
+    }
+    
+    const response = await api.getUserBehaviors(params)
+    if (response.data.success) {
+      userBehaviors.value = response.data.behaviors
+    }
+  } catch (error) {
+    console.error('获取用户行为记录失败:', error)
+    alert('获取行为记录失败')
+  }
+}
+
+const deleteUserBehavior = async (behaviorId) => {
+  if (!confirm('确定要删除这条行为记录吗？')) return
+  
+  try {
+    await api.deleteUserBehavior(behaviorId)
+    alert('删除成功')
+    await loadUserBehaviors()
+  } catch (error) {
+    console.error('删除行为记录失败:', error)
+    alert('删除失败')
+  }
+}
+
+const loadAIRecommendationConfig = async () => {
+  try {
+    const response = await api.getAIRecommendationConfig()
+    if (response.data.success) {
+      aiConfig.value = { ...aiConfig.value, ...response.data.config }
+    }
+  } catch (error) {
+    console.error('获取AI推荐配置失败:', error)
+  }
+}
+
+const saveAIRecommendationConfig = async () => {
+  savingConfig.value = true
+  try {
+    await api.updateAIRecommendationConfig(aiConfig.value)
+    alert('配置保存成功')
+    showAIRecommendationConfig.value = false
+  } catch (error) {
+    console.error('保存AI推荐配置失败:', error)
+    alert('保存配置失败')
+  } finally {
+    savingConfig.value = false
+  }
+}
+
+const testAIRecommendation = async () => {
+  if (selectedUsers.value.length === 0) {
+    alert('请先搜索并选择测试用户')
+    return
+  }
+  
+  try {
+    // 为每个选中的用户测试AI推荐
+    const testPromises = selectedUsers.value.map(user => 
+      api.testAIRecommendation(user.id, testLimit.value)
+    )
+    const responses = await Promise.all(testPromises)
+    testResult.value = responses.map((response, index) => ({
+      user: selectedUsers.value[index],
+      result: response.data
+    }))
+  } catch (error) {
+    console.error('测试AI推荐失败:', error)
+    alert('测试失败')
+  }
+}
+
+// AI推荐管理用户搜索方法
+const searchUsers = async () => {
+  if (!aiUserSearchQuery.value.trim()) {
+    userSearchResults.value = []
+    return
+  }
+  
+  try {
+    const response = await api.getAdminUsers({
+      search: aiUserSearchQuery.value,
+      limit: 10
+    })
+    userSearchResults.value = response.data || []
+  } catch (error) {
+    console.error('搜索用户失败:', error)
+    userSearchResults.value = []
+  }
+}
+
+// 添加用户到选择队列
+const addUserToSelection = (user) => {
+  if (!isUserSelected(user.id)) {
+    selectedUsers.value.push(user)
+  }
+}
+
+// 从选择队列移除用户
+const removeUserFromSelection = (userId) => {
+  selectedUsers.value = selectedUsers.value.filter(user => user.id !== userId)
+}
+
+// 检查用户是否已被选择
+const isUserSelected = (userId) => {
+  return selectedUsers.value.some(user => user.id === userId)
+}
+
+// 格式化日期时间
+const formatDateTime = (dateString) => {
+  if (!dateString) return '-'
+  const date = new Date(dateString)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+}
+
+// 获取推荐类型标签
+const getRecommendationTypeLabel = (type) => {
+  const typeMap = {
+    'ai': 'AI智能推荐',
+    'basic': '热门推荐',
+    'fallback': '基础推荐'
+  }
+  return typeMap[type] || type || '未知类型'
+}
+
+// 获取商品图片URL
+const getItemImageUrl = (images) => {
+  if (!images) return '/static/images/default-item.png'
+  const imageList = images.split(',').filter(img => img.trim())
+  if (imageList.length > 0) {
+    return imageList[0].startsWith('http') ? imageList[0] : `http://127.0.0.1:8000/static/uploads/items/${imageList[0]}`
+  }
+  return '/static/images/default-item.png'
+}
+
+// 获取商品成色标签
+const getConditionLabel = (condition) => {
+  const conditionMap = {
+    'new': '全新',
+    'like_new': '几乎全新',
+    'good': '轻微使用痕迹',
+    'fair': '使用痕迹明显',
+    'poor': '使用痕迹严重'
+  }
+  return conditionMap[condition] || condition || '未知状态'
+}
+
+// 查看商品详情
+const viewItem = (itemId) => {
+  window.open(`/item/${itemId}`, '_blank')
+}
+
+// 商品选择范围配置相关方法
+const loadItemSelectionConfig = async () => {
+  try {
+    const response = await api.getItemSelectionConfig()
+    if (response.data && response.data.config) {
+      itemSelectionConfig.value = response.data.config
+    }
+  } catch (error) {
+    console.error('获取商品选择配置失败:', error)
+  }
+}
+
+const loadAvailableCategories = async () => {
+  try {
+    const response = await api.getAvailableCategories()
+    if (response.data && response.data.categories) {
+      availableCategories.value = response.data.categories
+      
+      // 初始化分类限制配置
+      if (Object.keys(itemSelectionConfig.value.category_limits).length === 0) {
+        const categoryLimits = {}
+        response.data.categories.forEach(category => {
+          categoryLimits[category.id] = {
+            limit: 10,
+            enabled: true,
+            name: category.name
+          }
+        })
+        itemSelectionConfig.value.category_limits = categoryLimits
+      }
+    }
+  } catch (error) {
+    console.error('获取分类列表失败:', error)
+  }
+}
+
+const updateItemSelectionConfig = async () => {
+  try {
+    await api.updateItemSelectionConfig(itemSelectionConfig.value)
+    console.log('商品选择配置更新成功')
+  } catch (error) {
+    console.error('更新商品选择配置失败:', error)
+    alert('更新配置失败，请重试')
+  }
+}
+
+// 过滤后的用户行为记录（只显示已选择用户的行为）
+const filteredUserBehaviors = computed(() => {
+  if (selectedUsers.value.length === 0) {
+    return []
+  }
+  
+  const selectedUserIds = selectedUsers.value.map(user => user.id)
+  return userBehaviors.value.filter(behavior => 
+    selectedUserIds.includes(behavior.user_id)
+  )
+})
+
+const getBehaviorCount = (type) => {
+  if (!aiRecommendationStats.value.behavior_stats) return 0
+  const behavior = aiRecommendationStats.value.behavior_stats.find(b => b.type === type)
+  return behavior ? behavior.count : 0
+}
+
+const getBehaviorTypeLabel = (type) => {
+  const labels = {
+    'view': '浏览',
+    'click': '点击',
+    'favorite': '收藏',
+    'like': '点赞',
+    'search': '搜索'
+  }
+  return labels[type] || type
 }
 
 // 商家管理相关方法
@@ -3278,45 +4019,6 @@ const loadDefaultDisplayFrequency = async () => {
   gap: 15px;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
-}
-
-.stat-card {
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.stat-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: #3498db;
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-}
-
-.stat-content h3 {
-  margin: 0;
-  font-size: 24px;
-  color: #333;
-}
-
-.stat-content p {
-  margin: 5px 0 0 0;
-  color: #666;
-}
 
 .admin-tabs {
   display: flex;
@@ -3530,6 +4232,17 @@ th {
 .btn-primary {
   background: #3498db;
   color: white;
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+  border: 1px solid #6c757d;
+}
+
+.btn-secondary:hover {
+  background: #5a6268;
+  border-color: #545b62;
 }
 
 .btn-success {
@@ -4249,10 +4962,6 @@ th {
   border: 1px solid #e9ecef;
 }
 
-.stat-label {
-  font-weight: 500;
-  color: #666;
-}
 
 .stat-value {
   font-weight: 600;
@@ -4424,17 +5133,6 @@ th {
   border: 1px solid #e9ecef;
 }
 
-.stat-number {
-  font-size: 24px;
-  font-weight: bold;
-  color: #007bff;
-  margin-bottom: 5px;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #666;
-}
 
 .ai-result {
   background: white;
@@ -5124,9 +5822,724 @@ th {
 .messages-table table {
   min-width: 900px;
 }
+/* AI推荐管理样式 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.stat-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #42b983, #3aa776);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 20px;
+}
+
+.stat-content {
+  flex: 1;
+}
+
+
+.behavior-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+}
+
+.behavior-badge.view {
+  background: #42b983;
+}
+
+.behavior-badge.click {
+  background: #f56c6c;
+}
+
+.behavior-badge.favorite {
+  background: #e74c3c;
+}
+
+.behavior-badge.like {
+  background: #f39c12;
+}
+
+.behavior-badge.search {
+  background: #9b59b6;
+}
+
+.behavior-data {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #666;
+}
+
+.test-controls {
+  display: flex;
+  gap: 20px;
+  align-items: end;
+  margin-bottom: 20px;
+}
+
+.test-controls .form-group {
+  flex: 1;
+}
+
+.test-result {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.test-result h4 {
+  margin-bottom: 15px;
+  color: #333;
+}
+
+.result-content {
+  background: white;
+  border-radius: 4px;
+  padding: 15px;
+  overflow-x: auto;
+}
+
+.result-content pre {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.large-modal .modal-content {
+  max-width: 800px;
+  width: 90%;
+}
+
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.form-row .form-group {
+  margin-bottom: 0;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.checkbox-label input[type="checkbox"] {
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
 @media (max-width: 768px) {
   .tab-content {
     max-height: 60vh;
+  }
+  
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .test-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 用户搜索相关样式 */
+.user-search-results {
+  margin: 20px 0;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+/* 行为记录内容区域 */
+.behavior-content {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.table-container {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 已选择用户侧边栏 */
+.selected-users-sidebar {
+  width: 300px;
+  min-width: 300px;
+  background: #e8f5e8;
+  border-radius: 8px;
+  border: 1px solid #c3e6c3;
+  padding: 15px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.selected-users-sidebar h4 {
+  margin: 0 0 15px 0;
+  color: #2d5a2d;
+  font-size: 16px;
+  border-bottom: 1px solid #c3e6c3;
+  padding-bottom: 10px;
+}
+
+.no-selected-users {
+  text-align: center;
+  color: #666;
+  font-style: italic;
+  padding: 20px 0;
+}
+
+.no-selected-users p {
+  margin: 0;
+}
+
+.user-search-results h4 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 5px;
+}
+
+.user-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.user-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.user-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.user-list::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.user-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-name {
+  font-weight: 500;
+  color: #333;
+  font-size: 14px;
+}
+
+.user-email {
+  color: #666;
+  font-size: 12px;
+}
+
+.selected-users {
+  margin: 20px 0;
+  padding: 15px;
+  background: #e8f5e8;
+  border-radius: 8px;
+  border: 1px solid #c3e6c3;
+}
+
+.selected-users h4 {
+  margin: 0 0 15px 0;
+  color: #2d5a2d;
+  font-size: 16px;
+}
+
+.selected-user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding-right: 5px;
+}
+
+.selected-user-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.selected-user-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.selected-user-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.selected-user-list::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.selected-user-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #c3e6c3;
+}
+
+.test-user-info {
+  min-height: 40px;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+}
+
+.no-users {
+  color: #666;
+  font-style: italic;
+}
+
+.test-user-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.test-user-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: white;
+  border-radius: 20px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+}
+
+/* AI推荐测试结果样式 */
+.test-result {
+  margin-top: 20px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  overflow: hidden;
+}
+
+.test-result h4 {
+  margin: 0;
+  padding: 15px 20px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  color: #333;
+}
+
+.recommendations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+  padding: 20px;
+}
+
+.recommendation-card {
+  display: flex;
+  flex-direction: column;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+
+.recommendation-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  border-color: #007bff;
+}
+
+.item-image {
+  width: 100%;
+  height: 200px;
+  overflow: hidden;
+}
+
+.item-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s;
+}
+
+.recommendation-card:hover .item-thumbnail {
+  transform: scale(1.05);
+}
+
+.item-details {
+  padding: 15px;
+  flex: 1;
+}
+
+.item-title {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.item-category {
+  margin: 0 0 5px 0;
+  font-size: 12px;
+  color: #666;
+  background: #e9ecef;
+  padding: 2px 8px;
+  border-radius: 12px;
+  display: inline-block;
+}
+
+.item-price {
+  margin: 8px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #e74c3c;
+}
+
+.item-condition {
+  margin: 0 0 15px 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.item-actions {
+  padding: 0 15px 15px 15px;
+}
+
+.item-actions .btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.no-recommendations {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.no-recommendations p {
+  margin: 0;
+  font-size: 16px;
+}
+
+/* 商品选择范围配置样式 */
+.config-section {
+  margin-top: 20px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* 弹窗内的配置样式 */
+.modal-body .config-content {
+  padding: 0;
+}
+
+.modal-body .config-tabs {
+  margin-bottom: 0;
+  border-bottom: 1px solid #e9ecef;
+  background: #f8f9fa;
+}
+
+.modal-body .tab-content {
+  padding: 20px 0;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.modal-body .sort-configs,
+.modal-body .category-configs,
+.modal-body .general-configs {
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+.config-section h3 {
+  margin: 0;
+  padding: 20px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  color: #333;
+  font-size: 18px;
+}
+
+.config-content {
+  padding: 0;
+}
+
+.config-tabs {
+  display: flex;
+  border-bottom: 1px solid #e9ecef;
+  background: #f8f9fa;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 15px 20px;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-bottom: 3px solid transparent;
+}
+
+.tab-btn:hover {
+  background: #e9ecef;
+  color: #333;
+}
+
+.tab-btn.active {
+  background: white;
+  color: #007bff;
+  border-bottom-color: #007bff;
+  font-weight: 600;
+}
+
+.tab-content {
+  padding: 30px;
+}
+
+.config-header {
+  margin-bottom: 25px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.config-header h4 {
+  margin: 0 0 8px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.config-header p {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.sort-configs,
+.category-configs,
+.general-configs {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.sort-config-item,
+.category-config-item {
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.config-row {
+  display: flex;
+  gap: 30px;
+  align-items: center;
+}
+
+.config-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.config-field label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.config-field input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #007bff;
+}
+
+.config-field input[type="number"] {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 100px;
+}
+
+.config-field input[type="number"]:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.general-configs .config-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.general-configs .config-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 15px;
+}
+
+.general-configs .config-field label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.general-configs .config-field input[type="number"] {
+  width: 150px;
+}
+
+@media (max-width: 768px) {
+  .config-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+  
+  .config-field {
+    width: 100%;
+  }
+  
+  .config-field input[type="number"] {
+    width: 100%;
+    max-width: 200px;
+  }
+  
+  .general-configs .config-field {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .user-item,
+  .selected-user-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  
+  .user-info {
+    width: 100%;
+  }
+  
+  .behavior-content {
+    flex-direction: column;
+  }
+  
+  .selected-users-sidebar {
+    width: 100%;
+    min-width: auto;
+    max-height: 300px;
+  }
+  
+  .recommendations-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+    padding: 15px;
+  }
+  
+  .recommendation-card {
+    margin-bottom: 0;
   }
 }
 </style>

@@ -15,6 +15,8 @@
 <script>
 import { useRoute, useRouter } from 'vue-router'
 import { ref, watch } from 'vue'
+import { useAuthStore } from '@/store/auth'
+import api from '@/services/api'
 
 export default {
   props: {
@@ -24,6 +26,7 @@ export default {
   setup(props) {
     const route = useRoute()
     const router = useRouter()
+    const authStore = useAuthStore()
     const searchQuery = ref(props.initialQuery || '')
     
     // 监听路由变化更新搜索词
@@ -31,8 +34,27 @@ export default {
       searchQuery.value = newQuery || ''
     })
     
-    const performSearch = () => {
+    // 记录搜索行为
+    const recordSearchBehavior = async (query) => {
+      try {
+        if (authStore.user) {
+          console.log('记录搜索行为:', { query, userId: authStore.user.id })
+          await api.recordUserBehavior('search', null, {
+            query: query,
+            timestamp: new Date().toISOString()
+          })
+          console.log('搜索行为记录成功')
+        }
+      } catch (error) {
+        console.error('记录搜索行为失败:', error)
+      }
+    }
+    
+    const performSearch = async () => {
       if (searchQuery.value.trim()) {
+        // 记录搜索行为
+        await recordSearchBehavior(searchQuery.value.trim())
+        
         // 导航到搜索页面（使用首页代替发现页）
         router.push({ 
           path: '/', 

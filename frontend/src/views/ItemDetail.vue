@@ -304,6 +304,18 @@ export default {
         } else {
           await api.addFavorite(this.user.id, this.id);
           this.product.favorited_count = (this.product.favorited_count || 0) + 1;
+          
+          // 记录收藏行为
+          try {
+            await api.recordUserBehavior('favorite', this.id, {
+              title: this.product.title,
+              category: this.product.category,
+              price: this.product.price
+            });
+            console.log('收藏行为记录成功');
+          } catch (behaviorError) {
+            console.warn('记录收藏行为失败:', behaviorError);
+          }
         }
         this.isFavorited = !this.isFavorited;
       } catch (error) {
@@ -426,6 +438,18 @@ export default {
           console.log('点赞成功，返回数据:', res.data);
           this.product.like_count = res.data.like_count;
           this.product.liked_by_me = true;
+          
+          // 记录点赞行为
+          try {
+            await api.recordUserBehavior('like', this.product.id, {
+              title: this.product.title,
+              category: this.product.category,
+              price: this.product.price
+            });
+            console.log('点赞行为记录成功');
+          } catch (behaviorError) {
+            console.warn('记录点赞行为失败:', behaviorError);
+          }
         } else {
           console.log('发送取消点赞请求...');
           const res = await api.unlikeItem(this.product.id);

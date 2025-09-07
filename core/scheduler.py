@@ -46,10 +46,10 @@ class TaskScheduler:
                 db = SessionLocal()
                 try:
                     from crud.crud_merchant_detection import get_detection_config_value
-                    schedule_enabled = get_detection_config_value(db, "detection_schedule_enabled", "false")
+                    schedule_enabled = get_detection_config_value(db, "detection_schedule_enabled", False)
                     schedule_time = get_detection_config_value(db, "detection_schedule_time", "02:00")
                     
-                    if schedule_enabled.lower() == "true":
+                    if schedule_enabled:
                         # 解析检测时间
                         hour, minute = map(int, schedule_time.split(":"))
                         

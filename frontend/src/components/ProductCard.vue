@@ -1,6 +1,6 @@
 <template>
   <div class="product-card-wrapper">
-    <router-link :to="`/item/${product.id}`" class="product-card">
+    <router-link :to="`/item/${product.id}`" class="product-card" @click="handleProductClick">
       <div class="image-container">
         <img :src="getFirstImage(product)" 
              :alt="product.title" 
@@ -103,6 +103,8 @@
 </template>
 
 <script>
+import api from '@/services/api'
+
 export default {
   props: {
     product: {
@@ -165,6 +167,27 @@ export default {
     editItem() {
       // 触发编辑事件
       this.$emit('edit', this.product.id);
+    },
+    
+    // 处理商品点击事件
+    async handleProductClick() {
+      // 记录用户浏览商品行为
+      try {
+        console.log('ProductCard记录用户行为:', { 
+          behaviorType: 'view', 
+          itemId: this.product.id,
+          product: this.product.title 
+        });
+        const response = await api.recordUserBehavior('view', this.product.id, {
+          title: this.product.title,
+          category: this.product.category,
+          price: this.product.price
+        });
+        console.log('ProductCard行为记录成功:', response);
+      } catch (error) {
+        console.error('记录商品浏览行为失败:', error);
+        console.error('错误详情:', error.response?.data || error.message);
+      }
     }
   },
   data() {

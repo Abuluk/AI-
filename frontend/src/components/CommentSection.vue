@@ -292,6 +292,20 @@ const handleSubmit = async () => {
     parent_id: replyParentId.value,
     reply_to_user_id: replyToUserId.value
   })
+  
+  // 记录评论行为
+  if (props.itemId) {
+    try {
+      await api.recordUserBehavior('comment', props.itemId, {
+        content: inputContent.value,
+        comment_type: replyParentId.value ? 'reply' : 'comment'
+      });
+      console.log('评论行为记录成功');
+    } catch (behaviorError) {
+      console.warn('记录评论行为失败:', behaviorError);
+    }
+  }
+  
   inputContent.value = ''
   replyingTo.value = null
   replyParentId.value = null

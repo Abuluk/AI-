@@ -123,7 +123,8 @@
           <h3>AI智能推荐</h3>
           <div class="ai-status" :class="{ 'ai-active': aiAnalysis.success }">
             <span v-if="aiEnabled && aiAnalysis.success" class="ai-indicator">🤖 AI分析</span>
-            <span v-else class="ai-indicator">📊 基础推荐</span>
+            <span v-else-if="aiEnabled && !aiAnalysis.success" class="ai-indicator">📊 基础推荐</span>
+            <span v-else class="ai-indicator">💡 点击启动AI</span>
           </div>
         </div>
         <!-- AI分析结果展示 -->
@@ -169,6 +170,11 @@
                     {{ deal.owner && deal.owner.username ? deal.owner.username : '未知用户' }}
                   </span>
                   <span class="deal-condition">{{ getConditionText(deal.condition) }}</span>
+                </div>
+                <!-- 显示推荐类型标识 -->
+                <div v-if="deal.recommendation_type" class="recommendation-type">
+                  <span v-if="deal.recommendation_type === 'ai_behavior_based'" class="type-badge ai-based">AI推荐</span>
+                  <span v-else-if="deal.recommendation_type === 'basic'" class="type-badge basic">热门</span>
                 </div>
               </div>
             </div>
@@ -357,6 +363,16 @@ export default {
     selectedCategory() {
       this.pagination.page = 1;
       this.hasMore = true;
+      
+      // 记录分类点击行为
+      if (this.selectedCategory) {
+        const categoryName = this.CATEGORY_MAP.find(cat => cat.id == this.selectedCategory)?.name || '未知分类';
+        this.recordUserBehavior('category_click', null, {
+          category_id: this.selectedCategory,
+          category_name: categoryName
+        });
+      }
+      
       this.fetchSellingItems();
     }
   },
@@ -540,7 +556,8 @@ export default {
     async fetchCheapDeals() {
       this.loadingCheapDeals = true;
       try {
-        const response = await api.getAICheapDeals(10);
+        // 使用新的AI推荐API
+        const response = await api.getAIRecommendations(10);
         
         if (response.data.success) {
           // AI分析成功
@@ -559,11 +576,11 @@ export default {
             market_insights: null,
             message: response.data.message || "AI分析服务暂时不可用"
           };
-          this.cheapDeals = response.data.fallback_recommendations || [];
+          this.cheapDeals = response.data.recommendations || [];
         }
       } catch (error) {
-        console.error('Error loading AI cheap deals:', error);
-        // 如果API调用失败，不再显示本地模拟数据，只显示错误提示
+        console.error('Error loading AI recommendations:', error);
+        // 如果API调用失败，显示错误提示
         this.aiAnalysis = {
           success: false,
           analysis: null,
@@ -576,7 +593,25 @@ export default {
       }
     },
     goToItemDetail(itemId) {
+      // 记录用户点击行为
+      this.recordUserBehavior('click', itemId);
       this.$router.push(`/item/${itemId}`);
+    },
+    
+    // 记录用户行为
+    async recordUserBehavior(behaviorType, itemId = null, behaviorData = null) {
+      try {
+        if (this.authStore.user) {
+          console.log('记录用户行为:', { behaviorType, itemId, behaviorData, userId: this.authStore.user.id });
+          const response = await api.recordUserBehavior(behaviorType, itemId, behaviorData);
+          console.log('行为记录成功:', response);
+        } else {
+          console.log('用户未登录，跳过行为记录');
+        }
+      } catch (error) {
+        console.error('记录用户行为失败:', error);
+        console.error('错误详情:', error.response?.data || error.message);
+      }
     },
     goToPublishBuyRequest() {
       this.$router.push('/publish-buy-request');
@@ -1263,9 +1298,33 @@ export default {
   border-radius: 50%;
   cursor: pointer;
 }
-.carousel-dots .active {
-  background: #409eff;
-}
+  .carousel-dots .active {
+    background: #409eff;
+  }
+
+  /* 推荐类型标识样式 */
+  .recommendation-type {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+  }
+
+  .type-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: white;
+  }
+
+  .type-badge.ai-based {
+    background: linear-gradient(135deg, #42b983, #3aa776);
+  }
+
+  .type-badge.basic {
+    background: linear-gradient(135deg, #f56c6c, #e74c3c);
+  }
 
 /* 推广商品标识样式 */
 .promotion-badge {

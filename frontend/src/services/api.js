@@ -732,6 +732,87 @@ const apiService = {
   // 自动处理超时的疑似商家
   async autoProcessTimeout() {
     return api.post('/merchant-detection/auto-process-timeout')
+  },
+
+  // ==================== AI推荐相关API ====================
+  
+  // 获取AI智能推荐商品
+  async getAIRecommendations(limit = 10) {
+    return retryRequest(() => api.get('/ai_strategy/recommendations', { 
+      params: { limit } 
+    }))
+  },
+
+  // 记录用户行为
+  async recordUserBehavior(behaviorType, itemId = null, behaviorData = null) {
+    return api.post('/ai_strategy/record-behavior', {
+      behavior_type: behaviorType,
+      item_id: itemId,
+      behavior_data: behaviorData
+    })
+  },
+
+  // 获取用户行为统计
+  async getUserBehaviorStats(days = 30) {
+    return api.get('/ai_strategy/behavior-stats', { 
+      params: { days } 
+    })
+  },
+
+  // ==================== 管理员AI推荐管理API ====================
+  
+  // 获取AI推荐配置
+  async getAIRecommendationConfig() {
+    return retryRequest(() => api.get('/admin/ai-recommendation/config'))
+  },
+
+  // 更新AI推荐配置
+  async updateAIRecommendationConfig(configData) {
+    return retryRequest(() => api.put('/admin/ai-recommendation/config', configData))
+  },
+
+  // 获取AI推荐统计
+  async getAIRecommendationStats(days = 30) {
+    return retryRequest(() => api.get('/admin/ai-recommendation/stats', { 
+      params: { days } 
+    }))
+  },
+
+  // 获取用户行为记录
+  async getUserBehaviors(params = {}) {
+    return retryRequest(() => api.get('/admin/ai-recommendation/user-behaviors', { params }))
+  },
+
+  // 删除用户行为记录
+  async deleteUserBehavior(behaviorId) {
+    return retryRequest(() => api.delete(`/admin/ai-recommendation/user-behaviors/${behaviorId}`))
+  },
+
+  // 清理旧行为记录
+  async cleanupOldBehaviors(days = 90) {
+    return retryRequest(() => api.post('/admin/ai-recommendation/cleanup', { days }))
+  },
+
+  // 测试AI推荐功能
+  async testAIRecommendation(userId, limit = 5) {
+    return retryRequest(() => api.get('/admin/ai-recommendation/test', { 
+      params: { user_id: userId, limit } 
+    }))
+  },
+
+  // 获取商品选择范围配置
+  async getItemSelectionConfig() {
+    return retryRequest(() => api.get('/admin/ai-recommendation/item-selection-config'))
+  },
+
+  // 更新商品选择范围配置
+  async updateItemSelectionConfig(config) {
+    return retryRequest(() => api.post('/admin/ai-recommendation/item-selection-config', config))
+  },
+
+  // 获取可用分类
+  async getAvailableCategories() {
+    return retryRequest(() => api.get('/admin/ai-recommendation/categories'))
   }
 }
 

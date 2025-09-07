@@ -3,13 +3,13 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from db.session import get_db
 from core.security import get_current_user, create_access_token, authenticate_user, ACCESS_TOKEN_EXPIRE_MINUTES
-from db.models import User, Item, Favorite, SiteConfig, Message, BuyRequest, Merchant
+from db.models import User, Item, Favorite, SiteConfig, Message, BuyRequest, Merchant, UserBehavior, AIRecommendationConfig
 from schemas.user import UserInDB
 from schemas.item import ItemInDB, SiteConfigSchema
 from schemas.buy_request import BuyRequest as BuyRequestSchema
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
-from crud import crud_message, crud_buy_request
+from crud import crud_message, crud_buy_request, crud_user_behavior, crud_ai_recommendation
 import schemas.message
 from schemas.token import Token
 import json
@@ -770,4 +770,327 @@ def update_item_recommendations(
         db.add(config)
     
     db.commit()
-    return {"message": "商品推荐设置已更新", "item_id": item_id, "recommended_item_ids": recommended_item_ids} 
+    return {"message": "商品推荐设置已更新", "item_id": item_id, "recommended_item_ids": recommended_item_ids}
+
+# ==================== AI推荐管理功能 ====================
+
+@router.get("/ai-recommendation/config")
+def get_ai_recommendation_config(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """获取AI推荐配置"""
+    try:
+        settings = crud_ai_recommendation.get_ai_recommendation_settings(db)
+        return {
+            "success": True,
+            "config": settings
+        }
+    except Exception as e:
+        print(f"获取AI推荐配置失败: {e}")
+        raise HTTPException(status_code=500, detail="获取配置失败")
+
+@router.put("/ai-recommendation/config")
+def update_ai_recommendation_config(
+    config_data: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """更新AI推荐配置"""
+    try:
+        for key, value in config_data.items():
+            crud_ai_recommendation.create_or_update_ai_config(
+                db=db,
+                config_key=key,
+                config_value=value,
+                description=f"AI推荐配置 - {key}"
+            )
+        
+        return {
+            "success": True,
+            "message": "AI推荐配置已更新",
+            "config": config_data
+        }
+    except Exception as e:
+        print(f"更新AI推荐配置失败: {e}")
+        raise HTTPException(status_code=500, detail="更新配置失败")
+
+@router.get("/ai-recommendation/stats")
+def get_ai_recommendation_stats(
+    days: int = Query(30, ge=1, le=365, description="统计天数"),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """获取AI推荐统计信息"""
+    try:
+        # 用户行为统计
+        behavior_stats = db.query(
+            UserBehavior.behavior_type,
+            func.count(UserBehavior.id).label('count')
+        ).filter(
+            UserBehavior.created_at >= datetime.utcnow() - timedelta(days=days)
+        ).group_by(UserBehavior.behavior_type).all()
+        
+        # 用户活跃度统计
+        active_users = db.query(func.count(func.distinct(UserBehavior.user_id))).filter(
+            UserBehavior.created_at >= datetime.utcnow() - timedelta(days=days)
+        ).scalar()
+        
+        # 推荐效果统计（基于用户行为）
+        recommendation_effectiveness = db.query(
+            func.count(UserBehavior.id).label('total_behaviors'),
+            func.count(func.distinct(UserBehavior.user_id)).label('unique_users')
+        ).filter(
+            UserBehavior.behavior_type.in_(['view', 'click']),
+            UserBehavior.created_at >= datetime.utcnow() - timedelta(days=days)
+        ).first()
+        
+        return {
+            "success": True,
+            "stats": {
+                "period_days": days,
+                "behavior_stats": [{"type": bt, "count": count} for bt, count in behavior_stats],
+                "active_users": active_users,
+                "total_behaviors": recommendation_effectiveness.total_behaviors if recommendation_effectiveness else 0,
+                "unique_users": recommendation_effectiveness.unique_users if recommendation_effectiveness else 0
+            }
+        }
+    except Exception as e:
+        print(f"获取AI推荐统计失败: {e}")
+        raise HTTPException(status_code=500, detail="获取统计失败")
+
+@router.get("/ai-recommendation/user-behaviors")
+def get_user_behaviors(
+    user_id: Optional[int] = Query(None, description="用户ID，不传则获取所有用户"),
+    behavior_type: Optional[str] = Query(None, description="行为类型"),
+    limit: int = Query(50, ge=1, le=200, description="返回数量"),
+    offset: int = Query(0, ge=0, description="偏移量"),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """获取用户行为记录"""
+    try:
+        query = db.query(UserBehavior).join(User)
+        
+        if user_id:
+            query = query.filter(UserBehavior.user_id == user_id)
+        
+        if behavior_type:
+            query = query.filter(UserBehavior.behavior_type == behavior_type)
+        
+        total_count = query.count()
+        
+        behaviors = query.order_by(UserBehavior.created_at.desc()).offset(offset).limit(limit).all()
+        
+        result = []
+        for behavior in behaviors:
+            result.append({
+                "id": behavior.id,
+                "user_id": behavior.user_id,
+                "username": behavior.user.username if behavior.user else "未知用户",
+                "item_id": behavior.item_id,
+                "item_title": behavior.item.title if behavior.item else None,
+                "behavior_type": behavior.behavior_type,
+                "behavior_data": behavior.behavior_data,
+                "created_at": behavior.created_at.isoformat()
+            })
+        
+        return {
+            "success": True,
+            "behaviors": result,
+            "total_count": total_count,
+            "offset": offset,
+            "limit": limit
+        }
+    except Exception as e:
+        print(f"获取用户行为记录失败: {e}")
+        raise HTTPException(status_code=500, detail="获取行为记录失败")
+
+@router.delete("/ai-recommendation/user-behaviors/{behavior_id}")
+def delete_user_behavior(
+    behavior_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """删除用户行为记录"""
+    try:
+        behavior = db.query(UserBehavior).filter(UserBehavior.id == behavior_id).first()
+        if not behavior:
+            raise HTTPException(status_code=404, detail="行为记录不存在")
+        
+        db.delete(behavior)
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": "行为记录已删除"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"删除用户行为记录失败: {e}")
+        raise HTTPException(status_code=500, detail="删除失败")
+
+@router.post("/ai-recommendation/cleanup")
+def cleanup_old_behaviors(
+    days: int = Body(90, ge=30, le=365, description="清理多少天前的数据"),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """清理旧的行为记录"""
+    try:
+        deleted_count = crud_user_behavior.cleanup_old_behaviors(db, days)
+        
+        return {
+            "success": True,
+            "message": f"已清理 {deleted_count} 条旧行为记录",
+            "deleted_count": deleted_count
+        }
+    except Exception as e:
+        print(f"清理旧行为记录失败: {e}")
+        raise HTTPException(status_code=500, detail="清理失败")
+
+@router.get("/ai-recommendation/test")
+def test_ai_recommendation(
+    user_id: int = Query(..., description="测试用户ID"),
+    limit: int = Query(5, ge=1, le=10, description="推荐数量"),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """测试AI推荐功能"""
+    try:
+        # 获取用户信息
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {
+                "success": False,
+                "message": "用户不存在",
+                "behavior_count": 0
+            }
+        
+        # 获取用户行为序列
+        behavior_sequence = crud_user_behavior.get_user_behavior_sequence(
+            db, user_id, limit=10, days=30
+        )
+        
+        if len(behavior_sequence) < 3:
+            return {
+                "success": False,
+                "message": "用户行为数据不足，无法进行AI推荐测试",
+                "behavior_count": len(behavior_sequence)
+            }
+        
+        # 获取AI推荐设置
+        settings = crud_ai_recommendation.get_ai_recommendation_settings(db)
+        
+        # 调用AI推荐分析
+        from api.endpoints.ai_strategy import analyze_user_behavior_and_recommend
+        import asyncio
+        
+        ai_recommendations = asyncio.run(analyze_user_behavior_and_recommend(
+            db, behavior_sequence, settings, limit
+        ))
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "behavior_count": len(behavior_sequence),
+            "recommendations": ai_recommendations.get("recommendations", []),
+            "analysis": ai_recommendations.get("analysis", ""),
+            "recommendation_type": ai_recommendations.get("recommendation_type", "unknown"),
+            "message": "AI推荐测试成功"
+        }
+    except Exception as e:
+        print(f"测试AI推荐失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "message": f"AI推荐测试失败: {str(e)}",
+            "behavior_count": 0
+        }
+
+@router.get("/ai-recommendation/item-selection-config")
+def get_item_selection_config(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """获取商品选择范围配置"""
+    try:
+        settings = crud_ai_recommendation.get_ai_recommendation_settings(db)
+        item_selection = settings.get("item_selection", {})
+        
+        return {
+            "success": True,
+            "config": item_selection
+        }
+    except Exception as e:
+        print(f"获取商品选择配置失败: {e}")
+        raise HTTPException(status_code=500, detail="获取配置失败")
+
+@router.post("/ai-recommendation/item-selection-config")
+def update_item_selection_config(
+    config: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """更新商品选择范围配置"""
+    try:
+        # 验证配置格式
+        required_fields = ["sort_orders", "category_limits", "max_total_items", "enable_category_filter", "enable_sort_filter"]
+        for field in required_fields:
+            if field not in config:
+                raise HTTPException(status_code=400, detail=f"缺少必要字段: {field}")
+        
+        # 更新配置
+        crud_ai_recommendation.create_or_update_ai_config(
+            db=db,
+            config_key="item_selection",
+            config_value=config,
+            description="AI推荐商品选择范围配置"
+        )
+        
+        return {
+            "success": True,
+            "message": "配置更新成功"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"更新商品选择配置失败: {e}")
+        raise HTTPException(status_code=500, detail="更新配置失败")
+
+@router.get("/ai-recommendation/categories")
+def get_available_categories(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """获取可用的商品分类"""
+    try:
+        # 从商品表中获取所有存在的分类
+        categories = db.query(Item.category).filter(
+            Item.status == "online",
+            Item.sold == False,
+            Item.category.isnot(None)
+        ).distinct().all()
+        
+        category_list = []
+        for cat in categories:
+            if cat.category is not None:
+                category_list.append({
+                    "id": str(cat.category),
+                    "name": f"分类{cat.category}",
+                    "count": db.query(Item).filter(
+                        Item.category == cat.category,
+                        Item.status == "online",
+                        Item.sold == False
+                    ).count()
+                })
+        
+        return {
+            "success": True,
+            "categories": sorted(category_list, key=lambda x: int(x["id"]))
+        }
+    except Exception as e:
+        print(f"获取分类列表失败: {e}")
+        raise HTTPException(status_code=500, detail="获取分类失败") 

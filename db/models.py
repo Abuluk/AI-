@@ -244,3 +244,30 @@ class MerchantDetectionHistory(Base):
     
     # 关联用户
     user = relationship("User", back_populates="detection_histories")
+
+class UserBehavior(Base):
+    """用户行为记录表 - 用于AI推荐分析"""
+    __tablename__ = 'user_behaviors'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    item_id = Column(Integer, ForeignKey('items.id'), nullable=True)
+    behavior_type = Column(String(20), nullable=False)  # view, click, favorite, like, search
+    behavior_data = Column(JSON, nullable=True)  # 行为相关数据，如搜索关键词、停留时间等
+    created_at = Column(DateTime, server_default=func.now())
+    
+    # 关联用户和商品
+    user = relationship("User")
+    item = relationship("Item")
+
+class AIRecommendationConfig(Base):
+    """AI推荐配置表"""
+    __tablename__ = 'ai_recommendation_configs'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    config_key = Column(String(100), unique=True, nullable=False)  # 配置键
+    config_value = Column(JSON, nullable=True)  # 配置值
+    description = Column(String(500), nullable=True)  # 配置描述
+    is_active = Column(Boolean, default=True)  # 是否启用
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
