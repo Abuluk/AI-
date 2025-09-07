@@ -16,6 +16,7 @@ from .endpoints import (
     feedback,  # 新增
     ai_strategy,  # 新增
     merchants,  # 新增商家功能
+    merchant_detection,  # 新增商贩检测功能
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
@@ -117,5 +118,13 @@ api_router.include_router(
     merchants.router,
     prefix="/merchants",
     tags=["商家"],
+    dependencies=[Depends(oauth2_scheme)]
+)
+
+# 商贩检测路由 - 需要管理员权限
+api_router.include_router(
+    merchant_detection.router,
+    prefix="/merchant-detection",
+    tags=["商贩检测"],
     dependencies=[Depends(oauth2_scheme)]
 )

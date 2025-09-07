@@ -660,7 +660,7 @@ const apiService = {
   },
 
   async searchUser(keyword) {
-    return api.get(`/admin/users?search=${encodeURIComponent(keyword)}&limit=10`)
+    return api.get(`/admin/search-users?search=${encodeURIComponent(keyword)}&limit=10`)
   },
 
   async getPendingVerificationUsers(params) {
@@ -669,6 +669,27 @@ const apiService = {
     if (params.limit) queryParams.append('limit', params.limit)
     if (params.search) queryParams.append('search', params.search)
     return api.get(`/users/pending-verification?${queryParams.toString()}`)
+  },
+
+  // 商贩检测相关API
+  async getDetectionConfigs() {
+    return api.get('/merchant-detection/configs')
+  },
+
+  async updateDetectionConfig(key, data) {
+    return api.put(`/merchant-detection/configs/${key}`, data)
+  },
+
+  async runManualDetection(params) {
+    return api.post('/merchant-detection/detect', params)
+  },
+
+  async getDetectionStats() {
+    return api.get('/merchant-detection/stats')
+  },
+
+  async analyzeUser(userId, analysisDays = 30) {
+    return api.post(`/merchant-detection/analyze-user/${userId}?analysis_days=${analysisDays}`)
   },
 
   async removePendingVerification(userId) {
@@ -681,6 +702,36 @@ const apiService = {
 
   async updateDefaultDisplayFrequency(frequency) {
     return api.put('/merchants/admin/display-config/default', { display_frequency: frequency })
+  },
+
+  // 商贩检测历史相关API
+  async getDetectionHistories(params = {}) {
+    const queryParams = new URLSearchParams()
+    if (params.skip) queryParams.append('skip', params.skip)
+    if (params.limit) queryParams.append('limit', params.limit)
+    if (params.user_id) queryParams.append('user_id', params.user_id)
+    if (params.detection_type) queryParams.append('detection_type', params.detection_type)
+    
+    return api.get(`/merchant-detection/histories?${queryParams.toString()}`)
+  },
+
+  async getDetectionHistoriesStats() {
+    return api.get('/merchant-detection/histories/stats')
+  },
+
+  // 管理员确认疑似商家
+  async confirmMerchant(historyId) {
+    return api.post(`/merchant-detection/histories/${historyId}/confirm-merchant`)
+  },
+
+  // 管理员拒绝疑似商家
+  async rejectMerchant(historyId) {
+    return api.post(`/merchant-detection/histories/${historyId}/reject-merchant`)
+  },
+
+  // 自动处理超时的疑似商家
+  async autoProcessTimeout() {
+    return api.post('/merchant-detection/auto-process-timeout')
   }
 }
 

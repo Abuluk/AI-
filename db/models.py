@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Text, Boolean, DateTime, ForeignKey, func, UniqueConstraint, DECIMAL
+from sqlalchemy import Column, Integer, String, Float, Text, Boolean, DateTime, ForeignKey, func, UniqueConstraint, DECIMAL, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from db.base import Base
@@ -33,6 +33,7 @@ class User(Base):
     buy_requests = relationship("BuyRequest", back_populates="user")  # 新增
     merchant = relationship("Merchant", back_populates="user", uselist=False)  # 商家信息
     merchant_display_config = relationship("MerchantDisplayConfig", back_populates="user", uselist=False)  # 商家展示配置
+    detection_histories = relationship("MerchantDetectionHistory", back_populates="user")  # 检测历史
 
 class Item(Base):
     __tablename__ = "items"
@@ -214,3 +215,32 @@ class MerchantDisplayConfig(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
     
     user = relationship('User', foreign_keys=[user_id])
+
+class MerchantDetectionConfig(Base):
+    __tablename__ = 'merchant_detection_configs'
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(100), unique=True, nullable=False)  # 配置键
+    value = Column(Text, nullable=True)  # 配置值
+    description = Column(String(500), nullable=True)  # 配置描述
+    is_active = Column(Boolean, default=True)  # 是否启用
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class MerchantDetectionHistory(Base):
+    __tablename__ = 'merchant_detection_histories'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)  # 被检测用户ID
+    detection_type = Column(String(20), nullable=False, default='manual')  # 检测类型：manual/auto
+    behavior_data = Column(JSON, nullable=True)  # 用户行为数据
+    ai_analysis = Column(JSON, nullable=True)  # AI分析结果
+    active_items_count = Column(Integer, nullable=False, default=0)  # 在售商品数
+    is_merchant = Column(Boolean, nullable=False, default=False)  # AI判断结果
+    confidence = Column(Float, nullable=False, default=0.0)  # 置信度
+    ai_reason = Column(Text, nullable=True)  # AI分析理由
+    processed = Column(Boolean, nullable=False, default=False)  # 是否已处理
+    created_at = Column(DateTime, server_default=func.now())
+    
+    # 关联用户
+    user = relationship("User", back_populates="detection_histories")

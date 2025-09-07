@@ -331,3 +331,16 @@ def search_user(keyword: str = Query(..., min_length=1), db: Session = Depends(g
         "is_pending_merchant": user.is_pending_merchant or False,
         "is_pending_verification": user.is_pending_verification or False
     }
+
+@router.get("/{user_id}/avatar")
+def get_user_avatar(user_id: int, db: Session = Depends(get_db)):
+    """获取用户头像URL"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # 返回用户头像URL，如果没有头像则返回默认头像
+    if user.avatar:
+        return {"avatar_url": get_full_image_url(user.avatar)}
+    else:
+        return {"avatar_url": "http://127.0.0.1:8000/static/images/default_avatar.png"}

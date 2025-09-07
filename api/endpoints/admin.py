@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from db.session import get_db
 from core.security import get_current_user, create_access_token, authenticate_user, ACCESS_TOKEN_EXPIRE_MINUTES
-from db.models import User, Item, Favorite, SiteConfig, Message, BuyRequest
+from db.models import User, Item, Favorite, SiteConfig, Message, BuyRequest, Merchant
 from schemas.user import UserInDB
 from schemas.item import ItemInDB, SiteConfigSchema
 from schemas.buy_request import BuyRequest as BuyRequestSchema
@@ -163,6 +163,70 @@ def get_all_users(
         })
     return result
 
+@router.get("/search-users")
+def search_users_for_merchant_management(
+    search: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """搜索用户（用于商家管理）"""
+    # 构建搜索条件：ID精确匹配 OR 用户名/邮箱/手机号模糊匹配
+    search_conditions = []
+    
+    # 添加文本字段模糊搜索
+    text_search = (
+        User.username.ilike(f"%{search}%") |
+        User.email.ilike(f"%{search}%") |
+        User.phone.ilike(f"%{search}%")
+    )
+    search_conditions.append(text_search)
+    
+    # 如果搜索词是数字，也添加ID精确搜索
+    try:
+        user_id = int(search)
+        id_search = User.id == user_id
+        search_conditions.append(id_search)
+    except ValueError:
+        pass  # 不是数字，跳过ID搜索
+    
+    # 使用OR连接所有搜索条件
+    if search_conditions:
+        from sqlalchemy import or_
+        query = db.query(User).filter(or_(*search_conditions))
+    else:
+        query = db.query(User)
+    
+    # 按创建时间倒序，限制数量
+    users = query.order_by(User.created_at.desc()).limit(limit).all()
+    
+    result = []
+    for user in users:
+        # 获取用户的商家信息
+        merchant = db.query(Merchant).filter(Merchant.user_id == user.id).first()
+        
+        result.append({
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "phone": user.phone,
+            "avatar": get_full_image_url(user.avatar),
+            "is_active": user.is_active,
+            "is_admin": user.is_admin,
+            "is_merchant": user.is_merchant,
+            "is_pending_merchant": user.is_pending_merchant,
+            "is_pending_verification": user.is_pending_verification,
+            "created_at": user.created_at,
+            "merchant": {
+                "id": merchant.id,
+                "business_name": merchant.business_name,
+                "status": merchant.status,
+                "created_at": merchant.created_at
+            } if merchant else None
+        })
+    
+    return result
+
 @router.get("/users/{user_id}", response_model=UserInDB)
 def get_user_detail(
     user_id: int,
@@ -177,14 +241,14 @@ def get_user_detail(
     # 计算用户的商品数量
     items_count = db.query(func.count(Item.id)).filter(Item.owner_id == user_id).scalar()
     
-    if user.avatar:
-        user.avatar = user.avatar.replace('/static/images/', '').replace('static/images/', '')
+    # 处理用户头像URL
+    avatar = get_full_image_url(user.avatar)
     
     return {
         "id": user.id,
         "username": user.username,
         "email": user.email,
-        "avatar": user.avatar,
+        "avatar": avatar,
         "bio": user.bio,
         "location": user.location,
         "contact": user.contact,
@@ -219,10 +283,27 @@ def update_user_status(
     db.commit()
     db.refresh(user)
     
-    if user.avatar:
-        user.avatar = user.avatar.replace('/static/images/', '').replace('static/images/', '')
+    # 处理用户头像URL
+    avatar = get_full_image_url(user.avatar)
+    user_dict = {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "avatar": avatar,
+        "bio": user.bio,
+        "location": user.location,
+        "contact": user.contact,
+        "phone": user.phone,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "last_login": user.last_login,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
+        "followers": user.followers,
+        "following": user.following
+    }
     
-    return {"message": f"用户已{'激活' if is_active else '禁用'}", "user": user}
+    return {"message": f"用户已{'激活' if is_active else '禁用'}", "user": user_dict}
 
 @router.patch("/users/{user_id}/admin")
 def update_user_admin_status(
@@ -244,10 +325,27 @@ def update_user_admin_status(
     db.commit()
     db.refresh(user)
     
-    if user.avatar:
-        user.avatar = user.avatar.replace('/static/images/', '').replace('static/images/', '')
+    # 处理用户头像URL
+    avatar = get_full_image_url(user.avatar)
+    user_dict = {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "avatar": avatar,
+        "bio": user.bio,
+        "location": user.location,
+        "contact": user.contact,
+        "phone": user.phone,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "last_login": user.last_login,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
+        "followers": user.followers,
+        "following": user.following
+    }
     
-    return {"message": f"用户已{'设为管理员' if is_admin else '取消管理员权限'}", "user": user}
+    return {"message": f"用户已{'设为管理员' if is_admin else '取消管理员权限'}", "user": user_dict}
 
 @router.delete("/users/{user_id}")
 def delete_user(
@@ -472,6 +570,10 @@ def get_all_buy_requests(
             br.images = br.images.split(",")
         elif not br.images:
             br.images = []
+        
+        # 处理用户头像URL
+        if br.user and br.user.avatar:
+            br.user.avatar = get_full_image_url(br.user.avatar)
     return brs
 
 @router.delete("/buy_requests/{buy_request_id}")

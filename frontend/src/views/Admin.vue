@@ -198,6 +198,7 @@
             保存
           </button>
         </div>
+        
       </div>
 
       <!-- 商家管理子标签页 -->
@@ -610,6 +611,421 @@
         </table>
         <div v-if="loadingMoreBuyRequests" style="text-align:center;padding:8px;">加载中...</div>
         <div v-if="!hasMoreBuyRequests && buyRequests.length > 0" style="text-align:center;padding:8px;">已加载全部</div>
+      </div>
+    </div>
+
+    <!-- 商贩检测 -->
+    <div v-if="activeTab === 'merchant_detection'" class="tab-content">
+      <div class="section-header">
+        <h2>商贩检测</h2>
+        <div class="detection-status">
+          <span class="status-indicator" :class="{ active: detectionStats?.schedule_enabled }">
+            {{ detectionStats?.schedule_enabled ? '定时检测已启用' : '定时检测已禁用' }}
+          </span>
+        </div>
+      </div>
+
+      <!-- 检测配置 -->
+      <div class="merchant-detection-settings">
+        <h3>检测配置</h3>
+        <div class="detection-controls">
+          <div class="control-group">
+            <label>监控商品数量：</label>
+            <input 
+              v-model.number="detectionConfig.monitor_top_n" 
+              type="number" 
+              min="10" 
+              max="200" 
+              class="form-input"
+            >
+            <span>每个分类和首页排序前N个商品</span>
+          </div>
+          
+          <div class="control-group">
+            <label>商品数阈值：</label>
+            <input 
+              v-model.number="detectionConfig.threshold_items" 
+              type="number" 
+              min="5" 
+              max="50" 
+              class="form-input"
+            >
+            <span>在售商品数超过此数量将进行AI分析</span>
+          </div>
+          
+          <div class="control-group">
+            <label>分析天数：</label>
+            <input 
+              v-model.number="detectionConfig.analysis_days" 
+              type="number" 
+              min="7" 
+              max="90" 
+              class="form-input"
+            >
+            <span>分析用户最近N天的行为数据</span>
+          </div>
+          
+          <div class="control-group">
+            <label>AI置信度阈值：</label>
+            <input 
+              v-model.number="detectionConfig.ai_confidence_threshold" 
+              type="number" 
+              min="0.1" 
+              max="1.0" 
+              step="0.1" 
+              class="form-input"
+            >
+            <span>AI判断为商贩的置信度阈值</span>
+          </div>
+          
+          <div class="control-group">
+            <label>
+              <input 
+                v-model="detectionConfig.auto_set_pending" 
+                type="checkbox"
+              >
+              自动设为待认证
+            </label>
+            <span>识别出商贩后自动设为待认证状态</span>
+          </div>
+          
+          
+          <div class="control-group">
+            <label>超时自动处理天数：</label>
+            <input 
+              v-model.number="detectionConfig.auto_timeout_days" 
+              type="number" 
+              min="1" 
+              max="30" 
+              class="form-input"
+            >
+            <span>疑似商家超过此天数未确认将自动设为待认证</span>
+          </div>
+          
+          <div class="control-group">
+            <label>
+              <input 
+                v-model="detectionConfig.detection_schedule_enabled" 
+                type="checkbox"
+              >
+              启用定时检测
+            </label>
+            <span>启用定时自动检测功能</span>
+          </div>
+          
+          <div v-if="detectionConfig.detection_schedule_enabled" class="control-group">
+            <label>检测时间：</label>
+            <input 
+              v-model="detectionConfig.detection_schedule_time" 
+              type="time" 
+              class="form-input"
+            >
+            <span>每天执行检测的时间（24小时制）</span>
+          </div>
+          
+          <div class="control-actions">
+            <button @click="saveDetectionConfig" class="btn btn-primary">
+              保存配置
+            </button>
+            <button @click="runManualDetection" class="btn btn-warning" :disabled="runningDetection">
+              {{ runningDetection ? '检测中...' : '手动检测' }}
+            </button>
+            <button @click="loadDetectionStats" class="btn btn-outline">
+              刷新统计
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 检测统计信息 -->
+      <div v-if="detectionStats" class="detection-stats">
+        <h3>检测统计</h3>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">高活跃用户：</span>
+            <span class="stat-value">{{ detectionStats.high_activity_users }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">检测状态：</span>
+            <span class="stat-value" :class="{ active: detectionStats.detection_enabled }">
+              {{ detectionStats.detection_enabled ? '已启用' : '已禁用' }}
+            </span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">监控商品数：</span>
+            <span class="stat-value">{{ detectionConfig.monitor_top_n }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">商品数阈值：</span>
+            <span class="stat-value">{{ detectionConfig.threshold_items }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 检测结果 -->
+      <div v-if="detectionResults.length > 0" class="detection-results">
+        <h3>检测结果</h3>
+        <div class="results-table">
+          <table>
+            <thead>
+              <tr>
+                <th>用户ID</th>
+                <th>用户名</th>
+                <th>在售商品数</th>
+                <th>AI判断</th>
+                <th>置信度</th>
+                <th>检测时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="result in detectionResults" :key="result.user_id">
+                <td>{{ result.user_id }}</td>
+                <td>
+                  <div class="user-info">
+                    <img v-if="result.behavior_data?.avatar" 
+                         :src="getAvatarUrl(result.behavior_data.avatar)" 
+                         class="user-avatar" 
+                         :alt="result.behavior_data?.username"
+                         @error="handleAvatarError">
+                    <div class="user-details">
+                      <div class="username">{{ result.behavior_data?.username || '未知用户' }}</div>
+                      <div class="user-email">{{ result.behavior_data?.email || '未知邮箱' }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <span class="item-count">{{ result.active_items_count }}</span>
+                  <div class="item-stats">
+                    <small>总发布: {{ result.behavior_data?.total_items || 0 }}</small>
+                    <small>已售: {{ result.behavior_data?.sold_items || 0 }}</small>
+                  </div>
+                </td>
+                <td>
+                  <span class="ai-judgment" :class="{ 
+                    merchant: result.ai_analysis?.is_merchant, 
+                    normal: !result.ai_analysis?.is_merchant 
+                  }">
+                    {{ result.ai_analysis?.is_merchant ? '商贩' : '普通用户' }}
+                  </span>
+                </td>
+                <td>
+                  <div class="confidence-display">
+                    <div class="confidence-value">{{ (result.ai_analysis?.confidence * 100 || 0).toFixed(1) }}%</div>
+                    <div class="confidence-bar-small">
+                      <div class="confidence-fill-small" 
+                           :style="{ width: (result.ai_analysis?.confidence * 100 || 0) + '%' }"></div>
+                    </div>
+                  </div>
+                </td>
+                <td>{{ formatTime(result.detected_at) }}</td>
+                <td>
+                  <button @click="analyzeUser(result.user_id)" 
+                          class="btn btn-sm btn-outline" 
+                          :disabled="analyzingUser">
+                    {{ analyzingUser ? '分析中...' : '详细分析' }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 用户分析详情 -->
+      <div v-if="showUserAnalysis" class="user-analysis-modal">
+        <div class="modal-overlay" @click="showUserAnalysis = false">
+          <div class="modal-content" @click.stop>
+            <div class="modal-header">
+              <h3>用户行为分析</h3>
+              <button @click="showUserAnalysis = false" class="close-btn">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+            <div class="modal-body" v-if="userAnalysisData">
+              <div class="analysis-sections">
+                <div class="analysis-section">
+                  <h4>基本信息</h4>
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <label>用户名：</label>
+                      <span>{{ userAnalysisData.behavior_data?.username }}</span>
+                    </div>
+                    <div class="info-item">
+                      <label>邮箱：</label>
+                      <span>{{ userAnalysisData.behavior_data?.email }}</span>
+                    </div>
+                    <div class="info-item">
+                      <label>分析周期：</label>
+                      <span>{{ userAnalysisData.behavior_data?.analysis_period_days }}天</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="analysis-section">
+                  <h4>商品统计</h4>
+                  <div class="stats-grid">
+                    <div class="stat-card">
+                      <div class="stat-number">{{ userAnalysisData.behavior_data?.total_items || 0 }}</div>
+                      <div class="stat-label">总发布数</div>
+                    </div>
+                    <div class="stat-card">
+                      <div class="stat-number">{{ userAnalysisData.behavior_data?.active_items || 0 }}</div>
+                      <div class="stat-label">在售商品</div>
+                    </div>
+                    <div class="stat-card">
+                      <div class="stat-number">{{ userAnalysisData.behavior_data?.sold_items || 0 }}</div>
+                      <div class="stat-label">已售商品</div>
+                    </div>
+                    <div class="stat-card">
+                      <div class="stat-number">{{ userAnalysisData.behavior_data?.daily_publish_rate || 0 }}</div>
+                      <div class="stat-label">日均发布率</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="analysis-section">
+                  <h4>AI分析结果</h4>
+                  <div class="ai-result">
+                    <div class="ai-judgment-large" :class="{ 
+                      merchant: userAnalysisData.ai_analysis?.is_merchant, 
+                      normal: !userAnalysisData.ai_analysis?.is_merchant 
+                    }">
+                      {{ userAnalysisData.ai_analysis?.is_merchant ? '判定为商贩' : '判定为普通用户' }}
+                    </div>
+                    <div class="confidence-bar">
+                      <div class="confidence-label">置信度：{{ (userAnalysisData.ai_analysis?.confidence * 100 || 0).toFixed(1) }}%</div>
+                      <div class="confidence-progress">
+                        <div class="confidence-fill" :style="{ width: (userAnalysisData.ai_analysis?.confidence * 100 || 0) + '%' }"></div>
+                      </div>
+                    </div>
+                    <div class="ai-reason">
+                      <strong>分析理由：</strong>
+                      <p>{{ userAnalysisData.ai_analysis?.reason || '无' }}</p>
+                    </div>
+                    <div v-if="userAnalysisData.ai_analysis?.evidence?.length" class="ai-evidence">
+                      <strong>证据：</strong>
+                      <ul>
+                        <li v-for="evidence in userAnalysisData.ai_analysis.evidence" :key="evidence">
+                          {{ evidence }}
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 检测历史 -->
+      <div class="detection-history">
+        <div class="history-header">
+          <h3>检测历史</h3>
+          <div class="history-controls">
+            <button @click="loadDetectionHistories" class="btn btn-outline btn-sm">
+              刷新历史
+            </button>
+            <button @click="autoProcessTimeout" class="btn btn-warning btn-sm">
+              处理超时
+            </button>
+            <select v-model="historyFilter" @change="loadDetectionHistories" class="form-select">
+              <option value="">全部类型</option>
+              <option value="manual">手动检测</option>
+              <option value="auto">自动检测</option>
+            </select>
+          </div>
+        </div>
+        
+        <div v-if="detectionHistories.length > 0" class="history-table">
+          <table>
+            <thead>
+              <tr>
+                <th>检测时间</th>
+                <th>用户</th>
+                <th>在售商品</th>
+                <th>AI判断</th>
+                <th>置信度</th>
+                <th>类型</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="history in detectionHistories" :key="history.id">
+                <td>{{ formatTime(history.created_at) }}</td>
+                <td>
+                  <div class="user-info-small">
+                    <img v-if="history.behavior_data?.avatar" 
+                         :src="getAvatarUrl(history.behavior_data.avatar)" 
+                         class="user-avatar-small" 
+                         :alt="history.behavior_data?.username"
+                         @error="handleAvatarError">
+                    <!-- 无头像时通过用户ID获取头像 -->
+                    <img v-else 
+                         :src="userAvatarUrls[history.user_id] || 'http://127.0.0.1:8000/static/images/default_avatar.png'" 
+                         class="user-avatar-small" 
+                         :alt="history.behavior_data?.username || '未知用户'"
+                         @error="handleAvatarError"
+                         @load="loadUserAvatar(history.user_id)">
+                    <div class="user-details-small">
+                      <div class="username-small">{{ history.behavior_data?.username || '未知用户' }}</div>
+                      <div class="user-id-small">ID: {{ history.user_id }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td>{{ history.active_items_count }}</td>
+                <td>
+                  <span class="ai-judgment-small" :class="{ 
+                    merchant: history.is_merchant, 
+                    normal: !history.is_merchant 
+                  }">
+                    {{ history.is_merchant ? '商贩' : '普通用户' }}
+                  </span>
+                </td>
+                <td>{{ (history.confidence * 100).toFixed(1) }}%</td>
+                <td>
+                  <span class="detection-type" :class="history.detection_type">
+                    {{ history.detection_type === 'manual' ? '手动' : '自动' }}
+                  </span>
+                </td>
+                <td>
+                  <span class="processed-status" :class="{ processed: history.processed }">
+                    {{ history.processed ? '已处理' : '待处理' }}
+                  </span>
+                </td>
+                <td>
+                  <div class="action-buttons">
+                    <button @click="viewHistoryDetail(history)" class="btn btn-sm btn-outline">
+                      查看详情
+                    </button>
+                    <div v-if="!history.processed" class="merchant-actions">
+                      <button @click="confirmMerchant(history.id)" class="btn btn-sm btn-success">
+                        加入待认证
+                      </button>
+                      <button @click="rejectDetectionMerchant(history.id)" class="btn btn-sm btn-danger">
+                        拒绝
+                      </button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <div v-else class="no-history">
+          <p>暂无检测历史记录</p>
+        </div>
+        
+        <div class="history-info">
+          <h4>检测说明</h4>
+          <p>• 系统每天凌晨2点自动执行商贩检测</p>
+          <p>• 检测结果会自动将识别出的商贩设为待认证状态</p>
+          <p>• 管理员可在商家管理页面查看和管理待认证用户</p>
+          <p>• 点击"详细分析"可查看AI分析的详细过程</p>
+        </div>
       </div>
     </div>
 
@@ -1362,6 +1778,25 @@ const pendingVerificationFilters = reactive({
 })
 const pendingVerificationPage = ref(1)
 const pendingVerificationLimit = 50
+
+// 商贩检测相关
+const detectionConfig = reactive({
+  monitor_top_n: 50,
+  threshold_items: 3,  // 降低阈值
+  analysis_days: 30,
+  ai_confidence_threshold: 0.7,
+  auto_set_pending: true,
+  auto_timeout_days: 7,
+  detection_schedule_enabled: false,
+  detection_schedule_time: '02:00'
+})
+const detectionStats = ref(null)
+const runningDetection = ref(false)
+const detectionResults = ref([])
+const showUserAnalysis = ref(false)
+const userAnalysisData = ref(null)
+const detectionHistories = ref([])
+const historyFilter = ref('')
 const hasMorePendingVerificationUsers = ref(true)
 const loadingMorePendingVerificationUsers = ref(false)
 
@@ -1384,6 +1819,7 @@ const tabs = [
   { id: 'items', label: '商品管理', icon: 'fas fa-box' },
   { id: 'merchants', label: '商家管理', icon: 'fas fa-store' },
   { id: 'buy_requests', label: '求购管理', icon: 'fas fa-shopping-cart' },
+  { id: 'merchant_detection', label: '商贩检测', icon: 'fas fa-search' },
   { id: 'promotions', label: '推广位管理', icon: 'fas fa-star' },
   { id: 'messages', label: '消息管理', icon: 'fas fa-bullhorn' },
   { id: 'feedbacks', label: '留言管理', icon: 'fas fa-comment-dots' },
@@ -1662,10 +2098,167 @@ const changeTab = (tabId) => {
   else if (tabId === 'feedbacks') loadFeedbacks()
 }
 
+const getImageUrl = (imagePath) => {
+  if (!imagePath) return ''
+  
+  // 强制使用HTTP协议避免SSL错误
+  if (imagePath.startsWith('http://')) {
+    return imagePath
+  }
+  
+  if (imagePath.startsWith('https://')) {
+    // 将HTTPS转换为HTTP
+    return imagePath.replace('https://', 'http://')
+  }
+  
+  if (imagePath.startsWith('/static/')) {
+    return 'http://127.0.0.1:8000' + imagePath
+  }
+  
+  return 'http://127.0.0.1:8000/static/images/' + imagePath
+}
+
+const getAvatarUrl = (avatarPath) => {
+  if (!avatarPath) {
+    return 'http://127.0.0.1:8000/static/images/default_avatar.png'
+  }
+  
+  // 强制使用HTTP协议避免SSL错误
+  if (avatarPath.startsWith('http://')) {
+    return avatarPath
+  }
+  
+  if (avatarPath.startsWith('https://')) {
+    // 将HTTPS转换为HTTP
+    return avatarPath.replace('https://', 'http://')
+  }
+  
+  if (avatarPath.startsWith('/static/')) {
+    return 'http://127.0.0.1:8000' + avatarPath
+  }
+  
+  if (avatarPath.startsWith('static/')) {
+    return 'http://127.0.0.1:8000/' + avatarPath
+  }
+  
+  // 默认情况：假设是文件名，添加到静态路径
+  return 'http://127.0.0.1:8000/static/images/' + avatarPath
+}
+
+// 存储用户头像URL的响应式对象
+const userAvatarUrls = reactive({})
+
+const getUserAvatarUrl = (userId) => {
+  // 如果已经缓存了头像URL，直接返回
+  if (userAvatarUrls[userId]) {
+    return userAvatarUrls[userId]
+  }
+  
+  // 否则返回默认头像，并异步获取真实头像
+  loadUserAvatar(userId)
+  return 'http://127.0.0.1:8000/static/images/default_avatar.png'
+}
+
+const loadUserAvatar = async (userId) => {
+  try {
+    const response = await api.getUser(userId)
+    if (response.data && response.data.avatar) {
+      // 使用getAvatarUrl函数来处理头像URL
+      userAvatarUrls[userId] = getAvatarUrl(response.data.avatar)
+    }
+  } catch (error) {
+    console.log(`获取用户 ${userId} 头像失败:`, error)
+  }
+}
+
+const handleAvatarError = (event) => {
+  // 头像加载失败时显示默认头像
+  event.target.src = 'http://127.0.0.1:8000/static/images/default_avatar.png'
+  event.target.onerror = null // 防止无限循环
+}
+
 const formatTime = (time) => {
   if (!time) return '未知'
   const date = new Date(time)
   return date.toLocaleString('zh-CN')
+}
+
+const loadDetectionHistories = async () => {
+  try {
+    const params = {}
+    if (historyFilter.value) {
+      params.detection_type = historyFilter.value
+    }
+    
+    const response = await api.getDetectionHistories(params)
+    detectionHistories.value = response.data.histories || response.histories || []
+    
+    // 预加载所有需要的用户头像
+    for (const history of detectionHistories.value) {
+      if (!history.behavior_data?.avatar && history.user_id) {
+        loadUserAvatar(history.user_id)
+      }
+    }
+  } catch (error) {
+    console.error('加载检测历史失败:', error)
+  }
+}
+
+const viewHistoryDetail = (history) => {
+  // 使用历史记录中的数据进行详细分析
+  userAnalysisData.value = {
+    behavior_data: history.behavior_data,
+    ai_analysis: history.ai_analysis
+  }
+  showUserAnalysis.value = true
+}
+
+// 管理员确认疑似商家
+const confirmMerchant = async (historyId) => {
+  if (!confirm('确定要将该用户设为待认证状态吗？')) {
+    return
+  }
+  
+  try {
+    await api.confirmMerchant(historyId)
+    alert('用户已设为待认证状态')
+    await loadDetectionHistories()
+  } catch (error) {
+    console.error('确认商家失败:', error)
+    alert('操作失败，请重试')
+  }
+}
+
+// 管理员拒绝疑似商家
+const rejectDetectionMerchant = async (historyId) => {
+  if (!confirm('确定要拒绝该用户为商家吗？')) {
+    return
+  }
+  
+  try {
+    await api.rejectMerchant(historyId)
+    alert('已拒绝该用户为商家')
+    await loadDetectionHistories()
+  } catch (error) {
+    console.error('拒绝商家失败:', error)
+    alert('操作失败，请重试')
+  }
+}
+
+// 自动处理超时的疑似商家
+const autoProcessTimeout = async () => {
+  if (!confirm('确定要处理所有超时的疑似商家吗？\n\n这将自动将超时的疑似商家设为待认证状态。')) {
+    return
+  }
+  
+  try {
+    const response = await api.autoProcessTimeout()
+    alert(response.data.message || '处理完成')
+    await loadDetectionHistories()
+  } catch (error) {
+    console.error('处理超时失败:', error)
+    alert('操作失败，请重试')
+  }
 }
 
 const getFirstImage = (item) => {
@@ -1777,6 +2370,9 @@ onMounted(() => {
   loadUsers(true)
   loadActivityBanners()
   loadDefaultDisplayFrequency()
+  loadDetectionConfig()
+  loadDetectionStats()
+  loadDetectionHistories()
 })
 
 // 活动页管理相关
@@ -1830,15 +2426,25 @@ const getUserAvatar = (user) => {
   if (!user || !user.avatar) {
     return 'http://127.0.0.1:8000/static/images/default_avatar.png'
   }
-  if (user.avatar.startsWith('http')) {
+  
+  // 强制使用HTTP协议避免SSL错误
+  if (user.avatar.startsWith('http://')) {
     return user.avatar
   }
+  
+  if (user.avatar.startsWith('https://')) {
+    // 将HTTPS转换为HTTP
+    return user.avatar.replace('https://', 'http://')
+  }
+  
   if (user.avatar.startsWith('/static/images/')) {
     return `http://127.0.0.1:8000${user.avatar}`
   }
+  
   if (user.avatar.startsWith('static/images/')) {
     return `http://127.0.0.1:8000/${user.avatar}`
   }
+  
   return `http://127.0.0.1:8000/static/images/${user.avatar}`
 }
 
@@ -2270,6 +2876,21 @@ const getUserStatusText = (user) => {
   if (user.is_pending_verification) return '待认证'
   if (user.is_merchant) return '已认证商家'
   if (user.is_pending_merchant) return '申请中'
+  if (user.merchant) {
+    // 如果有商家信息但用户状态不是商家，显示商家状态
+    switch (user.merchant.status) {
+      case 'pending':
+        return '商家申请中'
+      case 'approved':
+        return '已认证商家'
+      case 'rejected':
+        return '商家申请被拒'
+      case 'cancelled':
+        return '商家已取消'
+      default:
+        return '商家状态未知'
+    }
+  }
   return '普通用户'
 }
 
@@ -2277,6 +2898,21 @@ const getUserStatusClass = (user) => {
   if (user.is_pending_verification) return 'danger'
   if (user.is_merchant) return 'active'
   if (user.is_pending_merchant) return 'warning'
+  if (user.merchant) {
+    // 如果有商家信息，根据商家状态返回样式
+    switch (user.merchant.status) {
+      case 'pending':
+        return 'warning'
+      case 'approved':
+        return 'active'
+      case 'rejected':
+        return 'danger'
+      case 'cancelled':
+        return 'inactive'
+      default:
+        return 'inactive'
+    }
+  }
   return 'inactive'
 }
 
@@ -2327,6 +2963,124 @@ const removeUserPendingVerification = async (user) => {
     alert('操作失败，请重试')
   }
 }
+
+// 商贩检测相关方法
+const loadDetectionConfig = async () => {
+  try {
+    const response = await api.getDetectionConfigs()
+    const configs = response.data || response
+    
+    // 更新配置
+    configs.forEach(config => {
+      if (config.key in detectionConfig) {
+        if (config.key === 'auto_set_pending' || config.key === 'detection_schedule_enabled') {
+          detectionConfig[config.key] = config.value === 'true'
+        } else {
+          detectionConfig[config.key] = parseFloat(config.value) || parseInt(config.value) || config.value
+        }
+      }
+    })
+  } catch (error) {
+    console.error('加载检测配置失败:', error)
+  }
+}
+
+const saveDetectionConfig = async () => {
+  try {
+    const configs = [
+      { key: 'monitor_top_n', value: detectionConfig.monitor_top_n },
+      { key: 'threshold_items', value: detectionConfig.threshold_items },
+      { key: 'analysis_days', value: detectionConfig.analysis_days },
+      { key: 'ai_confidence_threshold', value: detectionConfig.ai_confidence_threshold },
+      { key: 'auto_set_pending', value: detectionConfig.auto_set_pending },
+      { key: 'auto_timeout_days', value: detectionConfig.auto_timeout_days },
+      { key: 'detection_schedule_enabled', value: detectionConfig.detection_schedule_enabled },
+      { key: 'detection_schedule_time', value: detectionConfig.detection_schedule_time }
+    ]
+    
+    for (const config of configs) {
+      await api.updateDetectionConfig(config.key, { value: config.value })
+    }
+    
+    alert('配置保存成功')
+    await loadDetectionStats()
+  } catch (error) {
+    console.error('保存检测配置失败:', error)
+    alert('保存失败，请重试')
+  }
+}
+
+const runManualDetection = async () => {
+  // 防止重复点击
+  if (runningDetection.value) {
+    return
+  }
+  
+  if (!confirm('确定要执行手动商贩检测吗？\n\n这将分析所有高活跃用户，可能需要几分钟时间。')) {
+    return
+  }
+  
+  runningDetection.value = true
+  try {
+    const response = await api.runManualDetection({
+      top_n: detectionConfig.monitor_top_n,
+      threshold_items: detectionConfig.threshold_items,
+      analysis_days: detectionConfig.analysis_days
+    })
+    
+    const result = response.data || response
+    detectionResults.value = result.results || []
+    
+    alert(`检测完成！\n\n分析用户：${result.total_analyzed}个\n检测到商贩：${result.detected_merchants}个`)
+    
+    // 刷新统计信息
+    await loadDetectionStats()
+  } catch (error) {
+    console.error('手动检测失败:', error)
+    if (error.code === 'ECONNABORTED') {
+      alert('检测请求超时，请稍后重试')
+    } else {
+      alert('检测失败，请重试')
+    }
+  } finally {
+    runningDetection.value = false
+  }
+}
+
+const loadDetectionStats = async () => {
+  try {
+    const response = await api.getDetectionStats()
+    detectionStats.value = response.data || response
+  } catch (error) {
+    console.error('加载检测统计失败:', error)
+  }
+}
+
+const analyzingUser = ref(false)
+
+const analyzeUser = async (userId) => {
+  // 防止重复点击
+  if (analyzingUser.value) {
+    return
+  }
+  
+  analyzingUser.value = true
+  try {
+    const response = await api.analyzeUser(userId, detectionConfig.analysis_days)
+    userAnalysisData.value = response.data || response
+    showUserAnalysis.value = true
+  } catch (error) {
+    console.error('分析用户失败:', error)
+    if (error.code === 'ECONNABORTED') {
+      alert('分析请求超时，请稍后重试')
+    } else {
+      alert('分析用户失败，请重试')
+    }
+  } finally {
+    analyzingUser.value = false
+  }
+}
+
 
 // 显示待认证用户商家详情
 const showPendingUserMerchantDetails = async (user) => {
@@ -2566,13 +3320,15 @@ const loadDefaultDisplayFrequency = async () => {
 
 .admin-tabs {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 30px;
   border-bottom: 1px solid #eee;
+  padding-bottom: 15px;
 }
 
 .admin-tabs button {
-  padding: 12px 24px;
+  padding: 10px 16px;
   border: none;
   background: none;
   cursor: pointer;
@@ -2580,12 +3336,23 @@ const loadDefaultDisplayFrequency = async () => {
   transition: all 0.3s;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-width: 100px;
+  justify-content: center;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.admin-tabs button:hover {
+  background: #f8f9fa;
+  border-radius: 4px;
 }
 
 .admin-tabs button.active {
   border-bottom-color: #3498db;
   color: #3498db;
+  background: #f0f8ff;
+  border-radius: 4px;
 }
 
 .section-header {
@@ -3386,6 +4153,576 @@ th {
   border: 1px solid #e9ecef;
 }
 
+/* 商贩检测设置样式 */
+.merchant-detection-settings {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.merchant-detection-settings h3 {
+  margin: 0 0 20px 0;
+  color: #333;
+  font-size: 18px;
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 10px;
+}
+
+.detection-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-group label {
+  font-weight: 600;
+  color: #555;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-group input[type="number"] {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  width: 100px;
+}
+
+.control-group input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+}
+
+.control-group span {
+  font-size: 12px;
+  color: #666;
+  font-style: italic;
+}
+
+.control-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+  margin-top: 10px;
+}
+
+.detection-stats {
+  background: #f8f9fa;
+  border-radius: 6px;
+  padding: 15px;
+  margin-top: 20px;
+}
+
+.detection-stats h4 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.stat-label {
+  font-weight: 500;
+  color: #666;
+}
+
+.stat-value {
+  font-weight: 600;
+  color: #333;
+}
+
+.stat-value.active {
+  color: #28a745;
+}
+
+.stat-value.inactive {
+  color: #dc3545;
+}
+
+/* 商贩检测页面样式 */
+.detection-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-indicator {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #dc3545;
+  color: white;
+}
+
+.status-indicator.active {
+  background: #28a745;
+}
+
+.detection-history {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+  border: 1px solid #e9ecef;
+}
+
+.detection-history h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 16px;
+}
+
+.history-info {
+  color: #666;
+  line-height: 1.6;
+}
+
+.history-info p {
+  margin: 8px 0;
+}
+
+/* 检测结果样式 */
+.detection-results {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 20px;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.detection-results h3 {
+  margin: 0 0 20px 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.results-table {
+  overflow-x: auto;
+}
+
+.results-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.results-table th,
+.results-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.results-table th {
+  background: #f8f9fa;
+  font-weight: 600;
+  color: #333;
+}
+
+.ai-judgment {
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ai-judgment.merchant {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.ai-judgment.normal {
+  background: #e8f5e8;
+  color: #2e7d32;
+}
+
+/* 用户分析模态框样式 */
+.user-analysis-modal .modal-content {
+  max-width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.analysis-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.analysis-section {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 15px;
+}
+
+.analysis-section h4 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 16px;
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 8px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-item label {
+  font-weight: 600;
+  color: #666;
+  min-width: 80px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 15px;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 8px;
+  padding: 15px;
+  text-align: center;
+  border: 1px solid #e9ecef;
+}
+
+.stat-number {
+  font-size: 24px;
+  font-weight: bold;
+  color: #007bff;
+  margin-bottom: 5px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #666;
+}
+
+.ai-result {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid #e9ecef;
+}
+
+.ai-judgment-large {
+  font-size: 20px;
+  font-weight: bold;
+  text-align: center;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.ai-judgment-large.merchant {
+  background: #ffebee;
+  color: #c62828;
+  border: 2px solid #ffcdd2;
+}
+
+.ai-judgment-large.normal {
+  background: #e8f5e8;
+  color: #2e7d32;
+  border: 2px solid #c8e6c9;
+}
+
+.confidence-bar {
+  margin-bottom: 15px;
+}
+
+.confidence-label {
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.confidence-progress {
+  width: 100%;
+  height: 8px;
+  background: #e9ecef;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.confidence-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff6b6b, #ffa500, #32cd32);
+  transition: width 0.3s ease;
+}
+
+.ai-reason,
+.ai-evidence {
+  margin-top: 15px;
+}
+
+.ai-reason strong,
+.ai-evidence strong {
+  color: #333;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.ai-reason p {
+  margin: 0;
+  color: #666;
+  line-height: 1.5;
+}
+
+.ai-evidence ul {
+  margin: 0;
+  padding-left: 20px;
+  color: #666;
+}
+
+.ai-evidence li {
+  margin-bottom: 5px;
+}
+
+/* 检测历史样式 */
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.history-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.history-table {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.history-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.history-table th,
+.history-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.history-table th {
+  background: #f8f9fa;
+  font-weight: 600;
+  color: #333;
+}
+
+.user-info-small {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-avatar-small {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #e9ecef;
+}
+
+.user-details-small {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.username-small {
+  font-weight: 600;
+  color: #333;
+  font-size: 13px;
+}
+
+.user-id-small {
+  font-size: 11px;
+  color: #666;
+}
+
+.ai-judgment-small {
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ai-judgment-small.merchant {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.ai-judgment-small.normal {
+  background: #e8f5e8;
+  color: #2e7d32;
+}
+
+.detection-type {
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.detection-type.manual {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.detection-type.auto {
+  background: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.processed-status {
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.processed-status.processed {
+  background: #e8f5e8;
+  color: #2e7d32;
+}
+
+.no-history {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+/* 检测结果表格增强样式 */
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #e9ecef;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.username {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.user-email {
+  font-size: 12px;
+  color: #666;
+}
+
+.item-count {
+  font-size: 16px;
+  font-weight: bold;
+  color: #007bff;
+}
+
+.item-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.item-stats small {
+  color: #666;
+  font-size: 11px;
+}
+
+.confidence-display {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 80px;
+}
+
+.confidence-value {
+  font-weight: 600;
+  color: #333;
+  font-size: 13px;
+}
+
+.confidence-bar-small {
+  width: 100%;
+  height: 4px;
+  background: #e9ecef;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.confidence-fill-small {
+  height: 100%;
+  background: linear-gradient(90deg, #ff6b6b, #ffa500, #32cd32);
+  transition: width 0.3s ease;
+  border-radius: 2px;
+}
+
 .merchant-identification-section h3 {
   margin: 0 0 15px 0;
   color: #333;
@@ -3752,6 +5089,24 @@ th {
   max-height: 70vh;
   overflow-y: auto;
   padding-bottom: 20px;
+}
+
+/* 操作按钮样式 */
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.merchant-actions {
+  display: flex;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.merchant-actions .btn {
+  font-size: 12px;
+  padding: 4px 8px;
 }
 .users-table,
 .items-table,

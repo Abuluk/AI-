@@ -9,10 +9,12 @@ from fastapi.staticfiles import StaticFiles
 import os
 import sys
 import traceback
+import asyncio
 from dotenv import load_dotenv
 from api.api_v1 import api_router
 from api.endpoints import items, users
 from config import HOST, PORT, USE_HTTPS, SSL_CERT_FILE, SSL_KEY_FILE, STATIC_DIR
+from core.scheduler import start_scheduler
 
 # 加载环境变量
 load_dotenv()
@@ -27,6 +29,13 @@ def start_application():
     app = FastAPI(title="二手交易系统", version="1.0.0", debug=True)
     # create_tables()  # Only run this manually during development or use Alembic for migrations
     include_router(app)
+    
+    # 启动定时任务
+    @app.on_event("startup")
+    async def startup_event():
+        print("启动商贩检测定时任务...")
+        asyncio.create_task(start_scheduler())
+    
     return app
 
 app = start_application()
