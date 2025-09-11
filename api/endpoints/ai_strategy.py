@@ -212,6 +212,7 @@ def get_ai_recommendations(
         
         # 如果用户未登录，返回热门商品推荐
         if not current_user:
+            print("用户未登录，返回基础推荐")
             return get_basic_recommendations(db, limit)
         
         # 获取用户行为序列
@@ -223,7 +224,10 @@ def get_ai_recommendations(
         
         # 如果用户行为数据不足，返回基础推荐
         if len(behavior_sequence) < settings.get("min_behavior_count", 3):
+            print(f"用户行为数据不足: {len(behavior_sequence)} < {settings.get('min_behavior_count', 3)}")
             return get_basic_recommendations(db, limit)
+        
+        print(f"用户行为数据充足: {len(behavior_sequence)} 条记录，开始AI分析")
         
         # 基于用户行为序列进行AI分析推荐
         import asyncio
@@ -305,17 +309,26 @@ async def analyze_user_behavior_and_recommend(
 ) -> Dict[str, Any]:
     """基于用户行为序列进行AI分析推荐"""
     try:
-        # 构建AI分析prompt
-        sequence_text = "\n".join([
-            f"- {item['title']} (分类: {item['category']}, 价格: ¥{item['price']}, 行为: {item['behavior_type']})"
-            for item in behavior_sequence[:10]  # 只取前10个
-        ])
+        # 构建AI分析prompt - 只包含有效的商品浏览行为
+        valid_behaviors = []
+        for item in behavior_sequence[:10]:
+            # 只包含有关联商品的行为，或者分类点击行为
+            if item['item_id'] is not None or item['behavior_type'] == 'category_click':
+                if item['behavior_type'] == 'category_click' and item.get('behavior_data', {}).get('category_name'):
+                    # 分类点击行为，使用分类名称
+                    valid_behaviors.append(f"- 浏览了分类: {item['behavior_data']['category_name']} (行为: {item['behavior_type']})")
+                elif item['item_id'] is not None:
+                    # 商品浏览行为
+                    valid_behaviors.append(f"- {item['title']} (成色: {item['condition']}, 行为: {item['behavior_type']})")
+        
+        sequence_text = "\n".join(valid_behaviors) if valid_behaviors else "用户暂无有效的浏览行为记录"
         
         # 根据配置获取商品选择范围
         available_items = get_available_items_for_ai(db, settings)
         
+        # 传给AI的商品信息，包含ID、标题和成色
         items_text = "\n".join([
-            f"- {item.title} (分类: {item.category}, 价格: ¥{item.price}, 成色: {item.condition})"
+            f"- ID:{item.id} {item.title} (成色: {item.condition})"
             for item in available_items
         ])
         
@@ -328,10 +341,9 @@ async def analyze_user_behavior_and_recommend(
 {items_text}
 
 请分析用户的兴趣偏好，包括：
-1. 偏好的商品分类
-2. 价格区间偏好
-3. 商品成色偏好
-4. 浏览模式分析
+1. 偏好的商品分类（基于分类点击行为）
+2. 商品成色偏好
+3. 浏览模式分析
 
 然后从在售商品中选择{limit}个最符合用户偏好的商品进行推荐。
 
@@ -341,13 +353,13 @@ async def analyze_user_behavior_and_recommend(
     "market_insights": "市场洞察和建议（50字以内）",
     "recommendations": [
         {{
-            "item_id": 商品ID,
+            "item_id": 商品ID（必须是上面列表中的ID数字）,
             "reason": "推荐理由（20字以内）"
         }}
     ]
 }}
 
-请确保推荐的商品ID在提供的在售商品列表中。"""
+重要：请确保推荐的商品ID必须是上面商品列表中显示的ID数字。"""
 
         # 调用AI分析
         app_id = os.getenv("XUNFEI_APP_ID")

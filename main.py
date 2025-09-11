@@ -17,7 +17,7 @@ from config import HOST, PORT, USE_HTTPS, SSL_CERT_FILE, SSL_KEY_FILE, STATIC_DI
 from core.scheduler import start_scheduler
 
 # 加载环境变量
-load_dotenv()
+load_dotenv('env.txt')
 
 def create_tables():
     Base.metadata.create_all(bind=engine)

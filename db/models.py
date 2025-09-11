@@ -42,7 +42,7 @@ class Item(Base):
     title = Column(String(100), nullable=False)
     description = Column(Text)
     price = Column(Float, nullable=False)
-    category = Column(String(50))
+    category = Column(Integer)  # 修改为整数类型，与前端分类ID对应
     condition = Column(String(20), default="unknown")
     status = Column(String(20), default="online", nullable=False)  # online, offline, sold
     location = Column(String(100))

@@ -7,3 +7,4 @@ python-jose[cryptography]
 python-multipart
 requests
 websocket-client
+email-validator==2.1.1
