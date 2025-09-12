@@ -86,22 +86,31 @@
     <div v-if="activeTab === 'users'" class="tab-content">
       <div class="section-header">
         <h2>用户管理</h2>
-        <div class="filters">
-          <input 
-            v-model="userFilters.search" 
-            placeholder="搜索用户名/邮箱/手机"
-            class="search-input"
-          >
-          <select v-model="userFilters.is_active" class="filter-select">
-            <option value="">全部状态</option>
-            <option value="true">已激活</option>
-            <option value="false">已禁用</option>
-          </select>
-          <select v-model="userFilters.is_admin" class="filter-select">
-            <option value="">全部用户</option>
-            <option value="true">管理员</option>
-            <option value="false">普通用户</option>
-          </select>
+        <div class="header-actions">
+          <div class="filters">
+            <input 
+              v-model="userFilters.search" 
+              placeholder="搜索用户名/邮箱/手机"
+              class="search-input"
+            >
+            <select v-model="userFilters.is_active" class="filter-select">
+              <option value="">全部状态</option>
+              <option value="true">已激活</option>
+              <option value="false">已禁用</option>
+            </select>
+            <select v-model="userFilters.is_admin" class="filter-select">
+              <option value="">全部用户</option>
+              <option value="true">管理员</option>
+              <option value="false">普通用户</option>
+            </select>
+          </div>
+          <div class="action-buttons">
+            <button @click="loadUsers(true)" class="btn btn-primary" :disabled="loading.users">
+              <i class="fas fa-sync" v-if="!loading.users"></i>
+              <i class="fas fa-spinner fa-spin" v-else></i>
+              {{ loading.users ? '加载中...' : '刷新数据' }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -109,7 +118,7 @@
         <div class="skeleton-row" v-for="n in 5" :key="n"></div>
       </div>
 
-      <div v-else class="users-table" @scroll="onScroll($event, 'users')">
+      <div v-else class="users-table" @scroll="onTableScroll($event, 'users')">
         <table>
           <thead>
             <tr>
@@ -468,19 +477,28 @@
     <div v-if="activeTab === 'items'" class="tab-content">
       <div class="section-header">
         <h2>商品管理</h2>
-        <div class="filters">
-          <input 
-            v-model="itemFilters.search" 
-            placeholder="搜索商品标题/描述"
-            class="search-input"
-            @input="debouncedLoadItems"
-          >
-          <select v-model="itemFilters.displayStatus" class="filter-select">
-            <option value="">全部状态</option>
-            <option value="online">在售</option>
-            <option value="sold">已售出</option>
-            <option value="offline">已下架</option>
-          </select>
+        <div class="header-actions">
+          <div class="filters">
+            <input 
+              v-model="itemFilters.search" 
+              placeholder="搜索商品标题/描述"
+              class="search-input"
+              @input="debouncedLoadItems"
+            >
+            <select v-model="itemFilters.displayStatus" class="filter-select">
+              <option value="">全部状态</option>
+              <option value="online">在售</option>
+              <option value="sold">已售出</option>
+              <option value="offline">已下架</option>
+            </select>
+          </div>
+          <div class="action-buttons">
+            <button @click="loadItems(true)" class="btn btn-primary" :disabled="loading.items">
+              <i class="fas fa-sync" v-if="!loading.items"></i>
+              <i class="fas fa-spinner fa-spin" v-else></i>
+              {{ loading.items ? '加载中...' : '刷新数据' }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -488,7 +506,7 @@
         <div class="skeleton-row" v-for="n in 5" :key="n"></div>
       </div>
 
-      <div v-else class="items-table" @scroll="onScroll($event, 'items')">
+      <div v-else class="items-table" @scroll="onTableScroll($event, 'items')">
         <table>
           <thead>
             <tr>
@@ -551,7 +569,249 @@
         <div v-if="loadingMoreItems" style="text-align:center;padding:8px;">加载中...</div>
         <div v-if="!hasMoreItems && items.length > 0" style="text-align:center;padding:8px;">已加载全部</div>
       </div>
+
     </div>
+
+    <!-- AI智能排序 -->
+    <div v-if="activeTab === 'item_sorting'" class="tab-content">
+      <div class="section-header">
+        <h2>AI智能排序</h2>
+        <div class="header-actions">
+          <button @click="runSortingAlgorithm" class="btn btn-primary" :disabled="loading.sorting">
+            <i class="fas fa-play" v-if="!loading.sorting"></i>
+            <i class="fas fa-spinner fa-spin" v-else></i>
+            {{ loading.sorting ? '运行中...' : '运行排序算法' }}
+          </button>
+          <button @click="loadSortingConfig" class="btn btn-secondary">
+            <i class="fas fa-sync"></i>
+            刷新配置
+          </button>
+          <button @click="loadSortingStatus(); loadSortingHistory();" class="btn btn-outline">
+            <i class="fas fa-sync"></i>
+            刷新状态/历史
+          </button>
+        </div>
+      </div>
+
+      <!-- 排序配置 -->
+      <div class="sorting-settings-section">
+        <div class="sorting-config-grid">
+          <!-- 时间窗口配置 -->
+          <div class="config-card">
+            <h4>时间窗口配置</h4>
+            <div class="config-item">
+              <label>排序算法运行间隔（分钟）</label>
+              <input 
+                v-model.number="sortingConfig.time_window_minutes.default" 
+                type="number" 
+                min="5" 
+                max="1440"
+                class="form-input"
+                @change="updateSortingConfig('time_window_minutes', sortingConfig.time_window_minutes)"
+              >
+              <small>建议值：30分钟</small>
+            </div>
+          </div>
+
+          <!-- 权重因子配置 -->
+          <div class="config-card">
+            <h4>权重因子配置</h4>
+            <div class="config-item">
+              <label>基础权重占比</label>
+              <input 
+                v-model.number="sortingConfig.weight_factors.base_weight" 
+                type="number" 
+                min="0" 
+                max="1" 
+                step="0.05"
+                class="form-input"
+                @change="updateSortingConfig('weight_factors', sortingConfig.weight_factors)"
+              >
+            </div>
+            <div class="config-item">
+              <label>趋势权重占比</label>
+              <input 
+                v-model.number="sortingConfig.weight_factors.trend_weight" 
+                type="number" 
+                min="0" 
+                max="1" 
+                step="0.05"
+                class="form-input"
+                @change="updateSortingConfig('weight_factors', sortingConfig.weight_factors)"
+              >
+            </div>
+            <div class="config-item">
+              <label>位置权重占比</label>
+              <input 
+                v-model.number="sortingConfig.weight_factors.position_weight" 
+                type="number" 
+                min="0" 
+                max="1" 
+                step="0.05"
+                class="form-input"
+                @change="updateSortingConfig('weight_factors', sortingConfig.weight_factors)"
+              >
+            </div>
+          </div>
+
+          <!-- 趋势计算配置 -->
+          <div class="config-card">
+            <h4>趋势计算配置</h4>
+            <div class="config-item">
+              <label>浏览量权重</label>
+              <input 
+                v-model.number="sortingConfig.trend_calculation.views_weight" 
+                type="number" 
+                min="0" 
+                max="1" 
+                step="0.05"
+                class="form-input"
+                @change="updateSortingConfig('trend_calculation', sortingConfig.trend_calculation)"
+              >
+            </div>
+            <div class="config-item">
+              <label>点赞权重</label>
+              <input 
+                v-model.number="sortingConfig.trend_calculation.likes_weight" 
+                type="number" 
+                min="0" 
+                max="1" 
+                step="0.05"
+                class="form-input"
+                @change="updateSortingConfig('trend_calculation', sortingConfig.trend_calculation)"
+              >
+            </div>
+            <div class="config-item">
+              <label>收藏权重</label>
+              <input 
+                v-model.number="sortingConfig.trend_calculation.favorites_weight" 
+                type="number" 
+                min="0" 
+                max="1" 
+                step="0.05"
+                class="form-input"
+                @change="updateSortingConfig('trend_calculation', sortingConfig.trend_calculation)"
+              >
+            </div>
+          </div>
+
+          <!-- 对抗曲线算法配置 -->
+          <div class="config-card">
+            <h4>对抗曲线算法配置</h4>
+            <div class="config-item">
+              <label>位置调整系数</label>
+              <input 
+                v-model.number="sortingConfig.position_algorithm.position_adjustment" 
+                type="number" 
+                min="0" 
+                max="1" 
+                step="0.05"
+                class="form-input"
+                @change="updateSortingConfig('position_algorithm', sortingConfig.position_algorithm)"
+              >
+            </div>
+            <div class="config-item">
+              <label>下降调整系数</label>
+              <input 
+                v-model.number="sortingConfig.position_algorithm.decline_adjustment" 
+                type="number" 
+                min="0" 
+                max="1" 
+                step="0.05"
+                class="form-input"
+                @change="updateSortingConfig('position_algorithm', sortingConfig.position_algorithm)"
+              >
+            </div>
+            <div class="config-item">
+              <label>最大位置权重</label>
+              <input 
+                v-model.number="sortingConfig.position_algorithm.max_position_weight" 
+                type="number" 
+                min="1" 
+                max="2" 
+                step="0.1"
+                class="form-input"
+                @change="updateSortingConfig('position_algorithm', sortingConfig.position_algorithm)"
+              >
+            </div>
+          </div>
+        </div>
+
+        <!-- 排序状态和统计 -->
+        <div class="sorting-status-section">
+          <h4>排序状态</h4>
+          <div class="status-grid">
+            <div class="status-item">
+              <span class="status-label">当前时间周期：</span>
+              <span class="status-value">{{ currentTimePeriod || '未运行' }}</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">最后运行时间：</span>
+              <span class="status-value">{{ lastRunTime || '未运行' }}</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">处理商品数量：</span>
+              <span class="status-value">{{ processedItemsCount || 0 }}</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">算法状态：</span>
+              <span class="status-value" :class="{ 'status-running': loading.sorting }">
+                {{ loading.sorting ? '运行中' : '待机' }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 排序历史记录 -->
+        <div class="sorting-history-section">
+          <h4>排序历史记录</h4>
+          <div class="history-controls">
+            <button @click="loadSortingHistory" class="btn btn-outline btn-sm" :disabled="loading.history">
+              <i class="fas fa-sync" v-if="!loading.history"></i>
+              <i class="fas fa-spinner fa-spin" v-else></i>
+              {{ loading.history ? '加载中...' : '刷新历史' }}
+            </button>
+            <select v-model="sortingHistoryFilter" @change="loadSortingHistory" class="form-select">
+              <option value="7">最近7天</option>
+              <option value="30">最近30天</option>
+              <option value="90">最近90天</option>
+            </select>
+          </div>
+          
+          <div v-if="sortingHistory.length > 0" class="history-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>运行时间</th>
+                  <th>时间周期</th>
+                  <th>处理商品数</th>
+                  <th>运行时长</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="record in sortingHistory" :key="record.id">
+                  <td>{{ formatTime(record.created_at) }}</td>
+                  <td>{{ record.time_period }}</td>
+                  <td>{{ record.items_processed }}</td>
+                  <td>{{ record.duration }}秒</td>
+                  <td>
+                    <span class="status-badge" :class="record.status">
+                      {{ record.status === 'success' ? '成功' : '失败' }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="empty-state">
+            <i class="fas fa-history"></i>
+            <p>暂无排序历史记录</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
 
     <!-- 求购信息管理 -->
     <div v-if="activeTab === 'buy_requests'" class="tab-content">
@@ -820,11 +1080,21 @@
                 </td>
                 <td>{{ formatTime(result.detected_at) }}</td>
                 <td>
-                  <button @click="analyzeUser(result.user_id)" 
-                          class="btn btn-sm btn-outline" 
-                          :disabled="analyzingUser">
-                    {{ analyzingUser ? '分析中...' : '详细分析' }}
-                  </button>
+                  <div class="action-buttons">
+                    <button @click="analyzeUser(result.user_id)" 
+                            class="btn btn-sm btn-outline" 
+                            :disabled="analyzingUser">
+                      {{ analyzingUser ? '分析中...' : '详细分析' }}
+                    </button>
+                    <div v-if="result.history_id && !result.processed" class="merchant-actions">
+                      <button @click="confirmMerchant(result.history_id)" class="btn btn-sm btn-success">
+                        加入待认证
+                      </button>
+                      <button @click="rejectDetectionMerchant(result.history_id)" class="btn btn-sm btn-danger">
+                        拒绝
+                      </button>
+                    </div>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -924,13 +1194,13 @@
         <div class="history-header">
           <h3>检测历史</h3>
           <div class="history-controls">
-            <button @click="loadDetectionHistories" class="btn btn-outline btn-sm">
-              刷新历史
+            <button @click="loadDetectionHistories(true)" class="btn btn-outline btn-sm" :disabled="detectionHistoryPagination.loading">
+              {{ detectionHistoryPagination.loading ? '加载中...' : '刷新历史' }}
             </button>
             <button @click="autoProcessTimeout" class="btn btn-warning btn-sm">
               处理超时
             </button>
-            <select v-model="historyFilter" @change="loadDetectionHistories" class="form-select">
+            <select v-model="historyFilter" @change="loadDetectionHistories(true)" class="form-select">
               <option value="">全部类型</option>
               <option value="manual">手动检测</option>
               <option value="auto">自动检测</option>
@@ -1013,6 +1283,22 @@
               </tr>
             </tbody>
           </table>
+          
+          <!-- 加载更多按钮 -->
+          <div v-if="detectionHistoryPagination.hasMore" class="load-more-container">
+            <button 
+              @click="loadMoreDetectionHistories" 
+              class="btn btn-outline btn-sm"
+              :disabled="detectionHistoryPagination.loading"
+            >
+              {{ detectionHistoryPagination.loading ? '加载中...' : '加载更多' }}
+            </button>
+          </div>
+          
+          <!-- 无更多数据提示 -->
+          <div v-else-if="detectionHistories.length > 0" class="no-more-data">
+            <span>已显示全部检测记录</span>
+          </div>
         </div>
         
         <div v-else class="no-history">
@@ -1530,7 +1816,7 @@
         
         
         <div class="behavior-content">
-          <div class="table-container">
+          <div class="table-container behavior-table-container" v-if="activeSelectedUserId">
             <table class="data-table">
               <thead>
                 <tr>
@@ -1575,7 +1861,13 @@
               <p>请先搜索并选择用户</p>
             </div>
             <div v-else class="selected-user-list">
-              <div v-for="user in selectedUsers" :key="user.id" class="selected-user-item">
+              <div 
+                v-for="user in selectedUsers" 
+                :key="user.id" 
+                class="selected-user-item"
+                :class="{ active: user.id === activeSelectedUserId }"
+                @click="activeSelectedUserId = user.id"
+              >
                 <div class="user-info">
                   <img :src="getUserAvatar(user)" :alt="user.username" class="user-avatar-small">
                   <div class="user-details">
@@ -1583,7 +1875,7 @@
                     <div class="user-email">{{ user.email || '未设置' }}</div>
                   </div>
                 </div>
-                <button @click="removeUserFromSelection(user.id)" class="btn btn-sm btn-danger">
+                <button @click.stop="removeUserFromSelection(user.id)" class="btn btn-sm btn-danger">
                   <i class="fas fa-times"></i>
                 </button>
               </div>
@@ -1591,8 +1883,9 @@
           </div>
         </div>
         
-        <div v-if="filteredUserBehaviors.length === 0" class="empty-state">
+        <div v-if="!activeSelectedUserId || filteredUserBehaviors.length === 0" class="empty-state">
           <span v-if="selectedUsers.length === 0">请先搜索并选择用户查看行为记录</span>
+          <span v-else-if="!activeSelectedUserId">请在右侧点击某个用户以查看其行为</span>
           <span v-else>所选用户暂无行为记录</span>
         </div>
       </div>
@@ -2121,7 +2414,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
 import api from '@/services/api'
@@ -2139,7 +2432,9 @@ const loading = reactive({
   buy_requests: false,
   promotions: false,
   feedbacks: false,
-  pendingVerificationUsers: false
+  pendingVerificationUsers: false,
+  sorting: false,
+  history: false
 })
 
 const stats = ref({})
@@ -2220,6 +2515,57 @@ const detectionConfig = reactive({
   detection_schedule_enabled: false,
   detection_schedule_time: '02:00'
 })
+
+// 商品排序相关
+const sortingConfig = reactive({
+  time_window_minutes: {
+    default: 30,
+    min: 5,
+    max: 1440
+  },
+  weight_factors: {
+    base_weight: 0.4,
+    trend_weight: 0.35,
+    position_weight: 0.25
+  },
+  trend_calculation: {
+    views_weight: 0.3,
+    likes_weight: 0.25,
+    favorites_weight: 0.2,
+    messages_weight: 0.15,
+    activity_weight: 0.1,
+    max_trend_weight: 1.5,
+    min_trend_weight: 0.5
+  },
+  position_algorithm: {
+    log_base: 1.0,
+    position_adjustment: 0.2,
+    decline_adjustment: 0.15,
+    position_factor_max: 0.3,
+    max_position_weight: 1.3,
+    min_position_weight: 0.7
+  },
+  seller_activity: {
+    items_published_weight: 0.4,
+    messages_replied_weight: 0.3,
+    login_activity_weight: 0.3,
+    max_activity_score: 10.0,
+    login_score_days: {
+      "1": 1.0,
+      "7": 0.7,
+      "30": 0.3,
+      "default": 0.1
+    }
+  }
+})
+
+const currentTimePeriod = ref('')
+const lastRunTime = ref('')
+const processedItemsCount = ref(0)
+
+// 排序历史记录相关
+const sortingHistory = ref([])
+const sortingHistoryFilter = ref('7')
 const detectionStats = ref(null)
 const runningDetection = ref(false)
 const detectionResults = ref([])
@@ -2227,6 +2573,12 @@ const showUserAnalysis = ref(false)
 const userAnalysisData = ref(null)
 const detectionHistories = ref([])
 const historyFilter = ref('')
+const detectionHistoryPagination = ref({
+  skip: 0,
+  limit: 50,
+  hasMore: true,
+  loading: false
+})
 const hasMorePendingVerificationUsers = ref(true)
 const loadingMorePendingVerificationUsers = ref(false)
 
@@ -2244,12 +2596,21 @@ const systemMessage = reactive({
 const user = computed(() => authStore.user || {})
 const currentUserId = computed(() => user.value.id)
 
+// 调试认证状态
+console.log('管理员页面 - 认证状态:', {
+  isAuthenticated: authStore.isAuthenticated,
+  hasToken: !!authStore.token,
+  user: authStore.user,
+  isAdmin: authStore.user?.is_admin
+})
+
 const tabs = [
   { id: 'users', label: '用户管理', icon: 'fas fa-users' },
   { id: 'items', label: '商品管理', icon: 'fas fa-box' },
   { id: 'merchants', label: '商家管理', icon: 'fas fa-store' },
   { id: 'buy_requests', label: '求购管理', icon: 'fas fa-shopping-cart' },
   { id: 'merchant_detection', label: '商贩检测', icon: 'fas fa-search' },
+  { id: 'item_sorting', label: 'AI智能排序', icon: 'fas fa-sort-amount-down' },
   { id: 'promotions', label: '推广位管理', icon: 'fas fa-star' },
   { id: 'messages', label: '消息管理', icon: 'fas fa-bullhorn' },
   { id: 'feedbacks', label: '留言管理', icon: 'fas fa-comment-dots' },
@@ -2313,7 +2674,11 @@ const loadUsers = async (reset = false) => {
     if (userFilters.search) params.search = userFilters.search
     if (userFilters.is_active !== '') params.is_active = userFilters.is_active === 'true'
     if (userFilters.is_admin !== '') params.is_admin = userFilters.is_admin === 'true'
+    
+    console.log('加载用户数据，参数:', params)
     const response = await api.getAdminUsers(params)
+    console.log('用户数据响应:', response.data)
+    
     if (userPage.value === 1) {
       users.value = response.data
     } else {
@@ -2324,8 +2689,15 @@ const loadUsers = async (reset = false) => {
     } else {
       userPage.value++
     }
+    console.log('用户分页状态:', {
+      currentPage: userPage.value,
+      hasMore: hasMoreUsers.value,
+      dataLength: response.data.length,
+      limit: userLimit
+    })
   } catch (error) {
-    alert('获取用户列表失败')
+    console.error('获取用户列表失败:', error)
+    alert('获取用户列表失败: ' + (error.response?.data?.detail || error.message))
   } finally {
     loading.users = false
     loadingMoreUsers.value = false
@@ -2362,7 +2734,10 @@ const loadItems = async (reset = false) => {
         params.sold = false
         break
     }
+    console.log('加载商品数据，参数:', params)
     const response = await api.getAdminItems(params)
+    console.log('商品数据响应:', response.data)
+    
     if (itemPage.value === 1) {
       items.value = response.data
     } else {
@@ -2373,8 +2748,15 @@ const loadItems = async (reset = false) => {
     } else {
       itemPage.value++
     }
+    console.log('商品分页状态:', {
+      currentPage: itemPage.value,
+      hasMore: hasMoreItems.value,
+      dataLength: response.data.length,
+      limit: itemLimit
+    })
   } catch (error) {
-    alert('获取商品列表失败')
+    console.error('获取商品列表失败:', error)
+    alert('获取商品列表失败: ' + (error.response?.data?.detail || error.message))
   } finally {
     loading.items = false
     loadingMoreItems.value = false
@@ -2400,18 +2782,20 @@ const loadMerchants = async (reset = false) => {
     if (merchantFilters.search) params.search = merchantFilters.search
     if (merchantFilters.status) params.status = merchantFilters.status
     const response = await api.getAllMerchants(params)
-    const merchantsData = response.data || response
+    const merchantsData = response.data.data || response.data || []
     if (merchantPage.value === 1) {
       merchants.value = merchantsData
     } else {
       merchants.value.push(...merchantsData)
     }
-    if (merchantsData.length < merchantLimit) {
+    // 使用后端返回的has_more字段判断是否还有更多数据
+    if (response.data.has_more === false || merchantsData.length < merchantLimit) {
       hasMoreMerchants.value = false
     } else {
       merchantPage.value++
     }
   } catch (error) {
+    console.error('获取商家列表失败:', error)
     alert('获取商家列表失败')
   } finally {
     loading.merchants = false
@@ -2489,15 +2873,74 @@ const loadSystemMessages = async (reset = false) => {
   }
 }
 
-// 滚动监听
-const onScroll = (e, type) => {
+// 简单防抖函数
+const debounce = (fn, delay = 150) => {
+  let timerId = null
+  return (...args) => {
+    if (timerId) clearTimeout(timerId)
+    timerId = setTimeout(() => fn(...args), delay)
+  }
+}
+
+// 页面滚动监听（防抖 + 仅在接近底部/触发加载时打印日志）
+const onPageScrollHandler = () => {
+  const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+  const windowHeight = window.innerHeight
+  const documentHeight = document.documentElement.scrollHeight
+  const threshold = 100
+
+  const isNearBottom = scrollTop + windowHeight >= documentHeight - threshold
+
+  if (!isNearBottom) return
+
+  console.log(`页面滚动到底部，当前标签: ${activeTab.value}`)
+  if (activeTab.value === 'users' && hasMoreUsers.value && !loading.users && !loadingMoreUsers.value) {
+    console.log('触发用户数据加载')
+    loadUsers(false)
+  } else if (activeTab.value === 'items' && hasMoreItems.value && !loading.items && !loadingMoreItems.value) {
+    console.log('触发商品数据加载')
+    loadItems(false)
+  } else if (activeTab.value === 'merchants' && hasMoreMerchants.value && !loading.merchants && !loadingMoreMerchants.value) {
+    console.log('触发商家数据加载')
+    loadMerchants(false)
+  } else if (activeTab.value === 'buy_requests' && hasMoreBuyRequests.value && !loading.buy_requests && !loadingMoreBuyRequests.value) {
+    console.log('触发求购数据加载')
+    loadBuyRequests(false)
+  } else if (activeTab.value === 'messages' && hasMoreMessages.value && !loading.messages && !loadingMoreMessages.value) {
+    console.log('触发消息数据加载')
+    loadSystemMessages(false)
+  } else if (activeTab.value === 'merchants' && merchantSubTab.value === 'pending_verification' && hasMorePendingVerificationUsers.value && !loading.pendingVerificationUsers && !loadingMorePendingVerificationUsers.value) {
+    console.log('触发待认证用户数据加载')
+    loadPendingVerificationUsers(false)
+  }
+}
+
+const onPageScroll = debounce(onPageScrollHandler, 150)
+
+// 表格容器滚动监听（保留用于其他功能）
+const onTableScroll = (e, type) => {
   const el = e.target
-  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 10) {
+  const scrollTop = el.scrollTop
+  const clientHeight = el.clientHeight
+  const scrollHeight = el.scrollHeight
+  const threshold = 10
+  
+  console.log(`${type} 表格滚动事件:`, {
+    scrollTop,
+    clientHeight,
+    scrollHeight,
+    isNearBottom: scrollTop + clientHeight >= scrollHeight - threshold,
+    hasMore: type === 'users' ? hasMoreUsers.value : hasMoreItems.value
+  })
+  
+  if (scrollTop + clientHeight >= scrollHeight - threshold) {
+    console.log(`触发${type}数据加载`)
     if (type === 'users') loadUsers(false)
     if (type === 'items') loadItems(false)
     if (type === 'merchants') loadMerchants(false)
     if (type === 'buy_requests') loadBuyRequests(false)
     if (type === 'messages') loadSystemMessages(false)
+    if (type === 'pendingVerificationUsers') loadPendingVerificationUsers(false)
   }
 }
 
@@ -2516,11 +2959,16 @@ watch(merchantFilters, () => {
   if (activeTab.value === 'merchants' && merchantSubTab.value === 'certified') loadCertifiedMerchants(true)
 }, { deep: true })
 
+watch(pendingVerificationFilters, () => {
+  if (activeTab.value === 'merchants' && merchantSubTab.value === 'pending_verification') loadPendingVerificationUsers(true)
+}, { deep: true })
+
 // tab切换时重置分页
 const changeTab = (tabId) => {
   activeTab.value = tabId
   if (tabId === 'users') loadUsers(true)
   else if (tabId === 'items') loadItems(true)
+  else if (tabId === 'item_sorting') { loadSortingStatus(); loadSortingHistory(); }
   else if (tabId === 'merchants') loadCertifiedMerchants(true)
   else if (tabId === 'messages') loadSystemMessages(true)
   else if (tabId === 'buy_requests') loadBuyRequests(true)
@@ -2614,25 +3062,55 @@ const formatTime = (time) => {
   return date.toLocaleString('zh-CN')
 }
 
-const loadDetectionHistories = async () => {
+const loadDetectionHistories = async (reset = false) => {
+  if (detectionHistoryPagination.value.loading) return
+  
   try {
-    const params = {}
+    detectionHistoryPagination.value.loading = true
+    
+    if (reset) {
+      detectionHistoryPagination.value.skip = 0
+      detectionHistories.value = []
+    }
+    
+    const params = {
+      skip: detectionHistoryPagination.value.skip,
+      limit: detectionHistoryPagination.value.limit
+    }
     if (historyFilter.value) {
       params.detection_type = historyFilter.value
     }
     
     const response = await api.getDetectionHistories(params)
-    detectionHistories.value = response.data.histories || response.histories || []
+    const newHistories = response.data.histories || response.histories || []
+    
+    if (reset) {
+      detectionHistories.value = newHistories
+    } else {
+      detectionHistories.value.push(...newHistories)
+    }
+    
+    // 检查是否还有更多数据
+    detectionHistoryPagination.value.hasMore = newHistories.length === detectionHistoryPagination.value.limit
     
     // 预加载所有需要的用户头像
-    for (const history of detectionHistories.value) {
+    for (const history of newHistories) {
       if (!history.behavior_data?.avatar && history.user_id) {
         loadUserAvatar(history.user_id)
       }
     }
   } catch (error) {
     console.error('加载检测历史失败:', error)
+  } finally {
+    detectionHistoryPagination.value.loading = false
   }
+}
+
+const loadMoreDetectionHistories = async () => {
+  if (!detectionHistoryPagination.value.hasMore || detectionHistoryPagination.value.loading) return
+  
+  detectionHistoryPagination.value.skip += detectionHistoryPagination.value.limit
+  await loadDetectionHistories(false)
 }
 
 const viewHistoryDetail = (history) => {
@@ -2653,7 +3131,17 @@ const confirmMerchant = async (historyId) => {
   try {
     await api.confirmMerchant(historyId)
     alert('用户已设为待认证状态')
-    await loadDetectionHistories()
+    // 刷新历史
+    await loadDetectionHistories(true)
+    // 如果来源于“检测结果”区域，顺便本地标记已处理
+    if (Array.isArray(detectionResults.value) && detectionResults.value.length > 0) {
+      detectionResults.value = detectionResults.value.map(r => {
+        if (r && r.history_id === historyId) {
+          return { ...r, processed: true }
+        }
+        return r
+      })
+    }
   } catch (error) {
     console.error('确认商家失败:', error)
     alert('操作失败，请重试')
@@ -2669,7 +3157,17 @@ const rejectDetectionMerchant = async (historyId) => {
   try {
     await api.rejectMerchant(historyId)
     alert('已拒绝该用户为商家')
-    await loadDetectionHistories()
+    // 刷新历史
+    await loadDetectionHistories(true)
+    // 本地标记为已处理
+    if (Array.isArray(detectionResults.value) && detectionResults.value.length > 0) {
+      detectionResults.value = detectionResults.value.map(r => {
+        if (r && r.history_id === historyId) {
+          return { ...r, processed: true }
+        }
+        return r
+      })
+    }
   } catch (error) {
     console.error('拒绝商家失败:', error)
     alert('操作失败，请重试')
@@ -2685,7 +3183,7 @@ const autoProcessTimeout = async () => {
   try {
     const response = await api.autoProcessTimeout()
     alert(response.data.message || '处理完成')
-    await loadDetectionHistories()
+    await loadDetectionHistories(true)
   } catch (error) {
     console.error('处理超时失败:', error)
     alert('操作失败，请重试')
@@ -2732,6 +3230,101 @@ const getItemDisplayStatus = (item) => {
   }
   return { text: '已下架', class: 'offline' }
 };
+
+// 商品排序相关方法
+const loadSortingConfig = async () => {
+  try {
+    const response = await api.getSortingConfig()
+    const configs = response.data.configs || {}
+    
+    // 更新配置数据
+    if (configs.time_window_minutes) {
+      Object.assign(sortingConfig.time_window_minutes, configs.time_window_minutes)
+    }
+    if (configs.weight_factors) {
+      Object.assign(sortingConfig.weight_factors, configs.weight_factors)
+    }
+    if (configs.trend_calculation) {
+      Object.assign(sortingConfig.trend_calculation, configs.trend_calculation)
+    }
+    if (configs.position_algorithm) {
+      Object.assign(sortingConfig.position_algorithm, configs.position_algorithm)
+    }
+    if (configs.seller_activity) {
+      Object.assign(sortingConfig.seller_activity, configs.seller_activity)
+    }
+    
+    console.log('排序配置加载成功')
+  } catch (error) {
+    console.error('加载排序配置失败:', error)
+    alert('加载排序配置失败')
+  }
+}
+
+
+const updateSortingConfig = async (configKey, configValue) => {
+  try {
+    await api.updateSortingConfig({
+      config_key: configKey,
+      config_value: configValue,
+      description: `更新${configKey}配置`
+    })
+    console.log(`${configKey}配置更新成功`)
+  } catch (error) {
+    console.error(`更新${configKey}配置失败:`, error)
+    alert(`更新${configKey}配置失败`)
+  }
+}
+
+const runSortingAlgorithm = async () => {
+  if (!confirm('确定要运行商品排序算法吗？\n\n这将重新计算所有商品的排序权重。')) {
+    return
+  }
+  
+  loading.sorting = true
+  try {
+    const response = await api.runSortingAlgorithm(sortingConfig.time_window_minutes.default)
+    
+    const result = response.data.result
+    currentTimePeriod.value = result.time_period
+    processedItemsCount.value = result.weights_created
+    lastRunTime.value = new Date().toLocaleString('zh-CN')
+    
+    alert(`排序算法运行成功！\n处理商品数量: ${result.weights_created}\n时间周期: ${result.time_period}`)
+  } catch (error) {
+    console.error('运行排序算法失败:', error)
+    alert('运行排序算法失败: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    loading.sorting = false
+  }
+}
+
+// 加载排序历史记录
+const loadSortingHistory = async () => {
+  loading.history = true
+  try {
+    const days = Number(sortingHistoryFilter.value || 7)
+    const res = await api.getSortingHistory(days)
+    sortingHistory.value = res.data?.records || []
+  } catch (error) {
+    console.error('加载排序历史失败:', error)
+  } finally {
+    loading.history = false
+  }
+}
+
+// 加载排序状态
+const loadSortingStatus = async () => {
+  try {
+    const res = await api.getSortingStatus()
+    const data = res.data || {}
+    currentTimePeriod.value = data.current_time_period || '未运行'
+    processedItemsCount.value = data.items_processed || 0
+    lastRunTime.value = data.last_run_time ? new Date(data.last_run_time).toLocaleString('zh-CN') : '未运行'
+  } catch (error) {
+    console.error('加载排序状态失败:', error)
+  }
+}
 
 
 
@@ -2796,20 +3389,45 @@ const getTargetUsersText = (targetUsers) => {
 }
 
 // 生命周期
-onMounted(() => {
-  loadStats()
-  loadUsers(true)
-  loadActivityBanners()
-  loadDefaultDisplayFrequency()
-  loadDetectionConfig()
-  loadDetectionStats()
-  loadDetectionHistories()
-  loadAIRecommendationConfig()
-  loadAIRecommendationStats()
-  loadUserBehaviors()
-  loadItemSelectionConfig()
-  loadAvailableCategories()
+onMounted(async () => {
+  console.log('管理员页面初始化开始')
+  console.log('当前用户:', user.value)
+  console.log('认证token:', localStorage.getItem('access_token'))
+  
+  try {
+    await loadStats()
+    console.log('统计信息加载完成')
+    
+    await loadUsers(true)
+    console.log('用户数据加载完成，用户数量:', users.value.length)
+    
+    await loadActivityBanners()
+    loadDefaultDisplayFrequency()
+    loadDetectionConfig()
+    loadDetectionStats()
+    loadDetectionHistories()
+    loadAIRecommendationConfig()
+    loadAIRecommendationStats()
+    loadUserBehaviors()
+    loadSortingConfig()
+    loadItemSelectionConfig()
+    loadAvailableCategories()
+    // 初次进入也加载一次排序状态与历史
+    loadSortingStatus()
+    loadSortingHistory()
+
+    // 添加页面滚动事件监听
+    window.addEventListener('scroll', onPageScroll)
+    
+    console.log('管理员页面初始化完成')
+  } catch (error) {
+    console.error('管理员页面初始化失败:', error)
+  }
 })
+
+// 组件卸载时移除滚动监听
+// 注意：在Vue 3中，onUnmounted需要在setup函数内部调用
+// 这里我们使用beforeUnmount作为替代
 
 // 活动页管理相关
 const activityBanners = ref([])
@@ -3144,10 +3762,12 @@ const testResult = ref(null)
 const aiUserSearchQuery = ref('')
 const userSearchResults = ref([])
 const selectedUsers = ref([])
+const activeSelectedUserId = ref(null)
 
 // 商品选择范围配置相关
 const showItemSelectionConfig = ref(false)
 const itemSelectionTab = ref('sort')
+
 const itemSelectionConfig = ref({
   sort_orders: [
     { name: "按价格升序", field: "price", order: "asc", limit: 20, enabled: true },
@@ -3316,7 +3936,8 @@ const searchUsers = async () => {
   try {
     const response = await api.getAdminUsers({
       search: aiUserSearchQuery.value,
-      limit: 10
+      skip: 0,
+      limit: 50  // 增加搜索结果显示数量
     })
     userSearchResults.value = response.data || []
   } catch (error) {
@@ -3329,12 +3950,20 @@ const searchUsers = async () => {
 const addUserToSelection = (user) => {
   if (!isUserSelected(user.id)) {
     selectedUsers.value.push(user)
+    // 第一次添加时默认选中该用户
+    if (!activeSelectedUserId.value) {
+      activeSelectedUserId.value = user.id
+    }
   }
 }
 
 // 从选择队列移除用户
 const removeUserFromSelection = (userId) => {
   selectedUsers.value = selectedUsers.value.filter(user => user.id !== userId)
+  if (activeSelectedUserId.value === userId) {
+    // 若移除的是当前选中用户，则清空或切换到剩余第一个
+    activeSelectedUserId.value = selectedUsers.value.length > 0 ? selectedUsers.value[0].id : null
+  }
 }
 
 // 检查用户是否已被选择
@@ -3441,14 +4070,8 @@ const updateItemSelectionConfig = async () => {
 
 // 过滤后的用户行为记录（只显示已选择用户的行为）
 const filteredUserBehaviors = computed(() => {
-  if (selectedUsers.value.length === 0) {
-    return []
-  }
-  
-  const selectedUserIds = selectedUsers.value.map(user => user.id)
-  return userBehaviors.value.filter(behavior => 
-    selectedUserIds.includes(behavior.user_id)
-  )
+  if (!activeSelectedUserId.value) return []
+  return userBehaviors.value.filter(behavior => behavior.user_id === activeSelectedUserId.value)
 })
 
 const getBehaviorCount = (type) => {
@@ -3776,6 +4399,8 @@ const runManualDetection = async () => {
     
     // 刷新统计信息
     await loadDetectionStats()
+    // 刷新检测历史，确保新结果具备“加入/拒绝”操作
+    await loadDetectionHistories(true)
   } catch (error) {
     console.error('手动检测失败:', error)
     if (error.code === 'ECONNABORTED') {
@@ -3909,18 +4534,20 @@ const loadCertifiedMerchants = async (reset = false) => {
     // 始终添加status参数，即使是空字符串
     params.status = merchantFilters.status
     const response = await api.getAllMerchants(params)
-    const merchantsData = response.data || response
+    const merchantsData = response.data.data || response.data || []
     if (merchantPage.value === 1) {
       merchants.value = merchantsData
     } else {
       merchants.value.push(...merchantsData)
     }
-    if (merchantsData.length < merchantLimit) {
+    // 使用后端返回的has_more字段判断是否还有更多数据
+    if (response.data.has_more === false || merchantsData.length < merchantLimit) {
       hasMoreMerchants.value = false
     } else {
       merchantPage.value++
     }
   } catch (error) {
+    console.error('获取认证商家列表失败:', error)
     alert('获取认证商家列表失败')
   } finally {
     loading.merchants = false
@@ -3946,17 +4573,23 @@ const loadPendingVerificationUsers = async (reset = false) => {
       search: pendingVerificationFilters.search
     })
     
-    if (response.data.data.length < pendingVerificationLimit.value) {
+    const usersData = response.data.data || []
+    
+    // 判断是否还有更多数据
+    if (usersData.length < pendingVerificationLimit.value) {
       hasMorePendingVerificationUsers.value = false
     }
     
     if (reset) {
-      pendingVerificationUsers.value = response.data.data
+      pendingVerificationUsers.value = usersData
     } else {
-      pendingVerificationUsers.value = [...pendingVerificationUsers.value, ...response.data.data]
+      pendingVerificationUsers.value = [...pendingVerificationUsers.value, ...usersData]
     }
     
-    pendingVerificationPage.value += 1
+    // 只有在有更多数据时才增加页码
+    if (hasMorePendingVerificationUsers.value) {
+      pendingVerificationPage.value += 1
+    }
   } catch (error) {
     console.error('加载待认证用户失败:', error)
     alert('加载失败，请重试')
@@ -5027,6 +5660,8 @@ th {
   margin-top: 20px;
   border: 1px solid #e9ecef;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  max-height: 420px;
+  overflow: auto;
 }
 
 .detection-results h3 {
@@ -5235,6 +5870,8 @@ th {
   margin-bottom: 20px;
   border: 1px solid #e9ecef;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  max-height: 420px;
+  overflow: auto;
 }
 
 .history-table table {
@@ -5253,6 +5890,19 @@ th {
   background: #f8f9fa;
   font-weight: 600;
   color: #333;
+}
+
+.load-more-container {
+  text-align: center;
+  padding: 20px;
+  border-top: 1px solid #eee;
+}
+
+.no-more-data {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+  font-size: 14px;
 }
 
 .user-info-small {
@@ -5622,8 +6272,6 @@ th {
 
 /* 待认证用户表格样式 */
 .pending-verification-table {
-  max-height: 500px;
-  overflow-y: auto;
   border: 1px solid #ddd;
   border-radius: 8px;
 }
@@ -5689,8 +6337,6 @@ th {
 }
 
 .merchants-table {
-  max-height: 60vh;
-  overflow-y: auto;
   overflow-x: auto;
 }
 
@@ -5784,8 +6430,6 @@ th {
   }
 }
 .tab-content {
-  max-height: 70vh;
-  overflow-y: auto;
   padding-bottom: 20px;
 }
 
@@ -5811,8 +6455,6 @@ th {
 .merchants-table,
 .buy-requests-table,
 .messages-table {
-  max-height: 60vh;
-  overflow-y: auto;
   overflow-x: auto;
 }
 .users-table table,
@@ -5972,7 +6614,7 @@ th {
 
 @media (max-width: 768px) {
   .tab-content {
-    max-height: 60vh;
+    /* 移除高度限制，让内容自然滚动 */
   }
   
   .stats-grid {
@@ -6008,6 +6650,12 @@ th {
 .table-container {
   flex: 1;
   min-width: 0;
+}
+
+/* 行为表格限定高度并滚动 */
+.behavior-table-container {
+  max-height: 500px;
+  overflow: auto;
 }
 
 /* 已选择用户侧边栏 */
@@ -6157,6 +6805,11 @@ th {
   background: white;
   border-radius: 6px;
   border: 1px solid #c3e6c3;
+}
+
+.selected-user-item.active {
+  border-color: #42b983;
+  box-shadow: 0 0 0 2px rgba(66,185,131,0.15);
 }
 
 .test-user-info {
@@ -6540,6 +7193,359 @@ th {
   
   .recommendation-card {
     margin-bottom: 0;
+  }
+}
+
+/* 商品管理头部操作样式 */
+.header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.header-actions .filters {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.header-actions .action-buttons {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* 优化滚动体验 */
+.admin-container {
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* 让内容自然滚动，移除不必要的滚动条限制 */
+.tab-content {
+  min-height: auto;
+}
+
+/* 表格容器优化 */
+.table-container {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+/* 保持必要的水平滚动条用于宽表格 */
+.users-table,
+.items-table,
+.buy-requests-table,
+.merchants-table,
+.messages-table {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+/* 排序配置模态框样式 */
+.large-modal {
+  max-width: 90vw;
+  width: 1200px;
+}
+
+.sorting-config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.config-card {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid #e9ecef;
+}
+
+.config-card h4 {
+  margin: 0 0 15px 0;
+  color: #495057;
+  font-size: 16px;
+  border-bottom: 1px solid #dee2e6;
+  padding-bottom: 10px;
+}
+
+.config-item {
+  margin-bottom: 15px;
+}
+
+.config-item:last-child {
+  margin-bottom: 0;
+}
+
+.config-item label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+  color: #495057;
+}
+
+.config-item small {
+  color: #6c757d;
+  font-size: 12px;
+}
+
+.sorting-status-section {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid #e9ecef;
+  margin-top: 20px;
+}
+
+.sorting-status-section h4 {
+  margin: 0 0 15px 0;
+  color: #495057;
+  font-size: 16px;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+}
+
+.status-label {
+  font-weight: 500;
+  color: #495057;
+}
+
+.status-value {
+  color: #007bff;
+  font-weight: 600;
+}
+
+.status-running {
+  color: #28a745 !important;
+  font-weight: 600;
+}
+
+/* 排序历史记录样式 */
+.sorting-history-section {
+  margin-top: 30px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+  border: 1px solid #e9ecef;
+}
+
+.sorting-history-section h4 {
+  margin: 0 0 20px 0;
+  color: #495057;
+  font-size: 18px;
+  border-bottom: 1px solid #dee2e6;
+  padding-bottom: 10px;
+}
+
+.history-controls {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.history-table {
+  overflow-x: auto;
+}
+
+.history-table table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.history-table th,
+.history-table td {
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.history-table th {
+  background: #f8f9fa;
+  font-weight: 600;
+  color: #495057;
+  font-size: 14px;
+}
+
+.history-table td {
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.history-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge.success {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-badge.failed {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.section-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.sorting-config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: 25px;
+}
+
+.config-card {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.config-card h4 {
+  margin: 0 0 15px 0;
+  color: #495057;
+  font-size: 16px;
+  border-bottom: 1px solid #e9ecef;
+  padding-bottom: 8px;
+}
+
+.config-item {
+  margin-bottom: 15px;
+}
+
+.config-item:last-child {
+  margin-bottom: 0;
+}
+
+.config-item label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+  color: #495057;
+  font-size: 14px;
+}
+
+.config-item input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.config-item input:focus {
+  outline: 0;
+  border-color: #80bdff;
+  box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
+.config-item small {
+  display: block;
+  margin-top: 4px;
+  color: #6c757d;
+  font-size: 12px;
+}
+
+.sorting-status-section {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.sorting-status-section h4 {
+  margin: 0 0 15px 0;
+  color: #495057;
+  font-size: 16px;
+  border-bottom: 1px solid #e9ecef;
+  padding-bottom: 8px;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.status-label {
+  font-weight: 500;
+  color: #495057;
+  font-size: 14px;
+}
+
+.status-value {
+  color: #007bff;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .sorting-config-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+  
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .section-actions {
+    flex-direction: column;
+  }
+  
+  .sorting-settings-section .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
   }
 }
 </style>

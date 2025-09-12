@@ -15,6 +15,7 @@ from api.api_v1 import api_router
 from api.endpoints import items, users
 from config import HOST, PORT, USE_HTTPS, SSL_CERT_FILE, SSL_KEY_FILE, STATIC_DIR
 from core.scheduler import start_scheduler
+from core.item_sorting_scheduler import start_sorting_scheduler, stop_sorting_scheduler
 
 # 加载环境变量
 load_dotenv('env.txt')
@@ -35,6 +36,14 @@ def start_application():
     async def startup_event():
         print("启动商贩检测定时任务...")
         asyncio.create_task(start_scheduler())
+        print("启动商品排序定时任务...")
+        start_sorting_scheduler()
+    
+    # 关闭事件
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        print("停止商品排序定时任务...")
+        stop_sorting_scheduler()
     
     return app
 

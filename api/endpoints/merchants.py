@@ -203,7 +203,13 @@ def get_all_merchants_admin(
             } if user else None
         })
     
-    return result
+    return {
+        "data": result,
+        "total": total,
+        "skip": skip,
+        "limit": limit,
+        "has_more": len(result) == limit
+    }
 
 @router.put("/admin/{merchant_id}/status", response_model=MerchantInDB)
 def update_merchant_status_admin(

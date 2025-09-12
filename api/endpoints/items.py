@@ -17,6 +17,7 @@ from crud.crud_item import like_item, unlike_item
 from db.models import ItemLike, MerchantDisplayConfig
 from config import get_image_base_url, get_full_image_url
 from crud.crud_merchant import get_merchant_display_config
+from crud import crud_item_sorting
 
 router = APIRouter()
 
@@ -388,7 +389,7 @@ def get_all_items(
     # 支持web前端的原有参数格式
     skip: Optional[int] = Query(None, ge=0, description="跳过数量（web前端）"),
     limit: Optional[int] = Query(None, ge=1, le=100, description="限制数量（web前端）"),
-    order_by: Optional[str] = Query(None, description="排序方式（web前端）: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎)"),
+    order_by: Optional[str] = Query(None, description="排序方式（web前端）: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎), dynamic_sort(动态排序)"),
     exclude_promoted: Optional[bool] = Query(None, description="是否排除推广商品"),
     status: Optional[str] = Query(None, description="商品状态: online, offline"),
     sold: Optional[bool] = Query(None, description="是否已售出"),
@@ -493,7 +494,35 @@ def get_all_items(
                 print(f"解析推广商品配置失败: {e}")
     
     # 排序
-    if order_by == "created_at_desc":
+    if order_by == "dynamic_sort":
+        # 使用动态排序算法
+        category_id = None
+        if category is not None and category != "":
+            try:
+                category_id = int(category)
+            except ValueError:
+                pass
+        
+        items = crud_item_sorting.get_items_with_dynamic_sorting(
+            db, skip, limit, 
+            category=category_id,
+            search=search,
+            location=location
+        )
+        # 处理图片路径
+        for item in items:
+            if item.images:
+                images = item.images.split(',')
+                processed_images = []
+                for img in images:
+                    img = img.strip()
+                    if img:
+                        full_url = get_full_image_url(img)
+                        if full_url:
+                            processed_images.append(full_url)
+                item.images = ','.join(processed_images)
+        return items
+    elif order_by == "created_at_desc":
         query = query.order_by(Item.created_at.desc())
     elif order_by == "price_asc":
         query = query.order_by(Item.price.asc())

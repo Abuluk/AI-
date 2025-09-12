@@ -87,6 +87,7 @@
             <div class="sort-options">
               <select v-model="sortOption">
                 <option value="default">综合排序</option>
+                <option value="dynamic_sort">智能排序</option>
                 <option value="price_asc">价格从低到高</option>
                 <option value="price_desc">价格从高到低</option>
                 <option value="newest">最新发布</option>
@@ -500,6 +501,7 @@ export default {
         case 'newest': return 'created_at_desc';
         case 'price_asc': return 'price_asc';
         case 'price_desc': return 'price_desc';
+        case 'dynamic_sort': return 'dynamic_sort';
         default: return 'created_at_desc';
       }
     },

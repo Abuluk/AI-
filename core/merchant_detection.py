@@ -368,9 +368,9 @@ class MerchantDetectionSystem:
                     "detected_at": datetime.now().isoformat()
                 }
                 
-                # 保存检测历史到数据库
+                # 保存检测历史到数据库，并获取记录ID
                 from crud.crud_detection_history import create_detection_history
-                create_detection_history(
+                detection_history = create_detection_history(
                     db=self.db,
                     user_id=user_id,
                     detection_type="manual",
@@ -383,7 +383,11 @@ class MerchantDetectionSystem:
                     processed=processed
                 )
                 
-                results.append(result)
+                # 将history_id与processed返回给前端，便于直接操作
+                result_with_meta = dict(result)
+                result_with_meta["history_id"] = getattr(detection_history, "id", None)
+                result_with_meta["processed"] = processed
+                results.append(result_with_meta)
         
         return results
     

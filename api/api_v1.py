@@ -17,6 +17,7 @@ from .endpoints import (
     ai_strategy,  # 新增
     merchants,  # 新增商家功能
     merchant_detection,  # 新增商贩检测功能
+    item_sorting,  # 新增商品排序功能
 )
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
@@ -127,4 +128,11 @@ api_router.include_router(
     prefix="/merchant-detection",
     tags=["商贩检测"],
     dependencies=[Depends(oauth2_scheme)]
+)
+
+# 商品排序路由 - 部分需要认证
+api_router.include_router(
+    item_sorting.router,
+    prefix="/item-sorting",
+    tags=["商品排序"]
 )

@@ -175,8 +175,8 @@ class SparkAIService:
                 "recommendations": []
             }
     
-    def _call_spark_api(self, content: str) -> Dict[str, Any]:
-        """调用星火大模型API"""
+    async def _call_spark_api_async(self, content: str) -> Dict[str, Any]:
+        """异步调用星火大模型API"""
         config = self._get_config()
         app_id = config['app_id']
         api_key = config['api_key']
@@ -195,90 +195,82 @@ class SparkAIService:
         success = False
         error_message = ""
         
-        headers = [
-            f"Host: {host}",
-            f"Date: {date}",
-            f"authorization: {authorization}"
-        ]
-        
-        def on_message(ws, message):
-            nonlocal response_text, success, error_message
-            try:
-                data = json.loads(message)
-                code = data['header']['code']
-                if code != 0:
-                    error_message = f"请求错误: {data['header']['message']}"
-                    ws.close()
-                    return
-
-                # 健壮解析choices/text/content
-                choices = data.get('payload', {}).get('choices', {})
-                text_list = choices.get('text', [])
-                if text_list and isinstance(text_list, list):
-                    for t in text_list:
-                        if 'content' in t:
-                            if isinstance(t['content'], str):
-                                response_text += t['content']
-                            elif isinstance(t['content'], list):
-                                response_text += ''.join([item for item in t['content'] if isinstance(item, str)])
-                else:
-                    error_message = "AI响应格式错误：未找到content"
-                    ws.close()
-                    return
-
-                status = choices.get('status')
-                if status == 2:
-                    success = True
-                    ws.close()
-            except Exception as e:
-                error_message = f"解析响应失败: {str(e)}"
-                ws.close()
-        
-        def on_error(ws, error):
-            nonlocal error_message
-            error_message = f"WebSocket错误: {str(error)}"
-        
-        def on_close(ws, close_status_code, close_msg):
-            pass
-        
-        def on_open(ws):
-            print("WebSocket已连接，发送消息...")
-            ws.send(json.dumps(message, ensure_ascii=False))
+        headers = {
+            "Host": host,
+            "Date": date,
+            "authorization": authorization
+        }
         
         try:
-            ws = websocket.WebSocketApp(
-                url,
-                header=headers,
-                on_message=on_message,
-                on_error=on_error,
-                on_close=on_close,
-                on_open=on_open
-            )
-            
-            # 用线程+join方式实现超时控制
-            ws_thread = threading.Thread(target=ws.run_forever)
-            ws_thread.start()
-            ws_thread.join(timeout=30)
-            if ws_thread.is_alive():
-                try:
-                    ws.close()
-                except Exception:
-                    pass
-                error_message = error_message or "请求超时"
-            if success:
-                return {
-                    "success": True,
-                    "response": response_text
-                }
-            else:
-                return {
-                    "success": False,
-                    "message": error_message or "请求超时"
-                }
+            async with websockets.connect(url, extra_headers=headers, timeout=30) as websocket:
+                print("WebSocket已连接，发送消息...")
+                await websocket.send(json.dumps(message, ensure_ascii=False))
+                
+                async for message in websocket:
+                    try:
+                        data = json.loads(message)
+                        code = data['header']['code']
+                        if code != 0:
+                            error_message = f"请求错误: {data['header']['message']}"
+                            break
+
+                        # 健壮解析choices/text/content
+                        choices = data.get('payload', {}).get('choices', {})
+                        text_list = choices.get('text', [])
+                        if text_list and isinstance(text_list, list):
+                            for t in text_list:
+                                if 'content' in t:
+                                    if isinstance(t['content'], str):
+                                        response_text += t['content']
+                                    elif isinstance(t['content'], list):
+                                        response_text += ''.join([item for item in t['content'] if isinstance(item, str)])
+                        else:
+                            error_message = "AI响应格式错误：未找到content"
+                            break
+
+                        status = choices.get('status')
+                        if status == 2:
+                            success = True
+                            break
+                    except Exception as e:
+                        error_message = f"解析响应失败: {str(e)}"
+                        break
+                
+                if success:
+                    return {
+                        "success": True,
+                        "response": response_text
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "message": error_message or "请求超时"
+                    }
         except Exception as e:
             return {
                 "success": False,
                 "message": f"连接失败: {str(e)}"
+            }
+
+    def _call_spark_api(self, content: str) -> Dict[str, Any]:
+        """同步调用星火大模型API（保持向后兼容）"""
+        import asyncio
+        try:
+            # 尝试获取当前事件循环
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # 如果当前在事件循环中，使用线程池执行异步函数
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, self._call_spark_api_async(content))
+                    return future.result(timeout=35)
+            else:
+                # 如果没有事件循环，直接运行
+                return asyncio.run(self._call_spark_api_async(content))
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"调用失败: {str(e)}"
             }
 
     def auto_complete_item_by_image(self, image_bytes_list: list) -> dict:

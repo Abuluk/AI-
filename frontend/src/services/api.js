@@ -30,9 +30,17 @@ api.interceptors.response.use(response => {
   return response
 }, error => {
   console.error('API Error:', error)
+  console.error('Error details:', {
+    status: error.response?.status,
+    statusText: error.response?.statusText,
+    data: error.response?.data,
+    url: error.config?.url,
+    method: error.config?.method
+  })
   
   if (error.response && error.response.status === 401) {
     // 未授权错误处理
+    console.warn('收到401错误，清除token')
     localStorage.removeItem('access_token')
     // 不直接跳转，让路由守卫处理
     console.warn('Token已过期或无效，请重新登录')
@@ -813,6 +821,76 @@ const apiService = {
   // 获取可用分类
   async getAvailableCategories() {
     return retryRequest(() => api.get('/admin/ai-recommendation/categories'))
+  },
+
+  // 商品排序相关方法
+  // 获取排序配置
+  async getSortingConfig() {
+    return retryRequest(() => api.get('/item-sorting/config'))
+  },
+
+  // 更新排序配置
+  async updateSortingConfig(config) {
+    return retryRequest(() => api.put('/item-sorting/config', config))
+  },
+
+  // 运行排序算法
+  async runSortingAlgorithm(timeWindowMinutes = 30) {
+    return retryRequest(() => api.post('/item-sorting/run-algorithm', null, {
+      params: { time_window_minutes: timeWindowMinutes }
+    }))
+  },
+
+  // 获取当前指标数据
+  async getCurrentMetrics(timeWindowMinutes = 30) {
+    return retryRequest(() => api.get('/item-sorting/metrics/current', {
+      params: { time_window_minutes: timeWindowMinutes }
+    }))
+  },
+
+  // 获取商品历史指标
+  async getItemMetricsHistory(itemId, limit = 10) {
+    return retryRequest(() => api.get(`/item-sorting/metrics/history/${itemId}`, {
+      params: { limit }
+    }))
+  },
+
+  // 获取当前权重数据
+  async getCurrentWeights(timePeriod = null, limit = 100) {
+    return retryRequest(() => api.get('/item-sorting/weights/current', {
+      params: { time_period: timePeriod, limit }
+    }))
+  },
+
+  // 获取动态排序商品列表
+  async getSortedItems(page = 1, size = 20, timePeriod = null) {
+    return retryRequest(() => api.get('/item-sorting/sorted-items', {
+      params: { page, size, time_period: timePeriod }
+    }))
+  },
+
+  // 获取排序状态
+  async getSortingStatus() {
+    return retryRequest(() => api.get('/item-sorting/status'))
+  },
+
+  // 获取排序历史
+  async getSortingHistory(days = 7) {
+    return retryRequest(() => api.get('/item-sorting/history', { params: { days } }))
+  },
+
+  // 获取排序趋势分析
+  async getSortingTrendAnalytics(days = 7) {
+    return retryRequest(() => api.get('/item-sorting/analytics/trend', {
+      params: { days }
+    }))
+  },
+
+  // 获取单个商品排序分析
+  async getItemSortingAnalytics(itemId, days = 7) {
+    return retryRequest(() => api.get(`/item-sorting/analytics/item/${itemId}`, {
+      params: { days }
+    }))
   }
 }
 

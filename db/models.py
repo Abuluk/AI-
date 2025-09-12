@@ -271,3 +271,51 @@ class AIRecommendationConfig(Base):
     is_active = Column(Boolean, default=True)  # 是否启用
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+class ItemSortingMetrics(Base):
+    """商品排序指标表 - 记录商品在特定时间段内的行为数据"""
+    __tablename__ = 'item_sorting_metrics'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, ForeignKey('items.id'), nullable=False)
+    time_window_start = Column(DateTime, nullable=False)  # 时间窗口开始时间
+    time_window_end = Column(DateTime, nullable=False)  # 时间窗口结束时间
+    views_count = Column(Integer, default=0)  # 浏览量
+    likes_count = Column(Integer, default=0)  # 点赞数
+    favorites_count = Column(Integer, default=0)  # 收藏数
+    messages_count = Column(Integer, default=0)  # 消息数
+    seller_activity_score = Column(Float, default=0.0)  # 卖家活跃度分数
+    position_rank = Column(Integer, nullable=True)  # 商品在该时间段的排名位置
+    created_at = Column(DateTime, server_default=func.now())
+    
+    # 关联商品
+    item = relationship("Item")
+
+class ItemSortingWeights(Base):
+    """商品排序权重表 - 记录商品的动态权重"""
+    __tablename__ = 'item_sorting_weights'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, ForeignKey('items.id'), nullable=False)
+    time_period = Column(String(20), nullable=False)  # 时间周期标识，如 '2024-01-15-10:00'
+    base_weight = Column(Float, default=1.0)  # 基础权重
+    trend_weight = Column(Float, default=1.0)  # 趋势权重（基于对比上一周期的变化）
+    position_weight = Column(Float, default=1.0)  # 位置权重（基于对抗曲线）
+    final_weight = Column(Float, default=1.0)  # 最终权重
+    ranking_position = Column(Integer, nullable=True)  # 最终排名位置
+    created_at = Column(DateTime, server_default=func.now())
+    
+    # 关联商品
+    item = relationship("Item")
+
+class SortingConfig(Base):
+    """排序配置表"""
+    __tablename__ = 'sorting_configs'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    config_key = Column(String(100), unique=True, nullable=False)  # 配置键
+    config_value = Column(JSON, nullable=True)  # 配置值
+    description = Column(String(500), nullable=True)  # 配置描述
+    is_active = Column(Boolean, default=True)  # 是否启用
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
