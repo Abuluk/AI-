@@ -668,7 +668,7 @@ const apiService = {
   },
 
   async searchUser(keyword) {
-    return api.get(`/admin/search-users?search=${encodeURIComponent(keyword)}&limit=10`)
+    return api.get(`/admin/search-users?search=${encodeURIComponent(keyword)}&limit=100`)
   },
 
   async getPendingVerificationUsers(params) {

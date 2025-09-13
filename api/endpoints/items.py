@@ -263,7 +263,7 @@ def get_items_with_promoted(
             print(f"获取推广商品配置失败: {e}")
     
     # 构建查询条件
-    query = db.query(Item).filter(Item.status == "online", Item.sold == False)
+    query = db.query(Item).filter(Item.status.in_(["online", "active"]), Item.sold == False)
     
     # 分类过滤
     if category is not None and category != "":
@@ -449,7 +449,7 @@ def get_all_items(
         query = query.filter(Item.status == status)
     else:
         # 默认只显示在线商品
-        query = query.filter(Item.status == "online")
+        query = query.filter(Item.status.in_(["online", "active"]))
     
     # 售出状态过滤
     if sold is not None:
@@ -533,21 +533,41 @@ def get_all_items(
     else:
         query = query.order_by(Item.created_at.desc())
     
+    # 获取推广商品配置
+    promoted_config = db.query(SiteConfig).filter(SiteConfig.key == "promoted_items").first()
+    promoted_items = []
+    
+    if promoted_config and promoted_config.value and not exclude_promoted:
+        try:
+            promoted_ids = json.loads(promoted_config.value)
+            if promoted_ids:
+                # 获取推广商品详情
+                promoted_items = db.query(Item).filter(
+                    Item.id.in_(promoted_ids),
+                    Item.status == "online",
+                    Item.sold == False
+                ).all()
+        except Exception as e:
+            print(f"解析推广商品配置失败: {e}")
+    
     # 获取所有商品
     all_items = query.offset(skip).limit(limit * 2).all()  # 获取更多商品以便混合
     
     # 分离普通商品和商家商品
     normal_items = []
     merchant_items = []
+    promoted_ids = [item.id for item in promoted_items] if promoted_items else []
     
     for item in all_items:
-        if item.is_merchant_item:
+        if item.id in promoted_ids:
+            continue  # 跳过推广商品，单独处理
+        elif item.is_merchant_item:
             merchant_items.append(item)
         else:
             normal_items.append(item)
     
     # 处理图片路径
-    for item in normal_items + merchant_items:
+    for item in normal_items + merchant_items + promoted_items:
         if item.images:
             images = item.images.split(',')
             processed_images = []
@@ -561,9 +581,29 @@ def get_all_items(
             item.images = ','.join(processed_images)
     
     # 混合普通商品和商家商品
-    items = get_items_with_merchant_display(normal_items, merchant_items, display_frequency, limit)
+    mixed_items = get_items_with_merchant_display(normal_items, merchant_items, display_frequency, limit)
     
-    return items
+    # 插入推广商品
+    result = []
+    promoted_index = 0
+    mixed_index = 0
+    items_added = 0
+    
+    # 第一个位置总是推广商品（如果有的话）
+    if promoted_items and promoted_index < len(promoted_items):
+        promoted_item = promoted_items[promoted_index]
+        promoted_item.is_promoted = True
+        result.append(promoted_item)
+        promoted_index += 1
+        items_added += 1
+    
+    # 添加混合商品
+    while items_added < limit and mixed_index < len(mixed_items):
+        result.append(mixed_items[mixed_index])
+        mixed_index += 1
+        items_added += 1
+    
+    return result
 
 # 公共端点 - 搜索商品（无需认证）- 必须在/{item_id}之前定义
 @router.get("/search", response_model=List[ItemInDB])
@@ -602,6 +642,19 @@ def search_items(
     result = []
     for item in items:
         item_dict = jsonable_encoder(item)
+        
+        # 处理图片路径
+        if item.images:
+            images = item.images.split(',')
+            processed_images = []
+            for img in images:
+                img = img.strip()
+                if img:
+                    full_url = get_full_image_url(img)
+                    if full_url:
+                        processed_images.append(full_url)
+            item_dict["images"] = ','.join(processed_images)
+        
         if item.owner:
             item_dict["owner"] = {
                 "id": item.owner.id,

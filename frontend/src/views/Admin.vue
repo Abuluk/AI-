@@ -225,6 +225,12 @@
           >
             <i class="fas fa-exclamation-triangle"></i> 待认证商家
           </button>
+          <button 
+            :class="['sub-tab-btn', { active: merchantSubTab === 'applications' }]"
+            @click="changeMerchantSubTab('applications')"
+          >
+            <i class="fas fa-file-alt"></i> 商家认证申请
+          </button>
         </div>
 
         <!-- 认证商家内容 -->
@@ -235,13 +241,7 @@
               placeholder="搜索商家名称/联系人"
               class="search-input"
             >
-            <select v-model="merchantFilters.status" class="filter-select">
-              <option value="">全部状态</option>
-              <option value="pending">待审核</option>
-              <option value="approved">已通过</option>
-              <option value="rejected">已拒绝</option>
-            </select>
-            <button @click="loadMerchants(true)" class="btn btn-outline">刷新</button>
+            <button @click="loadCertifiedMerchants(true)" class="btn btn-outline">刷新</button>
           </div>
 
           <!-- 商家列表 -->
@@ -443,22 +443,98 @@
                         详情
                       </button>
                       <button 
-                        @click="approvePendingVerificationUser(user)"
+                        @click="removeUserPendingVerification(user)"
+                        class="btn btn-sm btn-warning"
+                      >
+                        解除待认证
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 商家认证申请内容 -->
+        <div v-if="merchantSubTab === 'applications'" class="sub-tab-content">
+          <div class="filters">
+            <input 
+              v-model="merchantApplicationFilters.search" 
+              placeholder="搜索商家名称/联系人"
+              class="search-input"
+            >
+            <select v-model="merchantApplicationFilters.status" class="filter-select">
+              <option value="">全部状态</option>
+              <option value="pending">待审核</option>
+              <option value="rejected">已拒绝</option>
+            </select>
+            <button @click="loadMerchantApplications(true)" class="btn btn-outline">刷新</button>
+          </div>
+
+          <!-- 商家认证申请列表 -->
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>用户信息</th>
+                  <th>店铺名称</th>
+                  <th>联系人</th>
+                  <th>联系电话</th>
+                  <th>状态</th>
+                  <th>申请时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="loading.merchantApplications">
+                  <td colspan="8" class="loading-cell">
+                    <div class="loading-spinner"></div>
+                    加载中...
+                  </td>
+                </tr>
+                <tr v-else-if="merchantApplications.length === 0">
+                  <td colspan="8" class="empty-cell">暂无商家认证申请</td>
+                </tr>
+                <tr v-else v-for="application in merchantApplications" :key="application.id">
+                  <td>{{ application.id }}</td>
+                  <td>
+                    <div class="user-cell">
+                      <img :src="getUserAvatar(application.user)" :alt="application.user.username" class="user-avatar-small">
+                      <div>
+                        <div class="user-name">{{ application.user.username }}</div>
+                        <div class="user-id">ID: {{ application.user.id }}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{{ application.business_name }}</td>
+                  <td>{{ application.contact_person }}</td>
+                  <td>{{ application.contact_phone }}</td>
+                  <td>
+                    <span :class="['status-badge', getMerchantStatusClass(application.status)]">
+                      {{ getMerchantStatusText(application.status) }}
+                    </span>
+                  </td>
+                  <td>{{ formatTime(application.created_at) }}</td>
+                  <td>
+                    <div class="action-buttons">
+                      <button @click="showMerchantApplicationDetails(application)" class="btn btn-sm btn-outline">
+                        详情
+                      </button>
+                      <button 
+                        v-if="application.status === 'pending'"
+                        @click="approveMerchantApplication(application)"
                         class="btn btn-sm btn-success"
                       >
                         通过
                       </button>
                       <button 
-                        @click="showRejectPendingUserModalFunc(user)"
+                        v-if="application.status === 'pending'"
+                        @click="showRejectMerchantApplicationModal(application)"
                         class="btn btn-sm btn-danger"
                       >
-                        不通过
-                      </button>
-                      <button 
-                        @click="removeUserPendingVerification(user)"
-                        class="btn btn-sm btn-warning"
-                      >
-                        解除
+                        拒绝
                       </button>
                     </div>
                   </td>
@@ -2354,8 +2430,7 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button @click="approvePendingVerificationUser(selectedPendingUser)" class="btn btn-success">通过</button>
-          <button @click="showRejectPendingUserModalFunc(selectedPendingUser)" class="btn btn-danger">不通过</button>
+          <button @click="removeUserPendingVerification(selectedPendingUser)" class="btn btn-warning">解除待认证</button>
           <button @click="showPendingUserMerchantDetailModal = false" class="btn btn-outline">关闭</button>
         </div>
       </div>
@@ -2433,6 +2508,7 @@ const loading = reactive({
   promotions: false,
   feedbacks: false,
   pendingVerificationUsers: false,
+  merchantApplications: false,
   sorting: false,
   history: false
 })
@@ -2502,7 +2578,19 @@ const pendingVerificationFilters = reactive({
   search: ''
 })
 const pendingVerificationPage = ref(1)
-const pendingVerificationLimit = 50
+const pendingVerificationLimit = ref(50)
+
+// 商家认证申请相关
+const merchantApplications = ref([])
+const merchantApplicationFilters = reactive({
+  search: '',
+  status: ''
+})
+const merchantApplicationPage = ref(1)
+const merchantApplicationLimit = ref(50)
+const hasMoreMerchantApplications = ref(true)
+const loadingMerchantApplications = ref(false)
+const loadingMoreMerchantApplications = ref(false)
 
 // 商贩检测相关
 const detectionConfig = reactive({
@@ -2900,9 +2988,9 @@ const onPageScrollHandler = () => {
   } else if (activeTab.value === 'items' && hasMoreItems.value && !loading.items && !loadingMoreItems.value) {
     console.log('触发商品数据加载')
     loadItems(false)
-  } else if (activeTab.value === 'merchants' && hasMoreMerchants.value && !loading.merchants && !loadingMoreMerchants.value) {
-    console.log('触发商家数据加载')
-    loadMerchants(false)
+  } else if (activeTab.value === 'merchants' && merchantSubTab.value === 'certified' && hasMoreMerchants.value && !loading.merchants && !loadingMoreMerchants.value) {
+    console.log('触发认证商家数据加载')
+    loadCertifiedMerchants(false)
   } else if (activeTab.value === 'buy_requests' && hasMoreBuyRequests.value && !loading.buy_requests && !loadingMoreBuyRequests.value) {
     console.log('触发求购数据加载')
     loadBuyRequests(false)
@@ -2912,6 +3000,9 @@ const onPageScrollHandler = () => {
   } else if (activeTab.value === 'merchants' && merchantSubTab.value === 'pending_verification' && hasMorePendingVerificationUsers.value && !loading.pendingVerificationUsers && !loadingMorePendingVerificationUsers.value) {
     console.log('触发待认证用户数据加载')
     loadPendingVerificationUsers(false)
+  } else if (activeTab.value === 'merchants' && merchantSubTab.value === 'applications' && hasMoreMerchantApplications.value && !loading.merchantApplications && !loadingMoreMerchantApplications.value) {
+    console.log('触发商家认证申请数据加载')
+    loadMerchantApplications(false)
   }
 }
 
@@ -2961,6 +3052,10 @@ watch(merchantFilters, () => {
 
 watch(pendingVerificationFilters, () => {
   if (activeTab.value === 'merchants' && merchantSubTab.value === 'pending_verification') loadPendingVerificationUsers(true)
+}, { deep: true })
+
+watch(merchantApplicationFilters, () => {
+  if (activeTab.value === 'merchants' && merchantSubTab.value === 'applications') loadMerchantApplications(true)
 }, { deep: true })
 
 // tab切换时重置分页
@@ -4512,6 +4607,8 @@ const changeMerchantSubTab = (tab) => {
     loadCertifiedMerchants(true)
   } else if (tab === 'pending_verification') {
     loadPendingVerificationUsers(true)
+  } else if (tab === 'applications') {
+    loadMerchantApplications(true)
   }
 }
 
@@ -4531,8 +4628,8 @@ const loadCertifiedMerchants = async (reset = false) => {
       limit: merchantLimit
     }
     if (merchantFilters.search) params.search = merchantFilters.search
-    // 始终添加status参数，即使是空字符串
-    params.status = merchantFilters.status
+    // 只显示已认证的商家
+    params.status = 'approved'
     const response = await api.getAllMerchants(params)
     const merchantsData = response.data.data || response.data || []
     if (merchantPage.value === 1) {
@@ -4622,6 +4719,84 @@ const loadDefaultDisplayFrequency = async () => {
   } catch (error) {
     console.error('获取默认展示频率失败:', error)
   }
+}
+
+// 商家认证申请相关方法
+const loadMerchantApplications = async (reset = false) => {
+  if (loading.merchantApplications || loadingMoreMerchantApplications.value) return
+  if (reset) {
+    merchantApplicationPage.value = 1
+    hasMoreMerchantApplications.value = true
+    merchantApplications.value = []
+  }
+  if (!hasMoreMerchantApplications.value) return
+  loading.merchantApplications = merchantApplicationPage.value === 1
+  loadingMoreMerchantApplications.value = merchantApplicationPage.value > 1
+  
+  try {
+    const params = {
+      skip: (merchantApplicationPage.value - 1) * merchantApplicationLimit.value,
+      limit: merchantApplicationLimit.value
+    }
+    if (merchantApplicationFilters.search) params.search = merchantApplicationFilters.search
+    // 显示申请中的商家（用户提交的认证申请）和已拒绝的申请
+    if (merchantApplicationFilters.status) {
+      params.status = merchantApplicationFilters.status
+    } else {
+      // 如果没有选择特定状态，显示pending和rejected状态
+      // 这里我们需要修改API调用逻辑，暂时只显示pending
+      params.status = 'pending'
+    }
+    
+    const response = await api.getAllMerchants(params)
+    const applicationsData = response.data.data || response.data || []
+    
+    if (merchantApplicationPage.value === 1) {
+      merchantApplications.value = applicationsData
+    } else {
+      merchantApplications.value.push(...applicationsData)
+    }
+    
+    // 使用后端返回的has_more字段判断是否还有更多数据
+    if (response.data.has_more === false || applicationsData.length < merchantApplicationLimit.value) {
+      hasMoreMerchantApplications.value = false
+    } else {
+      merchantApplicationPage.value++
+    }
+  } catch (error) {
+    console.error('获取商家认证申请失败:', error)
+    alert('获取商家认证申请失败')
+  } finally {
+    loading.merchantApplications = false
+    loadingMoreMerchantApplications.value = false
+  }
+}
+
+const showMerchantApplicationDetails = (application) => {
+  selectedMerchant.value = application
+  showMerchantDetailModal.value = true
+}
+
+const approveMerchantApplication = async (application) => {
+  if (!confirm(`确定要通过商家"${application.business_name}"的认证申请吗？`)) {
+    return
+  }
+  
+  try {
+    await api.approveMerchant(application.id)
+    application.status = 'approved'
+    alert('商家认证已通过')
+    loadMerchantApplications(true)
+  } catch (error) {
+    console.error('通过商家认证失败:', error)
+    alert('操作失败')
+  }
+}
+
+const showRejectMerchantApplicationModal = (application) => {
+  selectedMerchant.value = application
+  rejectReason.value = ''
+  showRejectMerchantModal.value = true
 }
 </script>
 

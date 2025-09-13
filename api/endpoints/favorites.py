@@ -7,6 +7,7 @@ from schemas.favorite import FavoriteCreate, FavoriteInDB, FavoriteWithItem
 from core.security import get_current_user
 from datetime import datetime
 from schemas.favorite import FavoriteListResponse
+from config import get_full_image_url
 
 router = APIRouter()
 
@@ -38,10 +39,22 @@ def read_favorites(
     # 分页查询
     favorites = favorites_query.offset(skip).limit(size).all()
     
-    # 处理created_at为None的情况
+    # 处理created_at为None的情况和图片路径
     for favorite in favorites:
         if favorite.created_at is None:
             favorite.created_at = datetime.now()
+        
+        # 处理商品图片路径
+        if favorite.item and favorite.item.images:
+            images = favorite.item.images.split(',')
+            processed_images = []
+            for img in images:
+                img = img.strip()
+                if img:
+                    full_url = get_full_image_url(img)
+                    if full_url:
+                        processed_images.append(full_url)
+            favorite.item.images = ','.join(processed_images)
     
     # 返回符合前端期望的格式
     return FavoriteListResponse(
@@ -66,10 +79,22 @@ def read_user_favorites(
         Item.id.isnot(None)  # 确保商品存在
     ).all()
     
-    # 处理created_at为None的情况
+    # 处理created_at为None的情况和图片路径
     for favorite in favorites:
         if favorite.created_at is None:
             favorite.created_at = datetime.now()
+        
+        # 处理商品图片路径
+        if favorite.item and favorite.item.images:
+            images = favorite.item.images.split(',')
+            processed_images = []
+            for img in images:
+                img = img.strip()
+                if img:
+                    full_url = get_full_image_url(img)
+                    if full_url:
+                        processed_images.append(full_url)
+            favorite.item.images = ','.join(processed_images)
     
     return favorites
 

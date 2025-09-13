@@ -3,12 +3,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from db.session import get_db
 from core.security import get_current_user, get_current_active_user
-from db.models import User, ItemSortingWeights, Item
+from db.models import User, ItemSortingWeights, Item, SiteConfig
 from crud import crud_item_sorting
 from schemas.item import ItemInDB
 from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 import json
+import copy
+from config import get_full_image_url
 
 router = APIRouter()
 
@@ -123,54 +125,75 @@ def get_dynamically_sorted_items(
     page: int = Query(1, ge=1, description="页码"),
     size: int = Query(20, ge=1, le=100, description="每页数量"),
     time_period: Optional[str] = Query(None, description="时间周期标识"),
+    category: Optional[int] = Query(None, description="分类ID"),
+    search: Optional[str] = Query(None, description="搜索关键词"),
+    location: Optional[str] = Query(None, description="地区"),
     db: Session = Depends(get_db)
 ):
     """获取按动态权重排序的商品列表"""
     skip = (page - 1) * size
     
+    # 处理空字符串和undefined参数
+    if search == "" or search == "undefined" or search is None:
+        search = None
+    if location == "" or location == "undefined" or location is None:
+        location = None
+    if category == "" or category == "undefined" or category is None:
+        category = None
+    
     items = crud_item_sorting.get_items_with_dynamic_sorting(
-        db, skip, size, time_period
+        db, skip, size, time_period, category, search, location
     )
+    
+    # 获取推广商品配置
+    promoted_config = db.query(SiteConfig).filter(SiteConfig.key == "promoted_items").first()
+    promoted_items = []
+    
+    if promoted_config and promoted_config.value:
+        try:
+            promoted_ids = json.loads(promoted_config.value)
+            if promoted_ids:
+                # 获取推广商品详情
+                promoted_items = db.query(Item).filter(
+                    Item.id.in_(promoted_ids),
+                    Item.status == "online",
+                    Item.sold == False
+                ).all()
+        except Exception as e:
+            print(f"解析推广商品配置失败: {e}")
+    
+    # 处理推广商品图片
+    for item in promoted_items:
+        if item.images:
+            images = item.images.split(',')
+            processed_images = []
+            for img in images:
+                img = img.strip()
+                if img:
+                    full_url = get_full_image_url(img)
+                    if full_url:
+                        processed_images.append(full_url)
+            item.images = ','.join(processed_images)
     
     # 转换为响应格式
     result = []
+    
+    # 第一个位置总是推广商品（如果有的话）
+    if promoted_items:
+        promoted_item = promoted_items[0]
+        promoted_item.is_promoted = True
+        result.append(_format_item_data(promoted_item, time_period, db))
+    
+    # 添加智能排序的商品
     for item in items:
-        item_data = {
-            "id": item.id,
-            "title": item.title,
-            "description": item.description,
-            "price": item.price,
-            "category": item.category,
-            "condition": item.condition,
-            "location": item.location,
-            "images": item.images,
-            "status": item.status,
-            "sold": item.sold,
-            "created_at": item.created_at.isoformat() if item.created_at else None,
-            "views": item.views,
-            "like_count": item.like_count or 0,
-            "favorited_count": item.favorited_count or 0,
-            "owner_id": item.owner_id,
-            "is_merchant_item": item.is_merchant_item or False
-        }
+        # 跳过已经在推广商品中的商品
+        if promoted_items and any(p.id == item.id for p in promoted_items):
+            continue
+        result.append(_format_item_data(item, time_period, db))
         
-        # 添加权重信息（如果可用）
-        if time_period:
-            weight = db.query(crud_item_sorting.ItemSortingWeights).filter(
-                crud_item_sorting.ItemSortingWeights.item_id == item.id,
-                crud_item_sorting.ItemSortingWeights.time_period == time_period
-            ).first()
-            
-            if weight:
-                item_data["sorting_weight"] = {
-                    "base_weight": weight.base_weight,
-                    "trend_weight": weight.trend_weight,
-                    "position_weight": weight.position_weight,
-                    "final_weight": weight.final_weight,
-                    "ranking_position": weight.ranking_position
-                }
-        
-        result.append(item_data)
+        # 限制返回的商品数量
+        if len(result) >= size:
+            break
     
     return {
         "success": True,
@@ -180,6 +203,56 @@ def get_dynamically_sorted_items(
         "items_count": len(result),
         "items": result
     }
+
+def _format_item_data(item, time_period, db):
+    # 处理图片URL
+    processed_images = []
+    if item.images:
+        images = item.images.split(',') if isinstance(item.images, str) else item.images
+        for img in images:
+            img = img.strip()
+            if img:
+                full_url = get_full_image_url(img)
+                if full_url:
+                    processed_images.append(full_url)
+    
+    item_data = {
+        "id": item.id,
+        "title": item.title,
+        "description": item.description,
+        "price": item.price,
+        "category": item.category,
+        "condition": item.condition,
+        "location": item.location,
+        "images": ','.join(processed_images) if processed_images else item.images,
+        "status": item.status,
+        "sold": item.sold,
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+        "views": item.views,
+        "like_count": item.like_count or 0,
+        "favorited_count": item.favorited_count or 0,
+        "owner_id": item.owner_id,
+        "is_merchant_item": item.is_merchant_item or False,
+        "is_promoted": getattr(item, 'is_promoted', False)
+    }
+    
+    # 添加权重信息（如果可用）
+    if time_period:
+        weight = db.query(crud_item_sorting.ItemSortingWeights).filter(
+            crud_item_sorting.ItemSortingWeights.item_id == item.id,
+            crud_item_sorting.ItemSortingWeights.time_period == time_period
+        ).first()
+        
+        if weight:
+            item_data["sorting_weight"] = {
+                "base_weight": weight.base_weight,
+                "trend_weight": weight.trend_weight,
+                "position_weight": weight.position_weight,
+                "final_weight": weight.final_weight,
+                "ranking_position": weight.ranking_position
+            }
+    
+    return item_data
 
 # 新增：获取排序状态（最近一次运行信息）
 @router.get("/status")

@@ -106,7 +106,7 @@ def get_user_stats(
     selling_count = db.query(Item).filter(
         Item.owner_id == user_id,
         Item.sold == False,
-        Item.status == "online"
+        Item.status.in_(["online", "active"])
     ).count()
     
     sold_count = db.query(Item).filter(
@@ -145,7 +145,7 @@ def get_user_items(
     # 根据状态筛选商品
     query = db.query(Item).filter(Item.owner_id == user_id)
     if status == "selling":
-        query = query.filter(Item.sold == False, Item.status == "online")
+        query = query.filter(Item.sold == False, Item.status.in_(["online", "active"]))
     elif status == "sold":
         query = query.filter(Item.sold == True)
     elif status == "offline":
@@ -157,6 +157,8 @@ def get_user_items(
     # 排序
     if order_by == "created_at_desc":
         query = query.order_by(Item.created_at.desc())
+    elif order_by == "created_at_asc":
+        query = query.order_by(Item.created_at.asc())
     elif order_by == "price_asc":
         query = query.order_by(Item.price.asc())
     elif order_by == "price_desc":
@@ -167,7 +169,21 @@ def get_user_items(
         query = query.order_by(Item.created_at.desc())
     # 分页
     items = query.offset(skip).limit(limit).all()
-    return {"data": items, "total": total    }
+    
+    # 处理图片路径
+    for item in items:
+        if item.images:
+            images = item.images.split(',')
+            processed_images = []
+            for img in images:
+                img = img.strip()
+                if img:
+                    full_url = get_full_image_url(img)
+                    if full_url:
+                        processed_images.append(full_url)
+            item.images = ','.join(processed_images)
+    
+    return {"data": items, "total": total}
 
 @router.get("/pending-verification")
 def get_pending_verification_users(

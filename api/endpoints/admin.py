@@ -141,7 +141,7 @@ def get_all_users(
     users = query.offset(skip).limit(limit).all()
     result = []
     for user in users:
-        items_count = db.query(func.count(Item.id)).filter(Item.owner_id == user.id).scalar()
+        items_count = db.query(func.count(Item.id)).filter(Item.owner_id == user.id).scalar() or 0
         avatar = get_full_image_url(user.avatar)
         result.append({
             "id": user.id,
@@ -166,7 +166,7 @@ def get_all_users(
 @router.get("/search-users")
 def search_users_for_merchant_management(
     search: str = Query(..., min_length=1),
-    limit: int = Query(10, ge=1, le=50),
+    limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):

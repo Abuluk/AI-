@@ -13,7 +13,7 @@ HOST = "0.0.0.0"
 PORT = 8000
 
 # HTTPS配置
-USE_HTTPS = False
+USE_HTTPS = True
 SSL_CERT_FILE = BASE_DIR / "ssl" / "cert.pem"
 SSL_KEY_FILE = BASE_DIR / "ssl" / "key.pem"
 
@@ -62,8 +62,25 @@ def get_full_image_url(image_path):
     
     # 清理路径，移除多余的前缀和斜杠
     clean_path = image_path.strip()
+    
+    # 处理反斜杠，统一为正斜杠
+    clean_path = clean_path.replace('\\', '/')
+    
+    # 如果路径已经包含static/images/，直接构建完整URL
+    if 'static/images/' in clean_path:
+        # 提取文件名部分
+        if '/static/images/' in clean_path:
+            filename = clean_path.split('/static/images/')[-1]
+        else:
+            filename = clean_path.split('static/images/')[-1]
+        base_url = get_image_base_url()
+        return f"{base_url}/{filename}"
+    
+    # 移除开头的斜杠
     if clean_path.startswith('/'):
         clean_path = clean_path[1:]
+    
+    # 如果路径以static/images/开头，移除这个前缀
     if clean_path.startswith('static/images/'):
         clean_path = clean_path[13:]
     
