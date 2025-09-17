@@ -31,29 +31,28 @@ def get_items_with_merchant_display(
     result = []
     normal_index = 0
     merchant_index = 0
-    items_added = 0
+    normal_count = 0  # 普通商品计数器
     
     # 按展示频率插入商家商品
-    while items_added < target_size and (normal_index < len(normal_items) or merchant_index < len(merchant_items)):
+    while len(result) < target_size and (normal_index < len(normal_items) or merchant_index < len(merchant_items)):
         # 添加普通商品
         if normal_index < len(normal_items):
             result.append(normal_items[normal_index])
             normal_index += 1
-            items_added += 1
+            normal_count += 1
             
             # 检查是否需要插入商家商品（每隔display_frequency个普通商品后插入一个商家商品）
-            if (items_added % display_frequency == 0 and merchant_index < len(merchant_items)):
+            if (normal_count % display_frequency == 0 and merchant_index < len(merchant_items)):
                 merchant_item = merchant_items[merchant_index % len(merchant_items)]
                 # 创建新的对象避免重复引用
                 import copy
                 new_merchant_item = copy.deepcopy(merchant_item)
-                new_merchant_item.is_promoted = True  # 标记为推广商品
+                # 商家商品保持is_merchant_item=True，不标记为推广商品
                 result.append(new_merchant_item)
                 merchant_index += 1
-                items_added += 1
                 
                 # 如果已经达到目标数量，跳出循环
-                if items_added >= target_size:
+                if len(result) >= target_size:
                     break
         else:
             # 如果普通商品用完了，继续添加商家商品
@@ -61,10 +60,9 @@ def get_items_with_merchant_display(
                 merchant_item = merchant_items[merchant_index % len(merchant_items)]
                 import copy
                 new_merchant_item = copy.deepcopy(merchant_item)
-                new_merchant_item.is_promoted = True
+                # 商家商品保持is_merchant_item=True，不标记为推广商品
                 result.append(new_merchant_item)
                 merchant_index += 1
-                items_added += 1
             else:
                 break
     
@@ -436,13 +434,19 @@ def get_all_items(
         user_config = get_merchant_display_config(db, user_id)
         if user_config:
             display_frequency = user_config.display_frequency
+            print(f"使用用户个人配置: user_id={user_id}, display_frequency={display_frequency}")
+        else:
+            print(f"用户个人配置不存在: user_id={user_id}, 使用默认配置")
     else:
         # 获取全局默认配置
         default_config = get_merchant_display_config(db, None)
         if default_config:
             display_frequency = default_config.display_frequency
+            print(f"使用全局默认配置: display_frequency={display_frequency}")
+        else:
+            print(f"全局默认配置不存在, 使用硬编码默认值: display_frequency={display_frequency}")
     
-    query = db.query(Item)
+    query = db.query(Item).options(joinedload(Item.owner))
     
     # 状态过滤
     if status is not None:
@@ -509,19 +513,63 @@ def get_all_items(
             search=search,
             location=location
         )
-        # 处理图片路径
+        
+        # 转换为字典格式，确保图片URL正确
+        result = []
         for item in items:
+            # 处理图片路径
+            processed_images = ""
             if item.images:
                 images = item.images.split(',')
-                processed_images = []
+                processed_image_list = []
                 for img in images:
                     img = img.strip()
                     if img:
                         full_url = get_full_image_url(img)
                         if full_url:
-                            processed_images.append(full_url)
-                item.images = ','.join(processed_images)
-        return items
+                            processed_image_list.append(full_url)
+                processed_images = ','.join(processed_image_list)
+            
+            # 在数据库会话内获取owner信息
+            owner_info = None
+            avatar_url = None
+            if hasattr(item, 'owner') and item.owner:
+                try:
+                    # 确保在数据库会话内访问owner属性
+                    avatar_url = get_full_image_url(item.owner.avatar) if item.owner.avatar else None
+                    owner_info = {
+                        "id": item.owner.id,
+                        "username": item.owner.username,
+                        "avatar": avatar_url
+                    }
+                except Exception as e:
+                    print(f"获取owner信息失败: {e}")
+                    owner_info = None
+            
+            item_dict = {
+                "id": item.id,
+                "title": item.title,
+                "description": item.description,
+                "price": item.price,
+                "category": item.category,
+                "location": item.location,
+                "condition": item.condition,
+                "images": processed_images,
+                "status": item.status,
+                "sold": item.sold,
+                "created_at": item.created_at,
+                "views": item.views,
+                "like_count": item.like_count or 0,
+                "owner_id": item.owner_id,
+                "favorited_count": item.favorited_count or 0,
+                "is_merchant_item": item.is_merchant_item or False,
+                "is_promoted": getattr(item, 'is_promoted', False),
+                "owner": owner_info
+            }
+            
+            result.append(item_dict)
+        
+        return result
     elif order_by == "created_at_desc":
         query = query.order_by(Item.created_at.desc())
     elif order_by == "price_asc":
@@ -541,8 +589,8 @@ def get_all_items(
         try:
             promoted_ids = json.loads(promoted_config.value)
             if promoted_ids:
-                # 获取推广商品详情
-                promoted_items = db.query(Item).filter(
+                # 获取推广商品详情，使用joinedload预加载owner
+                promoted_items = db.query(Item).options(joinedload(Item.owner)).filter(
                     Item.id.in_(promoted_ids),
                     Item.status == "online",
                     Item.sold == False
@@ -550,8 +598,8 @@ def get_all_items(
         except Exception as e:
             print(f"解析推广商品配置失败: {e}")
     
-    # 获取所有商品
-    all_items = query.offset(skip).limit(limit * 2).all()  # 获取更多商品以便混合
+    # 获取所有商品，使用joinedload预加载owner
+    all_items = query.options(joinedload(Item.owner)).offset(skip).limit(limit * 3).all()  # 获取更多商品以便混合
     
     # 分离普通商品和商家商品
     normal_items = []
@@ -603,7 +651,49 @@ def get_all_items(
         mixed_index += 1
         items_added += 1
     
-    return result
+    # 转换为字典格式，确保图片URL正确
+    formatted_result = []
+    for item in result:
+        # 在数据库会话内获取owner信息
+        owner_info = None
+        avatar_url = None
+        if hasattr(item, 'owner') and item.owner:
+            try:
+                # 确保在数据库会话内访问owner属性
+                avatar_url = get_full_image_url(item.owner.avatar) if item.owner.avatar else None
+                owner_info = {
+                    "id": item.owner.id,
+                    "username": item.owner.username,
+                    "avatar": avatar_url
+                }
+            except Exception as e:
+                print(f"获取owner信息失败: {e}")
+                owner_info = None
+        
+        item_dict = {
+            "id": item.id,
+            "title": item.title,
+            "description": item.description,
+            "price": item.price,
+            "category": item.category,
+            "location": item.location,
+            "condition": item.condition,
+            "images": item.images,  # 已经处理过的图片URL
+            "status": item.status,
+            "sold": item.sold,
+            "created_at": item.created_at,
+            "views": item.views,
+            "like_count": item.like_count or 0,
+            "owner_id": item.owner_id,
+            "favorited_count": item.favorited_count or 0,
+            "is_merchant_item": item.is_merchant_item or False,
+            "is_promoted": getattr(item, 'is_promoted', False),
+            "owner": owner_info
+        }
+        
+        formatted_result.append(item_dict)
+    
+    return formatted_result
 
 # 公共端点 - 搜索商品（无需认证）- 必须在/{item_id}之前定义
 @router.get("/search", response_model=List[ItemInDB])
@@ -641,28 +731,56 @@ def search_items(
     items = query.offset(skip).limit(limit).all()
     result = []
     for item in items:
-        item_dict = jsonable_encoder(item)
-        
         # 处理图片路径
+        processed_images = ""
         if item.images:
             images = item.images.split(',')
-            processed_images = []
+            processed_image_list = []
             for img in images:
                 img = img.strip()
                 if img:
                     full_url = get_full_image_url(img)
                     if full_url:
-                        processed_images.append(full_url)
-            item_dict["images"] = ','.join(processed_images)
+                        processed_image_list.append(full_url)
+            processed_images = ','.join(processed_image_list)
         
-        if item.owner:
-            item_dict["owner"] = {
-                "id": item.owner.id,
-                "username": item.owner.username,
-                "avatar": item.owner.avatar
-            }
-        else:
-            item_dict["owner"] = None
+        # 在数据库会话内获取owner信息
+        owner_info = None
+        avatar_url = None
+        if hasattr(item, 'owner') and item.owner:
+            try:
+                # 确保在数据库会话内访问owner属性
+                avatar_url = get_full_image_url(item.owner.avatar) if item.owner.avatar else None
+                owner_info = {
+                    "id": item.owner.id,
+                    "username": item.owner.username,
+                    "avatar": avatar_url
+                }
+            except Exception as e:
+                print(f"获取owner信息失败: {e}")
+                owner_info = None
+        
+        item_dict = {
+            "id": item.id,
+            "title": item.title,
+            "description": item.description,
+            "price": item.price,
+            "category": item.category,
+            "location": item.location,
+            "condition": item.condition,
+            "images": processed_images,
+            "status": item.status,
+            "sold": item.sold,
+            "created_at": item.created_at,
+            "views": item.views,
+            "like_count": item.like_count or 0,
+            "owner_id": item.owner_id,
+            "favorited_count": item.favorited_count or 0,
+            "is_merchant_item": item.is_merchant_item or False,
+            "is_promoted": getattr(item, 'is_promoted', False),
+            "owner": owner_info
+        }
+        
         result.append(item_dict)
     return result
 
@@ -781,7 +899,9 @@ async def create_item(
     # 处理图片上传
     image_paths = []
     if images:
-        UPLOAD_DIR = "static/images"
+        # 使用配置文件中的静态目录路径
+        from config import STATIC_DIR
+        UPLOAD_DIR = os.path.join(STATIC_DIR, "images")
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
         
@@ -792,14 +912,14 @@ async def create_item(
                 raise HTTPException(status_code=400, detail=f"不支持的图片格式: {ext}。允许的格式: {', '.join(ALLOWED_EXTENSIONS)}")
             # 确保文件名安全
             safe_filename = f"{db_item.id}_{uuid.uuid4().hex}{os.path.splitext(image.filename)[1]}"
-            # 使用正斜杠统一路径格式
-            file_path = os.path.join(UPLOAD_DIR, safe_filename).replace(os.sep, '/')
+            file_path = os.path.join(UPLOAD_DIR, safe_filename)
             
             with open(file_path, "wb") as f:
                 content = await image.read()
                 f.write(content)
             
-            image_paths.append(file_path)
+            # 只存储文件名，不存储完整路径
+            image_paths.append(safe_filename)
     
     # 更新商品图片字段
     if image_paths:
@@ -852,16 +972,19 @@ async def upload_item_image(
         raise HTTPException(status_code=403, detail="Not authorized")
     
     # 保存图片
-    UPLOAD_DIR = "static/images"
+    # 使用配置文件中的静态目录路径
+    from config import STATIC_DIR
+    UPLOAD_DIR = os.path.join(STATIC_DIR, "images")
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    file_path = f"{UPLOAD_DIR}/{item_id}_{file.filename}"
+    safe_filename = f"{item_id}_{file.filename}"
+    file_path = os.path.join(UPLOAD_DIR, safe_filename)
     
     with open(file_path, "wb") as f:
         f.write(await file.read())
     
-    # 更新商品图片字段
+    # 更新商品图片字段，只存储文件名
     images = item.images.split(",") if item.images else []
-    images.append(file_path)
+    images.append(safe_filename)
     item.images = ",".join(images)
     db.commit()
     
@@ -959,7 +1082,8 @@ async def upload_image(
         unique_filename = f"{uuid.uuid4()}.{file_extension}"
         
         # 确保上传目录存在
-        upload_dir = os.path.join("static", "uploads", "items")
+        from config import STATIC_DIR
+        upload_dir = os.path.join(STATIC_DIR, "uploads", "items")
         os.makedirs(upload_dir, exist_ok=True)
         
         # 保存文件

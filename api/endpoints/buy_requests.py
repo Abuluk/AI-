@@ -22,8 +22,8 @@ def create_buy_request_api(
     return crud_buy_request.create_buy_request(db, buy_request, user_id=current_user.id)
 
 @router.get("/", response_model=List[BuyRequestSchema])
-def list_buy_requests(skip: int = 0, limit: int = 10, user_id: int = None, db: Session = Depends(get_db)):
-    brs = crud_buy_request.get_buy_requests(db, skip=skip, limit=limit, user_id=user_id)
+def list_buy_requests(skip: int = 0, limit: int = 10, user_id: int = None, category: int = None, db: Session = Depends(get_db)):
+    brs = crud_buy_request.get_buy_requests(db, skip=skip, limit=limit, user_id=user_id, category=category)
     for br in brs:
         if br.images and isinstance(br.images, str):
             br.images = br.images.split(",")
@@ -68,7 +68,8 @@ def delete_buy_request(
 
 @router.post("/upload_image")
 async def upload_image(file: UploadFile = File(...)):
-    save_dir = os.path.join(os.getcwd(), "static", "images")
+    from config import STATIC_DIR
+    save_dir = os.path.join(STATIC_DIR, "images")
     os.makedirs(save_dir, exist_ok=True)
     file_ext = os.path.splitext(file.filename)[-1]
     save_name = f"buyreq_{int(datetime.now().timestamp())}{file_ext}"

@@ -378,13 +378,18 @@ def get_like_messages(db: Session = Depends(get_db), current_user: User = Depend
 
 @router.post("/upload-image")
 async def upload_chat_image(file: UploadFile = File(...)):
-    save_dir = os.path.join(os.getcwd(), "static", "images")
+    # 使用与main.py相同的路径计算方式
+    from config import STATIC_DIR
+    save_dir = os.path.join(STATIC_DIR, "images")
     os.makedirs(save_dir, exist_ok=True)
+    
     file_ext = os.path.splitext(file.filename)[-1]
     save_name = f"chat_{int(datetime.now().timestamp())}{file_ext}"
     save_path = os.path.join(save_dir, save_name)
+    
     with open(save_path, "wb") as f:
         f.write(await file.read())
+    
     return {"url": f"/static/images/{save_name}"}
 
 @router.post("/all-read")

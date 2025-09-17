@@ -49,6 +49,10 @@ def start_application():
 
 app = start_application()
 
+# 添加AI推荐中间件
+from core.ai_middleware import ai_middleware
+app.middleware("http")(ai_middleware)
+
 # 添加全局异常中间件
 @app.middleware("http")
 async def catch_exceptions_middleware(request: Request, call_next):

@@ -10,6 +10,7 @@ def create_buy_request(db: Session, buy_request: BuyRequestCreate, user_id: int)
         title=buy_request.title,
         description=buy_request.description,
         budget=buy_request.budget,
+        category=buy_request.category,
         user_id=user_id,
         images=images
     )
@@ -22,12 +23,16 @@ def create_buy_request(db: Session, buy_request: BuyRequestCreate, user_id: int)
         db_obj.images = []
     return db_obj
 
-def get_buy_requests(db: Session, skip=0, limit=10, user_id=None):
+def get_buy_requests(db: Session, skip=0, limit=10, user_id=None, category=None):
     query = db.query(BuyRequest).options(joinedload(BuyRequest.user))
     
     # 如果指定了user_id，则过滤该用户的求购信息
     if user_id is not None:
         query = query.filter(BuyRequest.user_id == user_id)
+    
+    # 如果指定了category，则过滤该分类的求购信息
+    if category is not None:
+        query = query.filter(BuyRequest.category == category)
     
     brs = query.order_by(BuyRequest.created_at.desc()).offset(skip).limit(limit).all()
     for br in brs:

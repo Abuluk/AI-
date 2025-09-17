@@ -7,6 +7,7 @@ class BuyRequestBase(BaseModel):
     title: str
     description: Optional[str] = None
     budget: Optional[float] = None
+    category: Optional[int] = 7  # 新增分类字段，默认为"其他"
     images: Optional[List[str]] = None
     like_count: Optional[int] = 0
 

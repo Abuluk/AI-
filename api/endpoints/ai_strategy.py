@@ -165,11 +165,17 @@ async def call_xunfei_v3_chat_async(app_id, api_key, api_secret, spark_url, prom
                     while True:
                         response = await websocket.recv()
                         response_data = json.loads(response)
-                        print(f"收到AI响应: {response_data}")
+                        
+                        # 只在调试模式下输出详细响应信息
+                        debug_mode = os.getenv("AI_DEBUG", "false").lower() == "true"
+                        if debug_mode:
+                            print(f"收到AI响应: {response_data}")
                         
                         # 检查响应状态
                         if response_data.get("header", {}).get("code") != 0:
-                            raise Exception(f"API错误: {response_data.get('header', {}).get('message', '未知错误')}")
+                            error_msg = response_data.get('header', {}).get('message', '未知错误')
+                            print(f"AI API错误: {error_msg}")
+                            raise Exception(f"API错误: {error_msg}")
                         
                         # 提取文本内容
                         if "payload" in response_data and "choices" in response_data["payload"]:
@@ -182,6 +188,7 @@ async def call_xunfei_v3_chat_async(app_id, api_key, api_secret, spark_url, prom
                         
                         # 检查是否结束
                         if response_data.get("header", {}).get("status") == 2:
+                            print("AI响应完成")
                             break
                             
             except asyncio.TimeoutError:
@@ -196,12 +203,12 @@ async def call_xunfei_v3_chat_async(app_id, api_key, api_secret, spark_url, prom
         raise Exception(f"AI调用失败: {str(e)}")
 
 @router.get("/recommendations", response_model=Dict[str, Any])
-def get_ai_recommendations(
+async def get_ai_recommendations(
     limit: int = Query(10, ge=1, le=20, description="推荐商品数量"),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user_optional)
 ):
-    """获取AI智能推荐商品列表 - 基于用户浏览行为序列"""
+    """获取AI智能推荐商品列表 - 基于用户浏览行为序列（异步并发优化版）"""
     try:
         # 获取AI推荐配置
         settings = crud_ai_recommendation.get_ai_recommendation_settings(db)
@@ -215,27 +222,16 @@ def get_ai_recommendations(
             print("用户未登录，返回基础推荐")
             return get_basic_recommendations(db, limit)
         
-        # 获取用户行为序列
-        behavior_sequence = crud_user_behavior.get_user_behavior_sequence(
-            db, current_user.id, 
-            limit=settings.get("sequence_length", 10),
-            days=settings.get("behavior_days", 30)
+        print(f"用户 {current_user.id} 请求AI推荐，数量: {limit}")
+        
+        # 使用并发优化的AI推荐服务
+        from core.ai_recommendation_service import ai_recommendation_service
+        result = await ai_recommendation_service.get_ai_recommendations(
+            db, current_user.id, limit
         )
         
-        # 如果用户行为数据不足，返回基础推荐
-        if len(behavior_sequence) < settings.get("min_behavior_count", 3):
-            print(f"用户行为数据不足: {len(behavior_sequence)} < {settings.get('min_behavior_count', 3)}")
-            return get_basic_recommendations(db, limit)
-        
-        print(f"用户行为数据充足: {len(behavior_sequence)} 条记录，开始AI分析")
-        
-        # 基于用户行为序列进行AI分析推荐
-        import asyncio
-        ai_recommendations = asyncio.run(analyze_user_behavior_and_recommend(
-            db, behavior_sequence, settings, limit
-        ))
-        
-        return ai_recommendations
+        print(f"AI推荐完成，类型: {result.get('recommendation_type', 'unknown')}")
+        return result
         
     except Exception as e:
         print(f"获取AI推荐失败: {e}")
@@ -492,6 +488,57 @@ def get_user_behavior_stats(
     except Exception as e:
         print(f"获取行为统计失败: {e}")
         raise HTTPException(status_code=500, detail="获取统计失败")
+
+@router.get("/service-stats")
+def get_ai_service_stats(
+    current_user: User = Depends(get_current_user)
+):
+    """获取AI推荐服务状态（管理员接口）"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="无权限")
+    
+    try:
+        from core.ai_recommendation_service import ai_recommendation_service
+        from core.ai_middleware import ai_middleware
+        
+        service_stats = ai_recommendation_service.get_service_stats()
+        middleware_stats = ai_middleware.get_stats()
+        
+        return {
+            "success": True,
+            "service_stats": service_stats,
+            "middleware_stats": middleware_stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        print(f"获取服务统计失败: {e}")
+        raise HTTPException(status_code=500, detail="获取服务统计失败")
+
+@router.post("/service-control")
+def control_ai_service(
+    action: str,
+    current_user: User = Depends(get_current_user)
+):
+    """AI服务控制接口（管理员接口）"""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="无权限")
+    
+    try:
+        from core.ai_middleware import ai_middleware
+        
+        if action == "reset_stats":
+            ai_middleware.reset_stats()
+            return {
+                "success": True,
+                "message": "统计信息已重置",
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=400, detail=f"不支持的操作: {action}")
+            
+    except Exception as e:
+        print(f"控制AI服务失败: {e}")
+        raise HTTPException(status_code=500, detail="控制服务失败")
 
 @router.post("/", response_model=Dict[str, Any])
 def ai_strategy(

@@ -128,6 +128,7 @@ def get_dynamically_sorted_items(
     category: Optional[int] = Query(None, description="分类ID"),
     search: Optional[str] = Query(None, description="搜索关键词"),
     location: Optional[str] = Query(None, description="地区"),
+    user_id: Optional[int] = Query(None, description="用户ID（用于获取个人展示配置）"),
     db: Session = Depends(get_db)
 ):
     """获取按动态权重排序的商品列表"""
@@ -140,6 +141,26 @@ def get_dynamically_sorted_items(
         location = None
     if category == "" or category == "undefined" or category is None:
         category = None
+    
+    # 获取商家商品展示配置
+    from crud.crud_merchant import get_merchant_display_config
+    display_frequency = 5  # 默认展示频率
+    if user_id:
+        # 获取用户个人配置
+        user_config = get_merchant_display_config(db, user_id)
+        if user_config:
+            display_frequency = user_config.display_frequency
+            print(f"智能排序使用用户个人配置: user_id={user_id}, display_frequency={display_frequency}")
+        else:
+            print(f"智能排序用户个人配置不存在: user_id={user_id}, 使用默认配置")
+    else:
+        # 获取全局默认配置
+        default_config = get_merchant_display_config(db, None)
+        if default_config:
+            display_frequency = default_config.display_frequency
+            print(f"智能排序使用全局默认配置: display_frequency={display_frequency}")
+        else:
+            print(f"智能排序全局默认配置不存在, 使用硬编码默认值: display_frequency={display_frequency}")
     
     items = crud_item_sorting.get_items_with_dynamic_sorting(
         db, skip, size, time_period, category, search, location
@@ -175,6 +196,23 @@ def get_dynamically_sorted_items(
                         processed_images.append(full_url)
             item.images = ','.join(processed_images)
     
+    # 分离普通商品和商家商品
+    normal_items = []
+    merchant_items = []
+    promoted_ids = [item.id for item in promoted_items] if promoted_items else []
+    
+    for item in items:
+        if item.id in promoted_ids:
+            continue  # 跳过推广商品
+        elif item.is_merchant_item:
+            merchant_items.append(item)
+        else:
+            normal_items.append(item)
+    
+    # 使用商家商品显示频率混合商品
+    from api.endpoints.items import get_items_with_merchant_display
+    mixed_items = get_items_with_merchant_display(normal_items, merchant_items, display_frequency, size)
+    
     # 转换为响应格式
     result = []
     
@@ -184,11 +222,8 @@ def get_dynamically_sorted_items(
         promoted_item.is_promoted = True
         result.append(_format_item_data(promoted_item, time_period, db))
     
-    # 添加智能排序的商品
-    for item in items:
-        # 跳过已经在推广商品中的商品
-        if promoted_items and any(p.id == item.id for p in promoted_items):
-            continue
+    # 添加混合后的商品
+    for item in mixed_items:
         result.append(_format_item_data(item, time_period, db))
         
         # 限制返回的商品数量

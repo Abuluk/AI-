@@ -46,7 +46,8 @@ async def update_avatar(
     filename = f"user_{current_user.id}_{uuid.uuid4().hex}.{ext}"
     
     # 保存文件
-    UPLOAD_DIR = "static/images"
+    from config import STATIC_DIR
+    UPLOAD_DIR = os.path.join(STATIC_DIR, "images")
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     file_path = os.path.join(UPLOAD_DIR, filename)
     
@@ -55,7 +56,7 @@ async def update_avatar(
     
     # 构建正确的头像URL，使用统一的图片URL处理函数
     from config import get_full_image_url
-    avatar_url = get_full_image_url(f"static/images/{filename}")
+    avatar_url = get_full_image_url(filename)
     
     # 更新用户头像
     user_update = UserUpdate(avatar=avatar_url)

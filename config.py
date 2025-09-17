@@ -6,14 +6,22 @@ from pathlib import Path
 
 # 基础配置
 BASE_DIR = Path(__file__).parent
-STATIC_DIR = BASE_DIR / "static"
+
+# 静态文件目录配置 - 支持环境变量覆盖
+STATIC_DIR = Path(os.getenv("STATIC_DIR", BASE_DIR / "static"))
+
+# 确保静态目录存在
+STATIC_DIR.mkdir(exist_ok=True)
+(STATIC_DIR / "images").mkdir(exist_ok=True)
+(STATIC_DIR / "uploads").mkdir(exist_ok=True)
+(STATIC_DIR / "uploads" / "items").mkdir(exist_ok=True)
 
 # 服务器配置
 HOST = "0.0.0.0"
 PORT = 8000
 
 # HTTPS配置
-USE_HTTPS = True
+USE_HTTPS = False
 SSL_CERT_FILE = BASE_DIR / "ssl" / "cert.pem"
 SSL_KEY_FILE = BASE_DIR / "ssl" / "key.pem"
 
@@ -44,52 +52,19 @@ def get_image_base_url():
 # 获取完整的图片URL
 def get_full_image_url(image_path):
     """
-    构建完整的图片URL，处理各种路径格式
+    构建完整的图片URL
     """
     if not image_path:
         return None
-        
-    # 如果已经是完整URL，检查是否需要修正域名
+    
+    # 如果已经是完整URL，直接返回
     if image_path.startswith('http'):
-        # 修正错误的localhost和协议
-        if 'localhost:8000' in image_path or '127.0.0.1:8000' in image_path:
-            # 提取文件名部分
-            if '/static/images/' in image_path:
-                filename = image_path.split('/static/images/')[-1]
-                base_url = get_image_base_url()
-                return f"{base_url}/{filename}"
         return image_path
     
-    # 清理路径，移除多余的前缀和斜杠
-    clean_path = image_path.strip()
+    # 提取文件名
+    filename = image_path.split('/')[-1]
     
-    # 处理反斜杠，统一为正斜杠
-    clean_path = clean_path.replace('\\', '/')
-    
-    # 如果路径已经包含static/images/，直接构建完整URL
-    if 'static/images/' in clean_path:
-        # 提取文件名部分
-        if '/static/images/' in clean_path:
-            filename = clean_path.split('/static/images/')[-1]
-        else:
-            filename = clean_path.split('static/images/')[-1]
-        base_url = get_image_base_url()
-        return f"{base_url}/{filename}"
-    
-    # 移除开头的斜杠
-    if clean_path.startswith('/'):
-        clean_path = clean_path[1:]
-    
-    # 如果路径以static/images/开头，移除这个前缀
-    if clean_path.startswith('static/images/'):
-        clean_path = clean_path[13:]
-    
-    # 构建完整URL，确保没有双斜杠
+    # 构建完整URL
     base_url = get_image_base_url()
-    if base_url.endswith('/') and clean_path.startswith('/'):
-        return f"{base_url}{clean_path[1:]}"
-    elif not base_url.endswith('/') and not clean_path.startswith('/'):
-        return f"{base_url}/{clean_path}"
-    else:
-        return f"{base_url}{clean_path}"
+    return f"{base_url}/{filename}"
 
