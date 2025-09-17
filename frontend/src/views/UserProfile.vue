@@ -132,9 +132,9 @@
             <p>暂无求购信息</p>
           </div>
           <div v-else>
-            <div v-for="buyRequest in buyRequests" :key="buyRequest.id" class="buy-request-card">
+            <div v-for="buyRequest in buyRequests" :key="buyRequest.id" class="buy-request-card" @click="goToBuyRequestDetail(buyRequest.id)">
               <div class="buy-request-main">
-                <img :src="getBuyRequestImage(buyRequest.images)" :alt="buyRequest.title" class="buy-request-img">
+                <img v-if="hasBuyRequestImage(buyRequest.images)" :src="getBuyRequestImage(buyRequest.images)" :alt="buyRequest.title" class="buy-request-img">
                 <div class="buy-request-info">
                   <h4>{{ buyRequest.title }}</h4>
                   <div class="budget">预算：<span class="price">¥{{ buyRequest.budget }}</span></div>
@@ -328,6 +328,11 @@ const startChat = () => {
   router.push(`/chat/${props.id}/${props.id}/user`)
 }
 
+// 跳转到求购详情
+const goToBuyRequestDetail = (id) => {
+  router.push(`/buy-request/${id}`)
+}
+
 // 工具函数
 const getUserAvatar = (avatar) => {
   if (!avatar || avatar.includes('default')) {
@@ -358,15 +363,26 @@ const formatDateTime = (datetime) => {
   return `${y}-${m}-${d} ${h}:${min}`
 }
 
-const getBuyRequestImage = (images) => {
-  if (!images) return '/static/images/default_product.png'
+const hasBuyRequestImage = (images) => {
+  if (!images) return false
   let img = ''
   if (typeof images === 'string') {
     img = images.split(',')[0]
   } else if (Array.isArray(images)) {
     img = images[0]
   }
-  if (!img) return '/static/images/default_product.png'
+  return !!img
+}
+
+const getBuyRequestImage = (images) => {
+  if (!images) return null
+  let img = ''
+  if (typeof images === 'string') {
+    img = images.split(',')[0]
+  } else if (Array.isArray(images)) {
+    img = images[0]
+  }
+  if (!img) return null
   if (img.startsWith('http')) return img
   if (img.startsWith('/static')) return 'http://127.0.0.1:8000' + img
   return 'http://127.0.0.1:8000/static/images/' + img
@@ -595,6 +611,15 @@ onMounted(() => {
   padding: 16px;
   margin-bottom: 18px;
   gap: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.buy-request-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+  border-color: #3498db;
 }
 
 .buy-request-main {
@@ -616,24 +641,42 @@ onMounted(() => {
 
 .buy-request-info {
   flex: 1;
+  min-width: 0; /* 防止内容溢出 */
 }
 
 .buy-request-info h4 {
   margin: 0 0 8px 0;
-  font-size: 1.1rem;
-  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c3e50;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.budget {
+  font-size: 14px;
+  margin: 4px 0;
 }
 
 .budget .price {
   color: #e74c3c;
   font-weight: bold;
   margin-left: 4px;
+  font-size: 16px;
 }
 
 .desc {
-  color: #666;
+  color: #7f8c8d;
+  font-size: 14px;
+  line-height: 1.4;
   margin: 8px 0;
-  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .meta {
@@ -641,8 +684,17 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-top: 8px;
-  font-size: 0.9rem;
-  color: #999;
+  font-size: 12px;
+  color: #95a5a6;
+}
+
+.meta .time {
+  flex: 1;
+}
+
+.meta .likes {
+  color: #3498db;
+  font-weight: 500;
 }
 
 .btn {

@@ -265,19 +265,15 @@
         <div v-else-if="activeTab === 'buy_requests'" class="tab-content">
           <div class="section-header">
             <h3>我的求购</h3>
-            <router-link to="/publish-buy-request" class="btn btn-primary">
-              <i class="fas fa-plus"></i> 发布求购
-            </router-link>
           </div>
           <div v-if="myBuyRequests.length === 0" class="empty-state">
             <i class="fas fa-shopping-cart"></i>
             <p>暂无求购信息</p>
-            <router-link to="/publish-buy-request" class="btn btn-outline">发布求购</router-link>
           </div>
           <div v-else>
-            <div v-for="buyRequest in myBuyRequests" :key="buyRequest.id" class="buy-request-card">
+            <div v-for="buyRequest in myBuyRequests" :key="buyRequest.id" class="buy-request-card" @click="goToBuyRequestDetail(buyRequest.id)">
               <div class="buy-request-main">
-                <img :src="getBuyRequestImage(buyRequest.images)" :alt="buyRequest.title" class="buy-request-img">
+                <img v-if="hasBuyRequestImage(buyRequest.images)" :src="getBuyRequestImage(buyRequest.images)" :alt="buyRequest.title" class="buy-request-img">
                 <div class="buy-request-info">
                   <h4>{{ buyRequest.title }}</h4>
                   <div class="budget">预算：<span class="price">¥{{ buyRequest.budget }}</span></div>
@@ -287,7 +283,7 @@
                     <span class="likes">👍 {{ buyRequest.like_count || 0 }}</span>
                   </div>
                 </div>
-                <div class="buy-request-actions">
+                <div class="buy-request-actions" @click.stop>
                   <button class="btn btn-primary btn-sm" @click="handleEditBuyRequest(buyRequest.id)">编辑</button>
                   <button class="btn btn-outline btn-sm" @click="handleDeleteBuyRequest(buyRequest.id)">删除</button>
                 </div>
@@ -1788,6 +1784,10 @@ const handleEditBuyRequest = (id) => {
   router.push(`/publish-buy-request?edit=${id}`);
 }
 
+const goToBuyRequestDetail = (id) => {
+  router.push(`/buy-request/${id}`);
+}
+
 onMounted(() => {
   // 支持通过URL参数tab自动切换
   if (route.query.tab && ['selling','sold','favorites','buy_requests'].includes(route.query.tab)) {
@@ -1801,15 +1801,26 @@ watch(() => route.query.tab, (newTab) => {
   }
 })
 
-const getBuyRequestImage = (images) => {
-  if (!images) return '/static/images/default_product.png'
+const hasBuyRequestImage = (images) => {
+  if (!images) return false
   let img = ''
   if (typeof images === 'string') {
     img = images.split(',')[0]
   } else if (Array.isArray(images)) {
     img = images[0]
   }
-  if (!img) return '/static/images/default_product.png'
+  return !!img
+}
+
+const getBuyRequestImage = (images) => {
+  if (!images) return null
+  let img = ''
+  if (typeof images === 'string') {
+    img = images.split(',')[0]
+  } else if (Array.isArray(images)) {
+    img = images[0]
+  }
+  if (!img) return null
   // 如果是完整URL，直接返回
   if (img.startsWith('http')) return img
   // 如果是以/static开头，补全域名
@@ -3040,6 +3051,15 @@ const saveDisplaySettings = async () => {
   padding: 16px;
   margin-bottom: 18px;
   gap: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.buy-request-card:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+  border-color: #3498db;
 }
 .buy-request-main {
   display: flex;
@@ -3058,11 +3078,59 @@ const saveDisplaySettings = async () => {
 }
 .buy-request-info {
   flex: 1;
+  min-width: 0; /* 防止内容溢出 */
 }
+
+.buy-request-info h4 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c3e50;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.buy-request-info .desc {
+  color: #7f8c8d;
+  font-size: 14px;
+  line-height: 1.4;
+  margin: 8px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.budget {
+  font-size: 14px;
+  margin: 4px 0;
+}
+
 .budget .price {
   color: #e74c3c;
   font-weight: bold;
   margin-left: 4px;
+  font-size: 16px;
+}
+
+.buy-request-info .meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #95a5a6;
+}
+
+.buy-request-info .meta .time {
+  flex: 1;
+}
+
+.buy-request-info .meta .likes {
+  color: #3498db;
+  font-weight: 500;
 }
 .btn-sm {
   padding: 4px 12px;
