@@ -11,6 +11,8 @@
         <div v-else-if="product.sold" class="sold-badge">已售出</div>
         <!-- 添加推广标识 -->
         <div v-if="product.is_promoted" class="promotion-badge">推广</div>
+        <!-- 添加大数据推荐标识 -->
+        <div v-if="product.is_bigdata_recommended" class="bigdata-badge">大数据推荐</div>
       </div>
       
       <div class="product-info">
@@ -298,6 +300,19 @@ export default {
   padding: 3px 8px;
   border-radius: 4px;
   font-size: 0.8rem;
+}
+
+.bigdata-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
 .stats {

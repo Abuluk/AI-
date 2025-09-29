@@ -53,6 +53,11 @@ class ItemInDB(ItemBase):
     owner: Optional[UserBase] = None  # 新增：嵌套用户信息
     is_merchant_item: Optional[bool] = False  # 是否为商家商品
     is_promoted: Optional[bool] = False  # 是否为推广商品
+    # 大数据推荐相关字段
+    is_bigdata_recommended: Optional[bool] = False  # 是否为大数据推荐商品
+    recommendation_source: Optional[str] = None  # 推荐来源
+    recommendation_algorithm: Optional[str] = None  # 推荐算法
+    recommendation_reason: Optional[str] = None  # 推荐原因
     
     class Config:
         from_attributes = True

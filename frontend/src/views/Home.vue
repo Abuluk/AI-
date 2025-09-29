@@ -88,6 +88,7 @@
               <select v-model="sortOption">
                 <option value="default">综合排序</option>
                 <option value="dynamic_sort">智能排序</option>
+                <option value="bigdata_recommendation">大数据推荐</option>
                 <option value="price_asc">价格从低到高</option>
                 <option value="price_desc">价格从高到低</option>
                 <option value="newest">最新发布</option>
@@ -255,7 +256,7 @@ export default {
   },
   data() {
     return {
-      sortOption: 'newest',
+      sortOption: 'default',
       products: [],
       loading: false,
       error: null,
@@ -351,6 +352,13 @@ export default {
     },
     sortOption: {
       handler() {
+        // 如果选择大数据推荐但用户未登录，提示登录
+        if (this.sortOption === 'bigdata_recommendation' && !this.authStore.user) {
+          alert('大数据推荐需要登录后才能使用，请先登录！');
+          this.sortOption = 'default'; // 重置为默认排序
+          return;
+        }
+        
         this.pagination.page = 1;
         this.hasMore = true;
         this.fetchSellingItems();
@@ -396,7 +404,9 @@ export default {
           location: this.selectedLocation,
           category: this.selectedCategory ? Number(this.selectedCategory) : undefined,
           status: 'online', // 只获取在售商品
-          sold: false // 只获取未售出商品
+          sold: false, // 只获取未售出商品
+          // 为大数据推荐添加用户ID
+          user_id: this.authStore.user?.id
         };
         
         // 如果是第一页且没有搜索条件，优先获取推广商品
@@ -460,6 +470,15 @@ export default {
         } else {
           response = await api.getItems(params);
         }
+        
+        // 检查大数据推荐的错误响应
+        if (this.sortOption === 'bigdata_recommendation' && response.data && response.data.error) {
+          alert(response.data.message || '大数据推荐需要登录后才能使用！');
+          this.sortOption = 'default'; // 重置为默认排序
+          this.fetchSellingItems(); // 重新获取默认排序的商品
+          return;
+        }
+        
         let items = response.data;
         
         // 过滤掉已售出和下架的商品
@@ -502,6 +521,7 @@ export default {
         case 'price_asc': return 'price_asc';
         case 'price_desc': return 'price_desc';
         case 'dynamic_sort': return 'dynamic_sort';
+        case 'bigdata_recommendation': return 'bigdata_recommendation';
         default: return 'created_at_desc';
       }
     },

@@ -375,7 +375,7 @@ def get_items_with_promoted(
     return result[:size]
 
 # 公共端点 - 获取所有商品（无需认证）
-@router.get("", response_model=List[ItemInDB])
+@router.get("")
 def get_all_items(
     # 支持小程序前端的参数格式
     page: Optional[int] = Query(None, ge=1, description="页码（小程序前端）"),
@@ -387,7 +387,7 @@ def get_all_items(
     # 支持web前端的原有参数格式
     skip: Optional[int] = Query(None, ge=0, description="跳过数量（web前端）"),
     limit: Optional[int] = Query(None, ge=1, le=100, description="限制数量（web前端）"),
-    order_by: Optional[str] = Query(None, description="排序方式（web前端）: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎), dynamic_sort(动态排序)"),
+    order_by: Optional[str] = Query(None, description="排序方式（web前端）: created_at_desc(最新发布), price_asc(价格从低到高), price_desc(价格从高到低), views_desc(最受欢迎), dynamic_sort(动态排序), bigdata_recommendation(大数据推荐)"),
     exclude_promoted: Optional[bool] = Query(None, description="是否排除推广商品"),
     status: Optional[str] = Query(None, description="商品状态: online, offline"),
     sold: Optional[bool] = Query(None, description="是否已售出"),
@@ -400,6 +400,7 @@ def get_all_items(
     1. 小程序前端：page, size, sort_by, category, search
     2. web前端：skip, limit, order_by, exclude_promoted, status, sold
     """
+    print(f">>>>>>> API入口: order_by={order_by}, user_id={user_id}")
     # 参数转换：优先使用web前端参数，如果没有则转换小程序前端参数
     if skip is None and page is not None:
         skip = (page - 1) * (size or 10)
@@ -426,6 +427,8 @@ def get_all_items(
     # 设置默认排序
     if order_by is None:
         order_by = "created_at_desc"
+    
+    print(f">>>>>>> 最终排序参数: order_by={order_by}, user_id={user_id}, limit={limit}")
     
     # 获取商家商品展示配置
     display_frequency = 5  # 默认展示频率
@@ -498,6 +501,7 @@ def get_all_items(
                 print(f"解析推广商品配置失败: {e}")
     
     # 排序
+    print(f"排序参数: order_by={order_by}, user_id={user_id}")
     if order_by == "dynamic_sort":
         # 使用动态排序算法
         category_id = None
@@ -566,6 +570,92 @@ def get_all_items(
                 "is_promoted": getattr(item, 'is_promoted', False),
                 "owner": owner_info
             }
+            
+            result.append(item_dict)
+        
+        return result
+    elif order_by == "bigdata_recommendation":
+        # 使用大数据推荐排序
+        print(f">>>>>>> 进入大数据推荐分支，用户ID: {user_id}")
+        print(f">>>>>>> 这是大数据推荐分支的开始")
+        from core.bigdata_recommendation_service import bigdata_recommendation_service
+        
+        # 如果没有用户ID，返回空结果
+        if not user_id:
+            print(">>>>>>> 大数据推荐需要用户ID，返回空结果")
+            return {
+                "error": "大数据推荐需要用户登录",
+                "message": "请先登录后再使用大数据推荐功能",
+                "items": []
+            }
+        
+        print(f">>>>>>> 开始获取用户 {user_id} 的推荐商品")
+        
+        # 获取推荐商品
+        recommended_items = bigdata_recommendation_service.get_recommended_items(
+            db, user_id, limit
+        )
+        print(f">>>>>>> 获取到 {len(recommended_items)} 个推荐商品")
+        
+        # 转换为字典格式，添加推荐标识
+        result = []
+        for item in recommended_items:
+            # 处理图片路径
+            processed_images = ""
+            if item.images:
+                images = item.images.split(',')
+                processed_image_list = []
+                for img in images:
+                    img = img.strip()
+                    if img:
+                        full_url = get_full_image_url(img)
+                        if full_url:
+                            processed_image_list.append(full_url)
+                processed_images = ','.join(processed_image_list)
+            
+            # 在数据库会话内获取owner信息
+            owner_info = None
+            avatar_url = None
+            if hasattr(item, 'owner') and item.owner:
+                try:
+                    # 确保在数据库会话内访问owner属性
+                    avatar_url = get_full_image_url(item.owner.avatar) if item.owner.avatar else None
+                    owner_info = {
+                        "id": item.owner.id,
+                        "username": item.owner.username,
+                        "avatar": avatar_url
+                    }
+                except Exception as e:
+                    print(f"获取owner信息失败: {e}")
+                    owner_info = None
+            
+            item_dict = {
+                "id": item.id,
+                "title": item.title,
+                "description": item.description,
+                "price": item.price,
+                "category": item.category,
+                "location": item.location,
+                "condition": item.condition,
+                "images": processed_images,
+                "status": item.status,
+                "sold": item.sold,
+                "created_at": item.created_at,
+                "views": item.views,
+                "like_count": item.like_count or 0,
+                "owner_id": item.owner_id,
+                "favorited_count": item.favorited_count or 0,
+                "is_merchant_item": item.is_merchant_item or False,
+                "is_promoted": getattr(item, 'is_promoted', False),
+                "owner": owner_info,
+                # 添加大数据推荐标识
+                "is_bigdata_recommended": True,
+                "recommendation_source": "bigdata",
+                "recommendation_algorithm": "als",
+                "recommendation_reason": "基于大数据分析推荐"
+            }
+            
+            print(f">>>>>>> 设置推荐标识: item_id={item.id}, is_bigdata_recommended={item_dict['is_bigdata_recommended']}")
             
             result.append(item_dict)
         
