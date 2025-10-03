@@ -22,9 +22,9 @@ class AIHadoopClient:
         health_endpoints = [
             "/",
             "/health", 
-            "/api/v1/ai_recommendations/",
-            "/api/v1/ai_strategy/",
-            "/docs"
+            "/ai_recommendations/1",
+            "/recommendations/ai/1",
+            "/api/v1/ai_recommendations/1"
         ]
         
         for endpoint in health_endpoints:
@@ -53,10 +53,10 @@ class AIHadoopClient:
             # 尝试多个可能的AI推荐API端点
             endpoints_to_test = [
                 f"/api/v1/ai_recommendations/{user_id}",
-                f"/api/v1/ai_strategy/recommendations/{user_id}",
                 f"/ai_recommendations/{user_id}",
                 f"/recommendations/ai/{user_id}",
                 f"/api/v1/ai_recommendations?user_id={user_id}&limit={limit}",
+                # 注意：不再尝试 /api/v1/ai_strategy/recommendations/{user_id} 避免与传统推荐混淆
             ]
             
             for endpoint in endpoints_to_test:

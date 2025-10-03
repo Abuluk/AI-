@@ -133,8 +133,8 @@ object AIEnhancedRecommendationEngine {
       // 先删除旧目录
       try {
         val fs = org.apache.hadoop.fs.FileSystem.get(spark.sparkContext.hadoopConfiguration)
-        fs.delete(new org.apache.hadoop.fs.Path("/data/output/user_item_scores"), true)
-        fs.delete(new org.apache.hadoop.fs.Path("/data/output/recommendation_snapshots"), true)
+        fs.delete(new org.apache.hadoop.fs.Path("/data/output/user_item_scores_ai"), true)
+        fs.delete(new org.apache.hadoop.fs.Path("/data/output/recommendation_snapshots_ai"), true)
       } catch {
         case e: Exception => println(s"删除旧目录失败: ${e.getMessage}")
       }
@@ -145,7 +145,7 @@ object AIEnhancedRecommendationEngine {
         .option("sep", ",")
         .option("header", "true")
         .mode("overwrite")
-        .csv("hdfs://hadoop01:9000/data/output/user_item_scores")
+        .csv("hdfs://hadoop01:9000/data/output/user_item_scores_ai")
       
       recommendationSnapshots
         .coalesce(1)
@@ -153,7 +153,7 @@ object AIEnhancedRecommendationEngine {
         .option("sep", ",")
         .option("header", "true")
         .mode("overwrite")
-        .csv("hdfs://hadoop01:9000/data/output/recommendation_snapshots")
+        .csv("hdfs://hadoop01:9000/data/output/recommendation_snapshots_ai")
       
       // 10. 显示AI增强结果统计
       println("=== AI增强推荐处理完成 ===")
@@ -161,8 +161,8 @@ object AIEnhancedRecommendationEngine {
       println(s"AI增强推荐快照记录数: ${recommendationSnapshots.count()}")
       println(s"算法: AI增强ALS (rank=15, maxIter=10)")
       println(s"数据源: MySQL + AI特征增强")
-      println(s"用户评分数据保存到: /data/output/user_item_scores")
-      println(s"推荐快照保存到: /data/output/recommendation_snapshots")
+      println(s"AI增强用户评分数据保存到: /data/output/user_item_scores_ai")
+      println(s"AI增强推荐快照保存到: /data/output/recommendation_snapshots_ai")
       
     } catch {
       case e: Exception =>

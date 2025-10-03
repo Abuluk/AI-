@@ -82,6 +82,7 @@ main() {
     log "检查AI特征输出..."
     check_hdfs_path "/data/features/ai_enhanced" || error_exit "AI特征目录不存在"
     check_hdfs_path "/data/output/user_item_scores_ai" || error_exit "AI评分数据目录不存在"
+    check_hdfs_path "/data/output/recommendation_snapshots_ai" || error_exit "AI推荐快照目录不存在"
     
     # 5. 运行AI增强推荐算法
     log "运行AI增强推荐算法..."
@@ -110,7 +111,7 @@ main() {
     hadoop fs -cp /data/features/ai_enhanced /data/backup/ai_$backup_timestamp/ || log "WARNING: AI特征备份失败"
     hadoop fs -cp /data/output/user_item_scores_ai /data/backup/ai_$backup_timestamp/ || log "WARNING: AI评分备份失败"
     hadoop fs -cp /data/output/user_item_scores /data/backup/ai_$backup_timestamp/ || log "WARNING: 用户评分备份失败"
-    hadoop fs -cp /data/output/recommendation_snapshots /data/backup/ai_$backup_timestamp/ || log "WARNING: 推荐快照备份失败"
+    hadoop fs -cp /data/output/recommendation_snapshots_ai /data/backup/ai_$backup_timestamp/ || log "WARNING: AI推荐快照备份失败"
     
     log "AI增强推荐系统数据处理流水线完成！"
     
@@ -119,27 +120,31 @@ main() {
     echo "=== 数据源 ==="
     echo "数据来源: MySQL (ershou.user_behaviors, item_likes, favorites)"
     echo "AI特征路径: /data/features/ai_enhanced"
-    echo "推荐结果路径: /data/output/recommendation_snapshots"
-    echo "用户评分路径: /data/output/user_item_scores"
+    echo "AI推荐结果路径: /data/output/recommendation_snapshots_ai"
+    echo "AI用户评分路径: /data/output/user_item_scores_ai"
+    echo "传统推荐结果路径: /data/output/recommendation_snapshots"
+    echo "传统用户评分路径: /data/output/user_item_scores"
     
     echo "=== 处理结果 ==="
     hadoop fs -test -e "/data/features/ai_enhanced/_SUCCESS" 2>/dev/null && echo "AI特征生成: ✓ 成功" || echo "AI特征生成: ✗ 失败"
-    hadoop fs -test -e "/data/output/recommendation_snapshots/_SUCCESS" 2>/dev/null && echo "推荐快照生成: ✓ 成功" || echo "推荐快照生成: ✗ 失败"
-    hadoop fs -test -e "/data/output/user_item_scores/_SUCCESS" 2>/dev/null && echo "用户评分生成: ✓ 成功" || echo "用户评分生成: ✗ 失败"
+    hadoop fs -test -e "/data/output/recommendation_snapshots_ai/_SUCCESS" 2>/dev/null && echo "AI推荐快照生成: ✓ 成功" || echo "AI推荐快照生成: ✗ 失败"
+    hadoop fs -test -e "/data/output/user_item_scores_ai/_SUCCESS" 2>/dev/null && echo "AI用户评分生成: ✓ 成功" || echo "AI用户评分生成: ✗ 失败"
     
     echo "=== 数据统计 ==="
     echo "AI特征数据:"
     hadoop fs -count "/data/features/ai_enhanced" 2>/dev/null || echo "无法统计AI特征数据"
-    echo "推荐快照数据:"
-    hadoop fs -count "/data/output/recommendation_snapshots" 2>/dev/null || echo "无法统计推荐快照数据"
-    echo "用户评分数据:"
-    hadoop fs -count "/data/output/user_item_scores" 2>/dev/null || echo "无法统计用户评分数据"
+    echo "AI推荐快照数据:"
+    hadoop fs -count "/data/output/recommendation_snapshots_ai" 2>/dev/null || echo "无法统计AI推荐快照数据"
+    echo "AI用户评分数据:"
+    hadoop fs -count "/data/output/user_item_scores_ai" 2>/dev/null || echo "无法统计AI用户评分数据"
     
     echo "=== 下一步 ==="
     echo "1. 查看AI特征: hadoop fs -ls /data/features/ai_enhanced"
-    echo "2. 查看推荐快照: hadoop fs -ls /data/output/recommendation_snapshots"
-    echo "3. 查看用户评分: hadoop fs -ls /data/output/user_item_scores"
-    echo "4. 查看推荐内容: hadoop fs -cat /data/output/recommendation_snapshots/part-*.csv"
+    echo "2. 查看AI推荐快照: hadoop fs -ls /data/output/recommendation_snapshots_ai"
+    echo "3. 查看AI用户评分: hadoop fs -ls /data/output/user_item_scores_ai"
+    echo "4. 查看AI推荐内容: hadoop fs -cat /data/output/recommendation_snapshots_ai/part-*.csv"
+    echo "5. 查看传统推荐快照: hadoop fs -ls /data/output/recommendation_snapshots"
+    echo "6. 查看传统用户评分: hadoop fs -ls /data/output/user_item_scores"
 }
 
 # 显示使用说明
