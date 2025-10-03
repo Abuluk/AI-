@@ -323,16 +323,48 @@ def get_user_conversations(db: Session, user_id: int) -> List[Dict[str, Any]]:
         })
     # ----------- 用户私聊对话 -----------
     # 查询所有与当前用户相关的私聊消息
-    user_chat_msgs = db.query(Message).filter(
+    # 首先获取当前用户的用户名，因为target_user字段可能存储用户名
+    current_user = db.query(User).filter(User.id == user_id).first()
+    if not current_user:
+        return output
+        
+    # 分别查询我发送的消息和发给我的消息，避免重复
+    # 1. 我发送的消息（target_user字段存储对方用户ID或用户名）
+    sent_messages = db.query(Message).filter(
         Message.is_system == False,
         Message.target_user.isnot(None),
-        or_(Message.user_id == user_id, Message.target_user == str(user_id))
+        Message.user_id == user_id
     ).all()
+    
+    # 2. 发给我的消息（target_user字段存储我的用户ID或用户名）
+    received_messages = db.query(Message).filter(
+        Message.is_system == False,
+        Message.target_user.isnot(None),
+        Message.user_id != user_id,
+        or_(
+            Message.target_user == str(user_id),  # target_user存储的是用户ID
+            Message.target_user == current_user.username  # target_user存储的是用户名
+        )
+    ).all()
+    
+    # 合并消息列表
+    user_chat_msgs = sent_messages + received_messages
+    
     # 用frozenset({user_id, target_user})去重，分组
     chat_pairs = {}
     for msg in user_chat_msgs:
         uid1 = msg.user_id
-        uid2 = int(msg.target_user)
+        
+        # 处理target_user字段，可能是用户ID或用户名
+        try:
+            uid2 = int(msg.target_user)
+        except ValueError:
+            # 如果是用户名，通过用户名查找用户ID
+            target_user = db.query(User).filter(User.username == msg.target_user).first()
+            if not target_user:
+                continue  # 跳过无效的用户名
+            uid2 = target_user.id
+            
         if uid1 == uid2:
             continue  # 跳过自己给自己发的
         pair = frozenset([uid1, uid2])

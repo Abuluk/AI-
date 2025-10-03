@@ -13,7 +13,7 @@ class BigDataRecommendationService:
     def __init__(self, hadoop_ip="192.168.174.128", hadoop_port=8080):
         self.hadoop_base_url = f"http://{hadoop_ip}:{hadoop_port}"
         self.cache = {}  # 简单的内存缓存
-        self.cache_ttl = 300  # 缓存5分钟
+        self.cache_ttl = 1200  # 缓存20分钟（大数据推荐相对稳定）
     
     def get_recommendations(self, user_id: int, limit: int = 10) -> Dict[str, Any]:
         """获取大数据推荐结果"""
@@ -38,6 +38,10 @@ class BigDataRecommendationService:
                 
                 # 缓存结果
                 self.cache[cache_key] = (result, time.time())
+                print(f"大数据推荐结果已缓存: user_id={user_id}, 缓存时间={self.cache_ttl}秒")
+                
+                # 清理过期缓存
+                self._cleanup_cache()
                 return result
             else:
                 print(f"大数据推荐失败: user_id={user_id}, 状态码={response.status_code}")
@@ -89,6 +93,21 @@ class BigDataRecommendationService:
         except Exception as e:
             print(f"获取推荐商品失败: {e}")
             return []
+    
+    def _cleanup_cache(self):
+        """清理过期的缓存"""
+        current_time = time.time()
+        expired_keys = []
+        
+        for cache_key, (cached_data, timestamp) in self.cache.items():
+            if current_time - timestamp >= self.cache_ttl:
+                expired_keys.append(cache_key)
+        
+        for key in expired_keys:
+            del self.cache[key]
+        
+        if expired_keys:
+            print(f"清理了 {len(expired_keys)} 个过期的大数据推荐缓存")
     
     def test_connection(self) -> bool:
         """测试与Hadoop服务的连接"""

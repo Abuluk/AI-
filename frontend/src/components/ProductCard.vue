@@ -13,6 +13,8 @@
         <div v-if="product.is_promoted" class="promotion-badge">推广</div>
         <!-- 添加大数据推荐标识 -->
         <div v-if="product.is_bigdata_recommended" class="bigdata-badge">大数据推荐</div>
+        <!-- 添加AI增强推荐标识 -->
+        <div v-if="product.is_ai_recommended" class="ai-badge">AI增强推荐</div>
       </div>
       
       <div class="product-info">
@@ -313,6 +315,30 @@ export default {
   font-size: 0.8rem;
   font-weight: bold;
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.ai-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: linear-gradient(45deg, #ff6b35 0%, #f7931e 50%, #ffd23f 100%);
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  animation: ai-glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes ai-glow {
+  from {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3), 0 0 10px rgba(255, 107, 53, 0.5);
+  }
+  to {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3), 0 0 20px rgba(255, 107, 53, 0.8);
+  }
 }
 
 .stats {

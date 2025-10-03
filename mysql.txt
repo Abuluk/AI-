@@ -1,0 +1,187 @@
++------------------------------+-------------------------+----------+-------+------+-----+-------------------+-------------------+
+| 表                           | 字段                    | 类型     | 长度  | 可空 | 键  | 默认值            | 额外              |
++------------------------------+-------------------------+----------+-------+------+-----+-------------------+-------------------+
+| ai_recommendation_configs    | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| ai_recommendation_configs    | config_key              | varchar  |   100 | NO   | UNI | NULL              |                   |
+| ai_recommendation_configs    | config_value            | json     |  NULL | YES  |     | NULL              |                   |
+| ai_recommendation_configs    | description             | varchar  |   500 | YES  |     | NULL              |                   |
+| ai_recommendation_configs    | is_active               | tinyint  |  NULL | YES  |     | NULL              |                   |
+| ai_recommendation_configs    | created_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| ai_recommendation_configs    | updated_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| alembic_version              | version_num             | varchar  |    32 | NO   | PRI | NULL              |                   |
+| blacklist                    | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| blacklist                    | user_id                 | int      |  NULL | NO   | MUL | NULL              |                   |
+| blacklist                    | blocked_user_id         | int      |  NULL | NO   | MUL | NULL              |                   |
+| blacklist                    | created_at              | datetime |  NULL | YES  |     | NULL              |                   |
+| buy_request_likes            | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| buy_request_likes            | user_id                 | int      |  NULL | YES  | MUL | NULL              |                   |
+| buy_request_likes            | buy_request_id          | int      |  NULL | YES  | MUL | NULL              |                   |
+| buy_request_likes            | created_at              | datetime |  NULL | YES  |     | CURRENT_TIMESTAMP | DEFAULT_GENERATED |
+| buy_requests                 | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| buy_requests                 | user_id                 | int      |  NULL | NO   | MUL | NULL              |                   |
+| buy_requests                 | title                   | varchar  |   100 | NO   |     | NULL              |                   |
+| buy_requests                 | description             | text     | 65535 | YES  |     | NULL              |                   |
+| buy_requests                 | budget                  | decimal  |  NULL | YES  |     | NULL              |                   |
+| buy_requests                 | created_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| buy_requests                 | images                  | varchar  |   500 | YES  |     | NULL              |                   |
+| buy_requests                 | like_count              | int      |  NULL | YES  |     | 0                 |                   |
+| buy_requests                 | category                | int      |  NULL | YES  |     | 7                 |                   |
+| comment_likes                | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| comment_likes                | user_id                 | int      |  NULL | YES  | MUL | NULL              |                   |
+| comment_likes                | comment_id              | int      |  NULL | YES  | MUL | NULL              |                   |
+| comment_likes                | created_at              | datetime |  NULL | YES  |     | CURRENT_TIMESTAMP | DEFAULT_GENERATED |
+| comments                     | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| comments                     | content                 | varchar  |   500 | NO   |     | NULL              |                   |
+| comments                     | user_id                 | int      |  NULL | YES  | MUL | NULL              |                   |
+| comments                     | item_id                 | int      |  NULL | YES  | MUL | NULL              |                   |
+| comments                     | buy_request_id          | int      |  NULL | YES  | MUL | NULL              |                   |
+| comments                     | parent_id               | int      |  NULL | YES  | MUL | NULL              |                   |
+| comments                     | reply_to_user_id        | int      |  NULL | YES  | MUL | NULL              |                   |
+| comments                     | created_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| comments                     | like_count              | int      |  NULL | YES  |     | 0                 |                   |
+| favorites                    | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| favorites                    | user_id                 | int      |  NULL | YES  | MUL | NULL              |                   |
+| favorites                    | item_id                 | int      |  NULL | YES  | MUL | NULL              |                   |
+| favorites                    | created_at              | datetime |  NULL | YES  |     | NULL              |                   |
+| feedbacks                    | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| feedbacks                    | user_id                 | int      |  NULL | NO   | MUL | NULL              |                   |
+| feedbacks                    | content                 | varchar  |  1000 | NO   |     | NULL              |                   |
+| feedbacks                    | status                  | varchar  |    20 | YES  |     | NULL              |                   |
+| feedbacks                    | created_at              | datetime |  NULL | YES  |     | NULL              |                   |
+| feedbacks                    | solved_at               | datetime |  NULL | YES  |     | NULL              |                   |
+| friends                      | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| friends                      | user_id                 | int      |  NULL | NO   | MUL | NULL              |                   |
+| friends                      | friend_id               | int      |  NULL | NO   | MUL | NULL              |                   |
+| friends                      | created_at              | datetime |  NULL | YES  |     | NULL              |                   |
+| item_likes                   | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| item_likes                   | user_id                 | int      |  NULL | YES  | MUL | NULL              |                   |
+| item_likes                   | item_id                 | int      |  NULL | YES  | MUL | NULL              |                   |
+| item_likes                   | created_at              | datetime |  NULL | YES  |     | CURRENT_TIMESTAMP | DEFAULT_GENERATED |
+| item_sorting_metrics         | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| item_sorting_metrics         | item_id                 | int      |  NULL | NO   | MUL | NULL              |                   |
+| item_sorting_metrics         | time_window_start       | datetime |  NULL | NO   |     | NULL              |                   |
+| item_sorting_metrics         | time_window_end         | datetime |  NULL | NO   |     | NULL              |                   |
+| item_sorting_metrics         | views_count             | int      |  NULL | YES  |     | NULL              |                   |
+| item_sorting_metrics         | likes_count             | int      |  NULL | YES  |     | NULL              |                   |
+| item_sorting_metrics         | favorites_count         | int      |  NULL | YES  |     | NULL              |                   |
+| item_sorting_metrics         | messages_count          | int      |  NULL | YES  |     | NULL              |                   |
+| item_sorting_metrics         | seller_activity_score   | float    |  NULL | YES  |     | NULL              |                   |
+| item_sorting_metrics         | position_rank           | int      |  NULL | YES  |     | NULL              |                   |
+| item_sorting_metrics         | created_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| item_sorting_weights         | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| item_sorting_weights         | item_id                 | int      |  NULL | NO   | MUL | NULL              |                   |
+| item_sorting_weights         | time_period             | varchar  |    20 | NO   |     | NULL              |                   |
+| item_sorting_weights         | base_weight             | float    |  NULL | YES  |     | NULL              |                   |
+| item_sorting_weights         | trend_weight            | float    |  NULL | YES  |     | NULL              |                   |
+| item_sorting_weights         | position_weight         | float    |  NULL | YES  |     | NULL              |                   |
+| item_sorting_weights         | final_weight            | float    |  NULL | YES  |     | NULL              |                   |
+| item_sorting_weights         | ranking_position        | int      |  NULL | YES  |     | NULL              |                   |
+| item_sorting_weights         | created_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| items                        | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| items                        | title                   | varchar  |   100 | NO   |     | NULL              |                   |
+| items                        | description             | text     | 65535 | YES  |     | NULL              |                   |
+| items                        | price                   | float    |  NULL | NO   |     | NULL              |                   |
+| items                        | condition               | varchar  |    20 | YES  |     | NULL              |                   |
+| items                        | location                | varchar  |   100 | YES  |     | NULL              |                   |
+| items                        | images                  | varchar  |   500 | YES  |     | NULL              |                   |
+| items                        | owner_id                | int      |  NULL | YES  | MUL | NULL              |                   |
+| items                        | created_at              | datetime |  NULL | NO   |     | CURRENT_TIMESTAMP | DEFAULT_GENERATED |
+| items                        | sold                    | tinyint  |  NULL | YES  |     | NULL              |                   |
+| items                        | views                   | int      |  NULL | YES  |     | NULL              |                   |
+| items                        | favorited_count         | int      |  NULL | YES  |     | NULL              |                   |
+| items                        | status                  | varchar  |    20 | NO   |     | online            |                   |
+| items                        | category                | int      |  NULL | YES  |     | NULL              |                   |
+| items                        | like_count              | int      |  NULL | YES  |     | 0                 |                   |
+| items                        | is_merchant_item        | tinyint  |  NULL | YES  |     | NULL              |                   |
+| merchant_detection_configs   | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| merchant_detection_configs   | key                     | varchar  |   100 | NO   | UNI | NULL              |                   |
+| merchant_detection_configs   | value                   | text     | 65535 | YES  |     | NULL              |                   |
+| merchant_detection_configs   | description             | varchar  |   500 | YES  |     | NULL              |                   |
+| merchant_detection_configs   | is_active               | tinyint  |  NULL | YES  |     | NULL              |                   |
+| merchant_detection_configs   | created_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| merchant_detection_configs   | updated_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| merchant_detection_histories | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| merchant_detection_histories | user_id                 | int      |  NULL | NO   | MUL | NULL              |                   |
+| merchant_detection_histories | detection_type          | varchar  |    20 | NO   |     | NULL              |                   |
+| merchant_detection_histories | behavior_data           | json     |  NULL | YES  |     | NULL              |                   |
+| merchant_detection_histories | ai_analysis             | json     |  NULL | YES  |     | NULL              |                   |
+| merchant_detection_histories | active_items_count      | int      |  NULL | NO   |     | NULL              |                   |
+| merchant_detection_histories | is_merchant             | tinyint  |  NULL | NO   |     | NULL              |                   |
+| merchant_detection_histories | confidence              | float    |  NULL | NO   |     | NULL              |                   |
+| merchant_detection_histories | ai_reason               | text     | 65535 | YES  |     | NULL              |                   |
+| merchant_detection_histories | processed               | tinyint  |  NULL | NO   |     | NULL              |                   |
+| merchant_detection_histories | created_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| merchant_display_configs     | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| merchant_display_configs     | user_id                 | int      |  NULL | YES  | MUL | NULL              |                   |
+| merchant_display_configs     | display_frequency       | int      |  NULL | YES  |     | NULL              |                   |
+| merchant_display_configs     | is_default              | tinyint  |  NULL | YES  |     | NULL              |                   |
+| merchant_display_configs     | created_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| merchant_display_configs     | updated_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| merchants                    | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| merchants                    | user_id                 | int      |  NULL | NO   | UNI | NULL              |                   |
+| merchants                    | business_name           | varchar  |   100 | NO   |     | NULL              |                   |
+| merchants                    | business_license        | varchar  |   200 | YES  |     | NULL              |                   |
+| merchants                    | contact_person          | varchar  |    50 | NO   |     | NULL              |                   |
+| merchants                    | contact_phone           | varchar  |    20 | NO   |     | NULL              |                   |
+| merchants                    | business_address        | varchar  |   200 | NO   |     | NULL              |                   |
+| merchants                    | business_description    | text     | 65535 | YES  |     | NULL              |                   |
+| merchants                    | status                  | varchar  |    20 | YES  |     | NULL              |                   |
+| merchants                    | is_pending              | tinyint  |  NULL | YES  |     | NULL              |                   |
+| merchants                    | created_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| merchants                    | updated_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| merchants                    | approved_at             | datetime |  NULL | YES  |     | NULL              |                   |
+| merchants                    | rejected_at             | datetime |  NULL | YES  |     | NULL              |                   |
+| merchants                    | reject_reason           | text     | 65535 | YES  |     | NULL              |                   |
+| messages                     | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| messages                     | content                 | text     | 65535 | NO   |     | NULL              |                   |
+| messages                     | user_id                 | int      |  NULL | NO   | MUL | NULL              |                   |
+| messages                     | item_id                 | int      |  NULL | YES  | MUL | NULL              |                   |
+| messages                     | created_at              | datetime |  NULL | YES  |     | CURRENT_TIMESTAMP | DEFAULT_GENERATED |
+| messages                     | is_read                 | tinyint  |  NULL | YES  |     | 0                 |                   |
+| messages                     | is_system               | tinyint  |  NULL | YES  |     | 0                 |                   |
+| messages                     | title                   | varchar  |   200 | YES  |     | NULL              |                   |
+| messages                     | target_users            | varchar  |   500 | YES  |     | NULL              |                   |
+| messages                     | buy_request_id          | int      |  NULL | YES  | MUL | NULL              |                   |
+| messages                     | deleted_by_sender       | tinyint  |  NULL | YES  |     | NULL              |                   |
+| messages                     | deleted_by_receiver     | tinyint  |  NULL | YES  |     | NULL              |                   |
+| messages                     | target_user             | varchar  |    50 | YES  |     | NULL              |                   |
+| site_config                  | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| site_config                  | key                     | varchar  |   100 | NO   | UNI | NULL              |                   |
+| site_config                  | value                   | text     | 65535 | YES  |     | NULL              |                   |
+| sorting_configs              | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| sorting_configs              | config_key              | varchar  |   100 | NO   | UNI | NULL              |                   |
+| sorting_configs              | config_value            | json     |  NULL | YES  |     | NULL              |                   |
+| sorting_configs              | description             | varchar  |   500 | YES  |     | NULL              |                   |
+| sorting_configs              | is_active               | tinyint  |  NULL | YES  |     | NULL              |                   |
+| sorting_configs              | created_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| sorting_configs              | updated_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| user_behaviors               | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| user_behaviors               | user_id                 | int      |  NULL | NO   | MUL | NULL              |                   |
+| user_behaviors               | item_id                 | int      |  NULL | YES  | MUL | NULL              |                   |
+| user_behaviors               | behavior_type           | varchar  |    20 | NO   |     | NULL              |                   |
+| user_behaviors               | behavior_data           | json     |  NULL | YES  |     | NULL              |                   |
+| user_behaviors               | created_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| users                        | id                      | int      |  NULL | NO   | PRI | NULL              | auto_increment    |
+| users                        | username                | varchar  |   100 | NO   | UNI | NULL              |                   |
+| users                        | email                   | varchar  |   200 | NO   | UNI | NULL              |                   |
+| users                        | phone                   | varchar  |    20 | YES  | UNI | NULL              |                   |
+| users                        | hashed_password         | varchar  |   200 | NO   |     | NULL              |                   |
+| users                        | avatar                  | varchar  |   200 | YES  |     | NULL              |                   |
+| users                        | location                | varchar  |   100 | YES  |     | NULL              |                   |
+| users                        | bio                     | text     | 65535 | YES  |     | NULL              |                   |
+| users                        | created_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| users                        | updated_at              | datetime |  NULL | YES  |     | now()             | DEFAULT_GENERATED |
+| users                        | is_active               | tinyint  |  NULL | YES  |     | NULL              |                   |
+| users                        | last_login              | datetime |  NULL | YES  |     | NULL              |                   |
+| users                        | followers               | int      |  NULL | YES  |     | NULL              |                   |
+| users                        | following               | int      |  NULL | YES  |     | NULL              |                   |
+| users                        | items_count             | int      |  NULL | YES  |     | NULL              |                   |
+| users                        | contact                 | varchar  |   100 | YES  |     | NULL              |                   |
+| users                        | is_admin                | tinyint  |  NULL | YES  |     | 0                 |                   |
+| users                        | is_merchant             | tinyint  |  NULL | YES  |     | NULL              |                   |
+| users                        | is_pending_merchant     | tinyint  |  NULL | YES  |     | NULL              |                   |
+| users                        | is_pending_verification | tinyint  |  NULL | YES  |     | NULL              |                   |
++------------------------------+-------------------------+----------+-------+------+-----+-------------------+-------------------+
+180 rows in set (0.01 sec)
+
+这个是我的web端的MySQL数据库

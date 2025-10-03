@@ -89,6 +89,7 @@
                 <option value="default">综合排序</option>
                 <option value="dynamic_sort">智能排序</option>
                 <option value="bigdata_recommendation">大数据推荐</option>
+                <option value="ai_recommendation">AI增强推荐</option>
                 <option value="price_asc">价格从低到高</option>
                 <option value="price_desc">价格从高到低</option>
                 <option value="newest">最新发布</option>
@@ -359,6 +360,13 @@ export default {
           return;
         }
         
+        // 如果选择AI增强推荐但用户未登录，提示登录
+        if (this.sortOption === 'ai_recommendation' && !this.authStore.user) {
+          alert('AI增强推荐需要登录后才能使用，请先登录！');
+          this.sortOption = 'default'; // 重置为默认排序
+          return;
+        }
+        
         this.pagination.page = 1;
         this.hasMore = true;
         this.fetchSellingItems();
@@ -479,6 +487,14 @@ export default {
           return;
         }
         
+        // 检查AI增强推荐的错误响应
+        if (this.sortOption === 'ai_recommendation' && response.data && response.data.error) {
+          alert(response.data.message || 'AI增强推荐需要登录后才能使用！');
+          this.sortOption = 'default'; // 重置为默认排序
+          this.fetchSellingItems(); // 重新获取默认排序的商品
+          return;
+        }
+        
         let items = response.data;
         
         // 过滤掉已售出和下架的商品
@@ -522,6 +538,7 @@ export default {
         case 'price_desc': return 'price_desc';
         case 'dynamic_sort': return 'dynamic_sort';
         case 'bigdata_recommendation': return 'bigdata_recommendation';
+        case 'ai_recommendation': return 'ai_recommendation';
         default: return 'created_at_desc';
       }
     },
