@@ -238,7 +238,7 @@ export default {
         if (this.product.images) {
           const images = this.product.images.split(',')
           this.product.images = images.map(img => {
-            if (!img) return '/static/images/default_product.png'
+            if (!img) return '/static/images/default_product.jpg'
             let path = img.trim().replace(/\\/g, '/')
             // 如果已经是完整URL（包含http），直接返回
             if (path.startsWith('http')) return path
@@ -249,7 +249,7 @@ export default {
             return path
           })
         } else {
-          this.product.images = ['/static/images/default_product.png']
+          this.product.images = ['/static/images/default_product.jpg']
         }
 
         this.mainImage = this.product.images[0]

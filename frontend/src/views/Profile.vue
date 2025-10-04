@@ -1544,10 +1544,10 @@ const handleOfflineItem = async (itemId) => {
 
 // 获取商品第一张图片
 const getFirstImage = (item) => {
-  if (!item.images) return '/static/images/default_product.png'
+  if (!item.images) return '/static/images/default_product.jpg'
   const images = item.images.split(',')
   const img = images[0]
-  if (!img) return '/static/images/default_product.png'
+  if (!img) return '/static/images/default_product.jpg'
   // 如果已经是完整URL（包含http），直接返回
   if (img.startsWith('http')) return img
   // 如果是相对路径，添加/前缀

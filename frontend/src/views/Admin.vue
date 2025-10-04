@@ -3286,10 +3286,10 @@ const autoProcessTimeout = async () => {
 }
 
 const getFirstImage = (item) => {
-  if (!item.images) return 'http://127.0.0.1:8000/static/images/default_product.png'
+  if (!item.images) return 'http://127.0.0.1:8000/static/images/default_product.jpg'
   const images = item.images.split(',')
   const img = images[0]
-  if (!img) return 'http://127.0.0.1:8000/static/images/default_product.png'
+  if (!img) return 'http://127.0.0.1:8000/static/images/default_product.jpg'
   if (img.startsWith('http')) return img
   if (img.startsWith('/static/images/')) return `http://127.0.0.1:8000${img}`
   if (img.startsWith('static/images/')) return `http://127.0.0.1:8000/${img}`
