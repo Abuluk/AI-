@@ -15,6 +15,8 @@
         <div v-if="product.is_bigdata_recommended" class="bigdata-badge">大数据推荐</div>
         <!-- 添加AI增强推荐标识 -->
         <div v-if="product.is_ai_recommended" class="ai-badge">AI增强推荐</div>
+        <!-- 添加综合排序标识 -->
+        <div v-if="product.is_comprehensive_sort" class="comprehensive-badge">综合排序</div>
       </div>
       
       <div class="product-info">
@@ -330,6 +332,19 @@ export default {
   box-shadow: 0 2px 4px rgba(0,0,0,0.3);
   text-shadow: 0 1px 2px rgba(0,0,0,0.3);
   animation: ai-glow 2s ease-in-out infinite alternate;
+}
+
+.comprehensive-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: linear-gradient(45deg, #4CAF50 0%, #8BC34A 100%);
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
 @keyframes ai-glow {

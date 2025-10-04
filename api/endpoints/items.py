@@ -580,14 +580,58 @@ def get_all_items(
         print(f">>>>>>> 这是大数据推荐分支的开始")
         from core.bigdata_recommendation_service import bigdata_recommendation_service
         
-        # 如果没有用户ID，返回空结果
+        # 如果没有用户ID，返回综合排序（热门商品）
         if not user_id:
-            print(">>>>>>> 大数据推荐需要用户ID，返回空结果")
-            return {
-                "error": "大数据推荐需要用户登录",
-                "message": "请先登录后再使用大数据推荐功能",
-                "items": []
-            }
+            print(">>>>>>> 用户未登录，返回综合排序（热门商品）")
+            # 获取热门商品（按浏览量排序）
+            items = db.query(Item).filter(
+                Item.status == "online",
+                Item.sold == False
+            ).order_by(Item.views.desc()).limit(limit).all()
+            
+            result = []
+            for item in items:
+                # 处理图片路径
+                processed_images = ""
+                if item.images:
+                    try:
+                        image_list = json.loads(item.images) if isinstance(item.images, str) else item.images
+                        if isinstance(image_list, list) and image_list:
+                            processed_images = json.dumps([get_full_image_url(img) for img in image_list])
+                        else:
+                            processed_images = item.images
+                    except:
+                        processed_images = item.images
+                
+                item_dict = {
+                    "id": item.id,
+                    "title": item.title,
+                    "description": item.description,
+                    "price": float(item.price),
+                    "category": item.category,
+                    "condition": item.condition,
+                    "status": item.status,
+                    "location": item.location,
+                    "images": processed_images,
+                    "owner_id": item.owner_id,
+                    "created_at": item.created_at.isoformat() if item.created_at else None,
+                    "sold": item.sold,
+                    "views": item.views,
+                    "favorited_count": item.favorited_count,
+                    "like_count": item.like_count,
+                    "owner": {
+                        "id": item.owner.id,
+                        "username": item.owner.username,
+                        "avatar": item.owner.avatar
+                    } if item.owner else None,
+                    # 添加综合排序标识
+                    "is_comprehensive_sort": True,
+                    "sort_type": "comprehensive",
+                    "sort_reason": "未登录用户显示综合排序"
+                }
+                result.append(item_dict)
+            
+            return result
         
         print(f">>>>>>> 开始获取用户 {user_id} 的推荐商品")
         
@@ -666,14 +710,58 @@ def get_all_items(
         print(f">>>>>>> 这是AI增强推荐分支的开始")
         from core.ai_enhanced_recommendation_service import ai_enhanced_recommendation_service
         
-        # 如果没有用户ID，返回空结果
+        # 如果没有用户ID，返回综合排序（热门商品）
         if not user_id:
-            print(">>>>>>> AI增强推荐需要用户ID，返回空结果")
-            return {
-                "error": "AI增强推荐需要用户登录",
-                "message": "请先登录后再使用AI增强推荐功能",
-                "items": []
-            }
+            print(">>>>>>> 用户未登录，返回综合排序（热门商品）")
+            # 获取热门商品（按浏览量排序）
+            items = db.query(Item).filter(
+                Item.status == "online",
+                Item.sold == False
+            ).order_by(Item.views.desc()).limit(limit).all()
+            
+            result = []
+            for item in items:
+                # 处理图片路径
+                processed_images = ""
+                if item.images:
+                    try:
+                        image_list = json.loads(item.images) if isinstance(item.images, str) else item.images
+                        if isinstance(image_list, list) and image_list:
+                            processed_images = json.dumps([get_full_image_url(img) for img in image_list])
+                        else:
+                            processed_images = item.images
+                    except:
+                        processed_images = item.images
+                
+                item_dict = {
+                    "id": item.id,
+                    "title": item.title,
+                    "description": item.description,
+                    "price": float(item.price),
+                    "category": item.category,
+                    "condition": item.condition,
+                    "status": item.status,
+                    "location": item.location,
+                    "images": processed_images,
+                    "owner_id": item.owner_id,
+                    "created_at": item.created_at.isoformat() if item.created_at else None,
+                    "sold": item.sold,
+                    "views": item.views,
+                    "favorited_count": item.favorited_count,
+                    "like_count": item.like_count,
+                    "owner": {
+                        "id": item.owner.id,
+                        "username": item.owner.username,
+                        "avatar": item.owner.avatar
+                    } if item.owner else None,
+                    # 添加综合排序标识
+                    "is_comprehensive_sort": True,
+                    "sort_type": "comprehensive",
+                    "sort_reason": "未登录用户显示综合排序"
+                }
+                result.append(item_dict)
+            
+            return result
         
         print(f">>>>>>> 开始获取用户 {user_id} 的AI增强推荐商品")
         
