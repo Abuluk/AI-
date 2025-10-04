@@ -224,7 +224,7 @@ async def get_ai_recommendations(
         
         print(f"用户 {current_user.id} 请求AI推荐，数量: {limit}")
         
-        # 使用并发优化的AI推荐服务
+        # 使用AI推荐服务
         from core.ai_recommendation_service import ai_recommendation_service
         result = await ai_recommendation_service.get_ai_recommendations(
             db, current_user.id, limit
@@ -517,6 +517,7 @@ def get_ai_service_stats(
 @router.post("/service-control")
 def control_ai_service(
     action: str,
+    user_id: Optional[int] = None,
     current_user: User = Depends(get_current_user)
 ):
     """AI服务控制接口（管理员接口）"""
@@ -525,12 +526,30 @@ def control_ai_service(
     
     try:
         from core.ai_middleware import ai_middleware
+        from core.ai_recommendation_service import ai_recommendation_service
         
         if action == "reset_stats":
             ai_middleware.reset_stats()
             return {
                 "success": True,
                 "message": "统计信息已重置",
+                "timestamp": datetime.now().isoformat()
+            }
+        elif action == "clear_cache":
+            # 清理AI推荐缓存
+            result = ai_recommendation_service.clear_cache(user_id)
+            return {
+                "success": result["success"],
+                "message": result["message"],
+                "cleared_count": result["cleared_count"],
+                "timestamp": datetime.now().isoformat()
+            }
+        elif action == "get_cache_info":
+            # 获取缓存信息
+            cache_info = ai_recommendation_service.get_cache_info()
+            return {
+                "success": True,
+                "cache_info": cache_info,
                 "timestamp": datetime.now().isoformat()
             }
         else:
@@ -590,10 +609,10 @@ def ai_strategy(
 请提供具体、可操作的建议，报告要详细且专业。"""
 
         # 获取环境变量
-        app_id = os.getenv("XUNFEI_V3_APP_ID")
-        api_key = os.getenv("XUNFEI_V3_API_KEY")
-        api_secret = os.getenv("XUNFEI_V3_API_SECRET")
-        spark_url = os.getenv("XUNFEI_V3_SPARK_URL")
+        app_id = os.getenv("XUNFEI_APP_ID")
+        api_key = os.getenv("XUNFEI_API_KEY")
+        api_secret = os.getenv("XUNFEI_API_SECRET")
+        spark_url = os.getenv("XUNFEI_SPARK_URL")
         
         print(f"环境变量检查: app_id={app_id}, api_key={api_key[:10] if api_key else None}..., api_secret={'已设置' if api_secret else '未设置'}, spark_url={spark_url}")
         
