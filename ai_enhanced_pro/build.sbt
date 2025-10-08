@@ -123,3 +123,4 @@ buildInfoKeys := Seq[BuildInfoKey](
 buildInfoPackage := "com.example.recommendation"
 enablePlugins(BuildInfoPlugin)
 
+
