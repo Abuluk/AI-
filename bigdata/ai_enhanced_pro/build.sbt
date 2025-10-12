@@ -124,3 +124,4 @@ buildInfoPackage := "com.example.recommendation"
 enablePlugins(BuildInfoPlugin)
 
 
+
