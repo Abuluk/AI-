@@ -405,7 +405,7 @@ const apiService = {
   },
 
   async getBuyRequests(params = {}) {
-    return api.get('/buy_requests', { params });
+    return api.get('/buy_requests/', { params });
   },
 
   async getBuyRequest(id) {
