@@ -22,7 +22,7 @@ class LoginRequest(BaseModel):
 
 router = APIRouter()
 
-@router.post("/register", response_model=UserInDB)
+@router.post("/register", response_model=UserInDB, status_code=status.HTTP_201_CREATED)
 def register(
     user_in: UserCreate,
     db: Session = Depends(get_db)

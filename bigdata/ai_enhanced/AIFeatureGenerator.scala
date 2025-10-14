@@ -455,10 +455,22 @@ object AIFeatureGenerator {
   
   def readUserBehaviorData(spark: SparkSession): DataFrame = {
     try {
-      // 根据实际表结构读取用户行为数据
-      val url = "jdbc:mysql://192.168.0.108:3306/ershou"
-      val user = "hadoop"
-      val password = "20030208.."
+      // 从HDFS读取用户行为评分数据（与als_recommendation.py使用相同数据源）
+      println("从HDFS读取用户行为评分数据...")
+      val ratingsDF = spark.read
+        .option("sep", "\t")
+        .csv("hdfs://localhost:9000/data/input/user_item_scores/dt=*")
+        .toDF("user_id", "item_id", "score", "updated_at")
+        .select(
+          col("user_id").cast("int"),
+          col("item_id").cast("int"),
+          col("score").cast("double"),
+          col("updated_at")
+        )
+        .filter(col("user_id").isNotNull && col("item_id").isNotNull)
+      
+      println(s"从HDFS读取到 ${ratingsDF.count()} 条评分记录")
+      return ratingsDF
       
       println("尝试连接MySQL数据库...")
       

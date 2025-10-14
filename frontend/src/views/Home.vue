@@ -555,8 +555,10 @@ export default {
     goToLogin() {
       this.$router.push('/login')
     },
-    handleLogout() {
-      this.authStore.logout()
+    async handleLogout() {
+      await this.authStore.logout()
+      // 退出后跳转到登录页
+      this.$router.push('/login')
     },
     goToProfile() {
       this.$router.push('/profile');

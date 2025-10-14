@@ -1,33 +1,48 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import BaseHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import subprocess
 import json
 import sys
 import csv
 import ast
 
-reload(sys)
-sys.setdefaultencoding('utf-8')
-
 def _safe_json_or_list(items_str):
+    """
+    解析推荐项列表，支持标准JSON数组格式
+    - "[1,2,3]" (标准JSON数组 - 主要格式)
+    - [1,2,3] (Python字面量 - 兼容旧格式)
+    """
+    # 去除首尾空白
+    items_str = items_str.strip()
+    
+    # 尝试JSON解析（标准格式）
     try:
-        return json.loads(items_str)
-    except Exception:
-        try:
-            return ast.literal_eval(items_str)
-        except Exception:
-            return None
+        result = json.loads(items_str)
+        if isinstance(result, list):
+            return result
+    except Exception as e:
+        print(f"JSON解析失败: {e}, 尝试其他方法")
+    
+    # 尝试Python字面量解析（兼容旧格式）
+    try:
+        result = ast.literal_eval(items_str)
+        if isinstance(result, list):
+            return result
+    except Exception as e:
+        print(f"Python字面量解析失败: {e}")
+    
+    return None
 
-class RecommendationHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+class RecommendationHandler(BaseHTTPRequestHandler):
     def _send_json(self, obj, status=200):
-        body = json.dumps(obj, indent=2, ensure_ascii=False)
+        body_bytes = json.dumps(obj, indent=2, ensure_ascii=False).encode('utf-8')
         self.send_response(status)
-        self.send_header('Content-type', 'application/json')
-        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Content-type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(body_bytes)))
         self.end_headers()
-        self.wfile.write(body)
+        self.wfile.write(body_bytes)
 
     def do_GET(self):
         if self.path == '/health':
@@ -48,10 +63,10 @@ class RecommendationHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 algorithm = "als"
                 rec_type = "bigdata"
 
-            # 读取一整条 CSV 记录（跳过表头），确保第二列作为一个字段解析
-            cmd = "hadoop fs -cat " + hdfs_path + "/part-* 2>/dev/null | grep -v '^user_id' | grep '^" + user_id + ",\\|^" + user_id + ",\"' | head -1"
+            # 读取一整条记录（使用tab分隔符）
+            cmd = "hadoop fs -cat " + hdfs_path + "/part-* 2>/dev/null | grep '^" + user_id + "\t' | head -1"
             try:
-                result = subprocess.check_output(cmd, shell=True)
+                result = subprocess.check_output(cmd, shell=True).decode('utf-8', errors='ignore')
             except subprocess.CalledProcessError:
                 result = ""
 
@@ -60,9 +75,8 @@ class RecommendationHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 return self._send_json({'error': 'User not found'}, 404)
 
             try:
-                # 用 csv.reader 正确解析带引号的第二列
-                row_iter = csv.reader([line], delimiter=',', quotechar='"')
-                row = next(row_iter)
+                # 使用tab分隔符解析
+                row = line.split('\t')
 
                 uid_str = row[0]
                 rec_items_str = row[1]
@@ -104,10 +118,10 @@ class RecommendationHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             user_id = self.path.split('/')[-1]
             hdfs_path = "/data/output/recommendation_snapshots_ai"
             
-            # 读取一整条 CSV 记录（跳过表头），确保第二列作为一个字段解析
-            cmd = "hadoop fs -cat " + hdfs_path + "/part-* 2>/dev/null | grep -v '^user_id' | grep '^" + user_id + ",\\|^" + user_id + ",\"' | head -1"
+            # 读取一整条记录（使用tab分隔符）
+            cmd = "hadoop fs -cat " + hdfs_path + "/part-* 2>/dev/null | grep '^" + user_id + "\t' | head -1"
             try:
-                result = subprocess.check_output(cmd, shell=True)
+                result = subprocess.check_output(cmd, shell=True).decode('utf-8', errors='ignore')
             except subprocess.CalledProcessError:
                 result = ""
 
@@ -116,9 +130,8 @@ class RecommendationHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 return self._send_json({'error': 'User not found'}, 404)
 
             try:
-                # 用 csv.reader 正确解析带引号的第二列
-                row_iter = csv.reader([line], delimiter=',', quotechar='"')
-                row = next(row_iter)
+                # 使用tab分隔符解析
+                row = line.split('\t')
 
                 uid_str = row[0]
                 rec_items_str = row[1]
@@ -157,19 +170,19 @@ class RecommendationHandler(BaseHTTPServer.BaseHTTPRequestHandler):
                 cmd1 = "hadoop fs -cat /data/output/user_item_scores/part-* 2>/dev/null | wc -l"
                 cmd2 = "hadoop fs -cat /data/output/recommendation_snapshots/part-* 2>/dev/null | wc -l"
                 cmd3 = "hadoop fs -ls /data/output/user_item_scores/_SUCCESS 2>/dev/null | awk '{print $6, $7, $8}' | head -1"
-                
+
                 # AI增强推荐统计
                 cmd4 = "hadoop fs -cat /data/output/user_item_scores_ai/part-* 2>/dev/null | wc -l"
                 cmd5 = "hadoop fs -cat /data/output/recommendation_snapshots_ai/part-* 2>/dev/null | wc -l"
                 cmd6 = "hadoop fs -ls /data/output/user_item_scores_ai/_SUCCESS 2>/dev/null | awk '{print $6, $7, $8}' | head -1"
 
-                count1 = subprocess.check_output(cmd1, shell=True).strip()
-                count2 = subprocess.check_output(cmd2, shell=True).strip()
-                timestamp1 = subprocess.check_output(cmd3, shell=True).strip()
-                
-                count3 = subprocess.check_output(cmd4, shell=True).strip()
-                count4 = subprocess.check_output(cmd5, shell=True).strip()
-                timestamp2 = subprocess.check_output(cmd6, shell=True).strip()
+                count1 = subprocess.check_output(cmd1, shell=True).decode('utf-8', errors='ignore').strip()
+                count2 = subprocess.check_output(cmd2, shell=True).decode('utf-8', errors='ignore').strip()
+                timestamp1 = subprocess.check_output(cmd3, shell=True).decode('utf-8', errors='ignore').strip()
+
+                count3 = subprocess.check_output(cmd4, shell=True).decode('utf-8', errors='ignore').strip()
+                count4 = subprocess.check_output(cmd5, shell=True).decode('utf-8', errors='ignore').strip()
+                timestamp2 = subprocess.check_output(cmd6, shell=True).decode('utf-8', errors='ignore').strip()
 
                 stats = {
                     'bigdata': {
@@ -198,21 +211,21 @@ class RecommendationHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     PORT = 8080
-    server = BaseHTTPServer.HTTPServer(("", PORT), RecommendationHandler)
-    print "=" * 50
-    print "推荐数据API服务已启动"
-    print "服务地址: http://0.0.0.0:%d" % PORT
-    print "=" * 50
-    print "可用端点:"
-    print "  GET /health                           - 健康检查"
-    print "  GET /recommendations/<user_id>        - 获取大数据推荐"
-    print "  GET /recommendations/ai/<user_id>     - 获取AI增强推荐"
-    print "  GET /ai_recommendations/<user_id>     - 获取AI增强推荐（备用端点）"
-    print "  GET /stats                            - 获取统计信息"
-    print "=" * 50
-    print "按 Ctrl+C 停止服务"
+    server = HTTPServer(("", PORT), RecommendationHandler)
+    print("=" * 50)
+    print("推荐数据API服务已启动")
+    print("服务地址: http://0.0.0.0:%d" % PORT)
+    print("=" * 50)
+    print("可用端点:")
+    print("  GET /health                           - 健康检查")
+    print("  GET /recommendations/<user_id>        - 获取大数据推荐")
+    print("  GET /recommendations/ai/<user_id>     - 获取AI增强推荐")
+    print("  GET /ai_recommendations/<user_id>     - 获取AI增强推荐（备用端点）")
+    print("  GET /stats                            - 获取统计信息")
+    print("=" * 50)
+    print("按 Ctrl+C 停止服务")
 
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print "\n服务已停止"
+        print("\n服务已停止")

@@ -503,6 +503,29 @@ object EnhancedAIRecommendationEngine {
   }
   
   def readMySQLBehaviorData(spark: SparkSession): DataFrame = {
+    // 从HDFS读取用户行为评分数据
+    println("从HDFS读取用户行为评分数据...")
+    try {
+      val ratingsDF = spark.read
+        .option("sep", "\t")
+        .csv("hdfs://localhost:9000/data/input/user_item_scores/dt=*")
+        .toDF("user_id", "item_id", "score", "updated_at")
+        .select(
+          col("user_id").cast("int"),
+          col("item_id").cast("int"),
+          col("score").cast("double")
+        )
+        .filter(col("user_id").isNotNull && col("item_id").isNotNull)
+      
+      println(s"从HDFS读取到 ${ratingsDF.count()} 条评分记录")
+      return ratingsDF
+    } catch {
+      case e: Exception =>
+        println(s"从HDFS读取数据失败: ${e.getMessage}")
+        throw e
+    }
+    
+    // 以下MySQL代码已废弃
     val jdbcUrl = "jdbc:mysql://localhost:3306/ershou?useSSL=false&serverTimezone=UTC&characterEncoding=utf8"
     val connectionProperties = new java.util.Properties()
     connectionProperties.setProperty("user", "root")

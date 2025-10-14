@@ -333,8 +333,8 @@ export default {
         }
         
         // 验证文件大小（限制为5MB）
-        if (file.size > 5 * 1024 * 1024) {
-          alert(`文件 "${file.name}" 太大，请选择小于5MB的图片`)
+        if (file.size > 20 * 1024 * 1024) {
+          alert(`文件 "${file.name}" 太大，请选择小于20MB的图片`)
           continue
         }
         

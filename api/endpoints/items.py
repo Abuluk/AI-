@@ -1340,8 +1340,8 @@ async def upload_image(
         file_content = await file.read()
         file_size = len(file_content)
         
-        if file_size > 5 * 1024 * 1024:  # 5MB
-            raise HTTPException(status_code=400, detail="图片文件大小不能超过5MB")
+        if file_size > 20 * 1024 * 1024:  # 20MB
+            raise HTTPException(status_code=400, detail="图片文件大小不能超过20MB")
         
         # 生成唯一文件名
         file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
@@ -1436,45 +1436,96 @@ def get_item_recommendations(
     config_key = f"item_recommendations_{item_id}"
     config = db.query(SiteConfig).filter(SiteConfig.key == config_key).first()
     
+    recommended_items = []
+    
     if config and config.value:
         try:
             recommended_ids = json.loads(config.value)
             if recommended_ids:
                 # 获取管理员设置的推荐商品
-                recommended_items = db.query(Item).filter(
+                recommended_items = db.query(Item).options(joinedload(Item.owner)).filter(
                     Item.id.in_(recommended_ids),
                     Item.status == "online",
                     Item.sold == False
                 ).limit(limit).all()
-                
-                if recommended_items:
-                    return recommended_items
         except Exception as e:
             print(f"解析推荐商品配置失败: {e}")
     
     # 如果没有管理员设置的推荐商品，使用默认推荐逻辑
-    # 获取同分类的其他商品
-    current_item = db.query(Item).filter(Item.id == item_id).first()
-    if not current_item:
-        raise HTTPException(status_code=404, detail="商品不存在")
-    
-    # 获取同分类的其他商品，排除当前商品
-    recommended_items = db.query(Item).filter(
-        Item.category == current_item.category,
-        Item.id != item_id,
-        Item.status == "online",
-        Item.sold == False
-    ).order_by(Item.views.desc()).limit(limit).all()
-    
-    # 如果同分类商品不够，补充其他分类的商品
-    if len(recommended_items) < limit:
-        remaining_limit = limit - len(recommended_items)
-        other_items = db.query(Item).filter(
-            Item.category != current_item.category,
+    if not recommended_items:
+        # 获取同分类的其他商品
+        current_item = db.query(Item).filter(Item.id == item_id).first()
+        if not current_item:
+            raise HTTPException(status_code=404, detail="商品不存在")
+        
+        # 获取同分类的其他商品，排除当前商品
+        recommended_items = db.query(Item).options(joinedload(Item.owner)).filter(
+            Item.category == current_item.category,
             Item.id != item_id,
             Item.status == "online",
             Item.sold == False
-        ).order_by(Item.views.desc()).limit(remaining_limit).all()
-        recommended_items.extend(other_items)
+        ).order_by(Item.views.desc()).limit(limit).all()
+        
+        # 如果同分类商品不够，补充其他分类的商品
+        if len(recommended_items) < limit:
+            remaining_limit = limit - len(recommended_items)
+            other_items = db.query(Item).options(joinedload(Item.owner)).filter(
+                Item.category != current_item.category,
+                Item.id != item_id,
+                Item.status == "online",
+                Item.sold == False
+            ).order_by(Item.views.desc()).limit(remaining_limit).all()
+            recommended_items.extend(other_items)
     
-    return recommended_items
+    # 处理图片URL和owner信息
+    result = []
+    for item in recommended_items:
+        # 处理图片路径
+        processed_images = ""
+        if item.images:
+            images = item.images.split(',')
+            processed_image_list = []
+            for img in images:
+                img = img.strip()
+                if img:
+                    full_url = get_full_image_url(img)
+                    if full_url:
+                        processed_image_list.append(full_url)
+            processed_images = ','.join(processed_image_list)
+        
+        # 获取owner信息
+        owner_info = None
+        if hasattr(item, 'owner') and item.owner:
+            try:
+                avatar_url = get_full_image_url(item.owner.avatar) if item.owner.avatar else None
+                owner_info = {
+                    "id": item.owner.id,
+                    "username": item.owner.username,
+                    "avatar": avatar_url
+                }
+            except Exception as e:
+                print(f"获取owner信息失败: {e}")
+                owner_info = None
+        
+        item_dict = {
+            "id": item.id,
+            "title": item.title,
+            "description": item.description,
+            "price": item.price,
+            "category": item.category,
+            "condition": item.condition,
+            "location": item.location,
+            "images": processed_images,
+            "status": item.status,
+            "sold": item.sold,
+            "views": item.views,
+            "owner_id": item.owner_id,
+            "owner": owner_info,
+            "created_at": item.created_at,
+            "updated_at": item.updated_at,
+            "favorited_count": item.favorited_count or 0,
+            "like_count": item.like_count or 0
+        }
+        result.append(item_dict)
+    
+    return result

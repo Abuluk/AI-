@@ -37,8 +37,13 @@ router.beforeEach(async (to, from, next) => {
     if (!authStore.user) {
       try {
         await authStore.fetchCurrentUser()
+        // 确保用户信息已加载
+        if (!authStore.user) {
+          throw new Error('获取用户信息失败')
+        }
       } catch (e) {
         // 获取失败，可能是无效token，跳转到登录页
+        console.error('路由守卫获取用户信息失败:', e)
         if (to.path.startsWith('/admin')) {
           return next({ name: 'AdminLogin' })
         } else {

@@ -9,7 +9,7 @@ from core.clients.ai_hadoop_client import AIHadoopClient
 class AIEnhancedRecommendationService:
     """AI增强推荐服务 - 使用AIHadoopClient获取Hadoop端的AI增强推荐数据"""
     
-    def __init__(self, vm_ip="192.168.174.128", api_port=8080):
+    def __init__(self, vm_ip="47.100.37.43", api_port=8080):
         # 使用AIHadoopClient获取推荐数据
         self.ai_client = AIHadoopClient(vm_ip, api_port)
         

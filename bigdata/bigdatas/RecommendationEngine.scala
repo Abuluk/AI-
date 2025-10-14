@@ -194,9 +194,24 @@ object RecommendationEngine {
   
   def readMySQLTable(spark: SparkSession, tableName: String): DataFrame = {
     try {
-      println(s"正在读取MySQL表: $tableName")
+      println(s"从HDFS读取数据（tableName参数已忽略，统一从HDFS读取）")
       
-      // 请根据您的实际MySQL配置修改以下参数
+      // 从HDFS读取用户行为评分数据
+      val ratingsDF = spark.read
+        .option("sep", "\t")
+        .csv("hdfs://localhost:9000/data/input/user_item_scores/dt=*")
+        .toDF("user_id", "item_id", "score", "updated_at")
+        .select(
+          col("user_id").cast("int"),
+          col("item_id").cast("int"),
+          col("score").cast("double")
+        )
+        .filter(col("user_id").isNotNull && col("item_id").isNotNull)
+      
+      println(s"从HDFS读取到 ${ratingsDF.count()} 条评分记录")
+      return ratingsDF
+      
+      // 以下MySQL代码已废弃
       val url = "jdbc:mysql://192.168.0.103:3306/ershou"
       val user = "hadoop" 
       val password = "20030208.."

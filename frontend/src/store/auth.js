@@ -16,8 +16,9 @@ export const useAuthStore = defineStore('auth', {
       try {
         const response = await api.login(credentials)
         if (response.data.access_token) {
+          this.token = response.data.access_token
           this.isAuthenticated = true
-          // 登录成功后，只获取用户信息，不再负责跳转
+          // 登录成功后，获取用户信息
           await this.fetchCurrentUser()
         }
         return response
@@ -53,12 +54,19 @@ export const useAuthStore = defineStore('auth', {
       this.error = null
       try {
         const response = await api.register(userData)
-        // 注册后自动登录
+        // 注册成功后自动登录
         if (response.status === 201) {
-          await this.login({
-            username: userData.username,
-            password: userData.password
-          })
+          try {
+            // 使用 identifier 字段进行登录（可以是 username、email 或 phone）
+            await this.login({
+              identifier: userData.username || userData.email || userData.phone,
+              password: userData.password
+            })
+          } catch (loginError) {
+            console.error('自动登录失败:', loginError)
+            this.error = '注册成功，但自动登录失败，请手动登录'
+            // 不抛出错误，允许注册流程完成
+          }
         }
         return response
       } catch (error) {
@@ -72,20 +80,24 @@ export const useAuthStore = defineStore('auth', {
     async logout() {
       try {
         await api.logout()
+      } catch (error) {
+        console.error('登出API调用失败:', error)
+      } finally {
+        // 无论API调用是否成功，都清除本地状态
         this.user = null
         this.isAuthenticated = false
+        this.token = null
         localStorage.removeItem('access_token')
-      } catch (error) {
-        console.error('登出失败:', error)
       }
     },
     
     async fetchCurrentUser() {
       try {
         const response = await api.getCurrentUser();
-        // 确保获取完整的用户信息，包括items_count
-        this.user = { ...this.user, ...response.data };
+        // 直接设置用户信息，避免 null 合并问题
+        this.user = response.data;
         this.isAuthenticated = true;
+        this.token = localStorage.getItem('access_token');
         return this.user;
       } catch (error) {
         // 如果获取用户信息失败，清除认证状态
@@ -147,9 +159,18 @@ async updateAvatar(file) {
 },
     
     // 在初始化时从本地存储加载token
-    initialize() {
+    async initialize() {
       if (this.token) {
-        this.fetchCurrentUser()
+        try {
+          await this.fetchCurrentUser()
+        } catch (error) {
+          // 初始化失败，清除无效token
+          console.error('初始化用户信息失败:', error)
+          this.user = null
+          this.isAuthenticated = false
+          this.token = null
+          localStorage.removeItem('access_token')
+        }
       }
     }
   }

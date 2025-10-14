@@ -3296,6 +3296,53 @@ const getFirstImage = (item) => {
   return `http://127.0.0.1:8000/static/images/${img}`
 }
 
+// 用户管理操作
+const toggleUserStatus = async (user) => {
+  const action = user.is_active ? '禁用' : '激活'
+  if (!confirm(`确定要${action}用户 "${user.username}" 吗？`)) return
+  
+  try {
+    const newStatus = !user.is_active
+    const response = await api.updateUserStatus(user.id, newStatus)
+    alert(response.data.message || `${action}成功`)
+    // 更新本地数据
+    user.is_active = newStatus
+  } catch (error) {
+    console.error(`${action}用户失败:`, error)
+    alert(error.response?.data?.detail || `${action}失败`)
+  }
+}
+
+const toggleAdminStatus = async (user) => {
+  const action = user.is_admin ? '取消管理员' : '设为管理员'
+  if (!confirm(`确定要${action} "${user.username}" 吗？`)) return
+  
+  try {
+    const newAdminStatus = !user.is_admin
+    const response = await api.updateUserAdminStatus(user.id, newAdminStatus)
+    alert(response.data.message || `${action}成功`)
+    // 更新本地数据
+    user.is_admin = newAdminStatus
+  } catch (error) {
+    console.error(`${action}失败:`, error)
+    alert(error.response?.data?.detail || `${action}失败`)
+  }
+}
+
+const deleteUser = async (user) => {
+  if (!confirm(`确定要删除用户 "${user.username}" 吗？此操作不可恢复！`)) return
+  
+  try {
+    const response = await api.deleteAdminUser(user.id)
+    alert(response.data.message || '删除成功')
+    // 从列表中移除
+    await loadUsers(true)
+  } catch (error) {
+    console.error('删除用户失败:', error)
+    alert(error.response?.data?.detail || '删除失败')
+  }
+}
+
 const logout = () => {
   authStore.logout()
   router.push('/login')

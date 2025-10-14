@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 class AIHadoopClient:
     """AI增强推荐系统的Hadoop客户端"""
     
-    def __init__(self, vm_ip="192.168.174.128", api_port=8080):
+    def __init__(self, vm_ip="47.100.37.43", api_port=8080):
         self.base_url = f"http://{vm_ip}:{api_port}"
         self.ai_model_version = "bailian-ai-enhanced-v2.0"
         self.data_source = "ershou_mysql_with_bailian_ai"

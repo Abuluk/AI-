@@ -10,7 +10,7 @@ from config import get_full_image_url
 class BigDataRecommendationService:
     """大数据推荐服务 - 集成Hadoop推荐系统"""
     
-    def __init__(self, hadoop_ip="192.168.174.128", hadoop_port=8080):
+    def __init__(self, hadoop_ip="47.100.37.43", hadoop_port=8081):
         self.hadoop_base_url = f"http://{hadoop_ip}:{hadoop_port}"
         self.cache = {}  # 简单的内存缓存
         self.cache_ttl = 1200  # 缓存20分钟（大数据推荐相对稳定）

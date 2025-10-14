@@ -248,8 +248,14 @@ const submitForm = async () => {
         password: form.password
       })
       console.log('Login call finished in submitForm.');
-      // 普通用户登录成功后，跳转到首页
-      router.push('/');
+      
+      // 等待用户信息加载完成后再跳转
+      if (authStore.user) {
+        // 普通用户登录成功后，跳转到首页
+        router.push('/');
+      } else {
+        authStore.error = '登录成功但获取用户信息失败，请刷新页面';
+      }
     } catch (error) {
       console.error('Login failed in submitForm:', error);
       // 错误信息已经在authStore中设置，这里只记录日志
@@ -273,10 +279,20 @@ const submitForm = async () => {
         phone: form.phone,
         password: form.password
       })
-      // 注册并自动登录后，跳转到首页
-      router.push('/');
+      
+      // 检查是否自动登录成功
+      if (authStore.user && authStore.isAuthenticated) {
+        // 注册并自动登录成功，跳转到首页
+        console.log('注册并自动登录成功，跳转到首页')
+        router.push('/');
+      } else if (!authStore.error) {
+        // 注册成功但自动登录失败（如果store没有设置错误信息）
+        authStore.error = '注册成功，请手动登录'
+      }
+      // 如果有错误信息，会显示在界面上
     } catch (error) {
-      // 错误已在store中处理
+      // 注册失败，错误已在store中处理
+      console.error('注册失败:', error);
     }
   }
 }
