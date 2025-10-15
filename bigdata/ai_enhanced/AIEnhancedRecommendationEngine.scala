@@ -26,7 +26,7 @@ object AIEnhancedRecommendationEngine {
       println("读取AI增强特征数据...")
       val aiFeaturesDF = try {
         spark.read
-          .parquet("hdfs://hadoop01:9000/data/features/ai_enhanced")
+          .parquet("hdfs://localhost:9000/data/features/ai_enhanced")
       } catch {
         case e: Exception =>
           println(s"读取AI特征失败: ${e.getMessage}")
@@ -142,18 +142,20 @@ object AIEnhancedRecommendationEngine {
       userItemScores
         .coalesce(1)
         .write
-        .option("sep", ",")
-        .option("header", "true")
+        .option("sep", "\t")
+        .option("header", "false")
+        .option("quote", "")
         .mode("overwrite")
-        .csv("hdfs://hadoop01:9000/data/output/user_item_scores_ai")
+        .csv("hdfs://localhost:9000/data/output/user_item_scores_ai")
       
       recommendationSnapshots
         .coalesce(1)
         .write
-        .option("sep", ",")
-        .option("header", "true")
+        .option("sep", "\t")
+        .option("header", "false")
+        .option("quote", "")
         .mode("overwrite")
-        .csv("hdfs://hadoop01:9000/data/output/recommendation_snapshots_ai")
+        .csv("hdfs://localhost:9000/data/output/recommendation_snapshots_ai")
       
       // 10. 显示AI增强结果统计
       println("=== AI增强推荐处理完成 ===")
@@ -198,24 +200,7 @@ object AIEnhancedRecommendationEngine {
         .filter(col("user_id").isNotNull && col("item_id").isNotNull)
       
       println(s"从HDFS读取到 ${ratingsDF.count()} 条评分记录")
-      return ratingsDF
-      
-      spark.read
-        .format("jdbc")
-        .option("url", url)
-        .option("dbtable", 
-          "(SELECT user_id, item_id, " +
-          "CASE behavior_type " +
-          "  WHEN 'view' THEN 1.0 " +
-          "  WHEN 'like' THEN 4.0 " + 
-          "  WHEN 'favorite' THEN 5.0 " +
-          "  WHEN 'message' THEN 3.0 " +
-          "  ELSE 2.0 END as rating " +
-          "FROM user_behaviors WHERE item_id IS NOT NULL) as t")
-        .option("user", user)
-        .option("password", password)
-        .option("driver", "com.mysql.cj.jdbc.Driver")
-        .load()
+      ratingsDF
     } catch {
       case e: Exception =>
         println(s"读取MySQL数据失败: ${e.getMessage}")

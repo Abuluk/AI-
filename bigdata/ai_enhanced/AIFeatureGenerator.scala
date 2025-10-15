@@ -258,7 +258,7 @@ object AIFeatureGenerator {
       .coalesce(1)
       .write
       .mode(SaveMode.Overwrite)
-      .parquet("hdfs://hadoop01:9000/data/features/ai_enhanced")
+      .parquet("hdfs://localhost:9000/data/features/ai_enhanced")
     
     // 保存用户-物品评分数据
     val ratingsDF = aiEnhancedFeatures
@@ -271,7 +271,7 @@ object AIFeatureGenerator {
       .option("sep", ",")
       .option("header", "true")
       .mode(SaveMode.Overwrite)
-      .csv("hdfs://hadoop01:9000/data/output/user_item_scores_ai")
+      .csv("hdfs://localhost:9000/data/output/user_item_scores_ai")
     
     // 显示统计信息
     val totalRecords = aiEnhancedFeatures.count()
@@ -470,133 +470,7 @@ object AIFeatureGenerator {
         .filter(col("user_id").isNotNull && col("item_id").isNotNull)
       
       println(s"从HDFS读取到 ${ratingsDF.count()} 条评分记录")
-      return ratingsDF
-      
-      println("尝试连接MySQL数据库...")
-      
-      // 首先测试基本连接
-      val testConnectionDF = try {
-        spark.read
-          .format("jdbc")
-          .option("url", url)
-          .option("dbtable", "(SELECT COUNT(*) as count FROM users) as t")
-          .option("user", user)
-          .option("password", password)
-          .option("driver", "com.mysql.cj.jdbc.Driver")
-          .load()
-        
-      } catch {
-        case e: Exception =>
-          println(s"MySQL连接测试失败: ${e.getMessage}")
-          return generateTestData(spark)
-      }
-      
-      println("MySQL连接成功，开始读取数据...")
-      
-      // 方法1: 从user_behaviors表读取，根据behavior_type映射评分
-      val userBehaviorsDF = try {
-        val df = spark.read
-          .format("jdbc")
-          .option("url", url)
-          .option("dbtable", 
-            "(SELECT user_id, item_id, " +
-            "CASE behavior_type " +
-            "  WHEN 'view' THEN 1.0 " +
-            "  WHEN 'like' THEN 4.0 " + 
-            "  WHEN 'favorite' THEN 5.0 " +
-            "  WHEN 'message' THEN 3.0 " +
-            "  ELSE 2.0 END as rating " +
-            "FROM user_behaviors WHERE item_id IS NOT NULL LIMIT 1000) as t")
-          .option("user", user)
-          .option("password", password)
-          .option("driver", "com.mysql.cj.jdbc.Driver")
-          .load()
-        
-        val count = df.count()
-        println(s"从user_behaviors表读取到 $count 条记录")
-        df
-      } catch {
-        case e: Exception =>
-          println(s"从user_behaviors表读取失败: ${e.getMessage}")
-          spark.createDataFrame(spark.sparkContext.emptyRDD[org.apache.spark.sql.Row], 
-            org.apache.spark.sql.types.StructType(Seq(
-              org.apache.spark.sql.types.StructField("user_id", org.apache.spark.sql.types.IntegerType),
-              org.apache.spark.sql.types.StructField("item_id", org.apache.spark.sql.types.IntegerType),
-              org.apache.spark.sql.types.StructField("rating", org.apache.spark.sql.types.DoubleType)
-            )))
-      }
-      
-      // 方法2: 从item_likes表读取
-      val itemLikesDF = try {
-        val df = spark.read
-          .format("jdbc")
-          .option("url", url)
-          .option("dbtable", 
-            "(SELECT user_id, item_id, 5.0 as rating FROM item_likes WHERE item_id IS NOT NULL LIMIT 1000) as t")
-          .option("user", user)
-          .option("password", password)
-          .option("driver", "com.mysql.cj.jdbc.Driver")
-          .load()
-        
-        val count = df.count()
-        println(s"从item_likes表读取到 $count 条记录")
-        df
-      } catch {
-        case e: Exception =>
-          println(s"从item_likes表读取失败: ${e.getMessage}")
-          spark.createDataFrame(spark.sparkContext.emptyRDD[org.apache.spark.sql.Row], 
-            org.apache.spark.sql.types.StructType(Seq(
-              org.apache.spark.sql.types.StructField("user_id", org.apache.spark.sql.types.IntegerType),
-              org.apache.spark.sql.types.StructField("item_id", org.apache.spark.sql.types.IntegerType),
-              org.apache.spark.sql.types.StructField("rating", org.apache.spark.sql.types.DoubleType)
-            )))
-      }
-      
-      // 方法3: 从favorites表读取
-      val favoritesDF = try {
-        val df = spark.read
-          .format("jdbc")
-          .option("url", url)
-          .option("dbtable", 
-            "(SELECT user_id, item_id, 4.0 as rating FROM favorites WHERE item_id IS NOT NULL LIMIT 1000) as t")
-          .option("user", user)
-          .option("password", password)
-          .option("driver", "com.mysql.cj.jdbc.Driver")
-          .load()
-        
-        val count = df.count()
-        println(s"从favorites表读取到 $count 条记录")
-        df
-      } catch {
-        case e: Exception =>
-          println(s"从favorites表读取失败: ${e.getMessage}")
-          spark.createDataFrame(spark.sparkContext.emptyRDD[org.apache.spark.sql.Row], 
-            org.apache.spark.sql.types.StructType(Seq(
-              org.apache.spark.sql.types.StructField("user_id", org.apache.spark.sql.types.IntegerType),
-              org.apache.spark.sql.types.StructField("item_id", org.apache.spark.sql.types.IntegerType),
-              org.apache.spark.sql.types.StructField("rating", org.apache.spark.sql.types.DoubleType)
-            )))
-      }
-      
-      // 合并所有数据源
-      var combinedDF = userBehaviorsDF
-      if (itemLikesDF.count() > 0) {
-        combinedDF = combinedDF.union(itemLikesDF)
-      }
-      if (favoritesDF.count() > 0) {
-        combinedDF = combinedDF.union(favoritesDF)
-      }
-      
-      val totalCount = combinedDF.count()
-      println(s"合并后总记录数: $totalCount")
-      
-      // 如果仍然没有数据，生成测试数据
-      if (totalCount == 0) {
-        println("MySQL中没有找到用户行为数据，生成测试数据...")
-        generateTestData(spark)
-      } else {
-        combinedDF
-      }
+      ratingsDF
       
     } catch {
       case e: Exception =>

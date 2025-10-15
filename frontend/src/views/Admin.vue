@@ -1310,7 +1310,7 @@
                          @error="handleAvatarError">
                     <!-- 无头像时通过用户ID获取头像 -->
                     <img v-else 
-                         :src="userAvatarUrls[history.user_id] || 'http://127.0.0.1:8000/static/images/default_avatar.png'" 
+                         :src="userAvatarUrls[history.user_id] || '/static/images/default_avatar.png'" 
                          class="user-avatar-small" 
                          :alt="history.behavior_data?.username || '未知用户'"
                          @error="handleAvatarError"
@@ -3086,15 +3086,15 @@ const getImageUrl = (imagePath) => {
   }
   
   if (imagePath.startsWith('/static/')) {
-    return 'http://127.0.0.1:8000' + imagePath
+    return imagePath
   }
   
-  return 'http://127.0.0.1:8000/static/images/' + imagePath
+  return '/static/images/' + imagePath
 }
 
 const getAvatarUrl = (avatarPath) => {
   if (!avatarPath) {
-    return 'http://127.0.0.1:8000/static/images/default_avatar.png'
+    return '/static/images/default_avatar.png'
   }
   
   // 强制使用HTTP协议避免SSL错误
@@ -3108,15 +3108,15 @@ const getAvatarUrl = (avatarPath) => {
   }
   
   if (avatarPath.startsWith('/static/')) {
-    return 'http://127.0.0.1:8000' + avatarPath
+    return avatarPath
   }
   
   if (avatarPath.startsWith('static/')) {
-    return 'http://127.0.0.1:8000/' + avatarPath
+    return '/' + avatarPath
   }
   
   // 默认情况：假设是文件名，添加到静态路径
-  return 'http://127.0.0.1:8000/static/images/' + avatarPath
+  return '/static/images/' + avatarPath
 }
 
 // 存储用户头像URL的响应式对象
@@ -3130,7 +3130,7 @@ const getUserAvatarUrl = (userId) => {
   
   // 否则返回默认头像，并异步获取真实头像
   loadUserAvatar(userId)
-  return 'http://127.0.0.1:8000/static/images/default_avatar.png'
+  return '/static/images/default_avatar.png'
 }
 
 const loadUserAvatar = async (userId) => {
@@ -3147,7 +3147,7 @@ const loadUserAvatar = async (userId) => {
 
 const handleAvatarError = (event) => {
   // 头像加载失败时显示默认头像
-  event.target.src = 'http://127.0.0.1:8000/static/images/default_avatar.png'
+  event.target.src = '/static/images/default_avatar.png'
   event.target.onerror = null // 防止无限循环
 }
 
@@ -3286,14 +3286,14 @@ const autoProcessTimeout = async () => {
 }
 
 const getFirstImage = (item) => {
-  if (!item.images) return 'http://127.0.0.1:8000/static/images/default_product.jpg'
+  if (!item.images) return '/static/images/default_product.jpg'
   const images = item.images.split(',')
   const img = images[0]
-  if (!img) return 'http://127.0.0.1:8000/static/images/default_product.jpg'
+  if (!img) return '/static/images/default_product.jpg'
   if (img.startsWith('http')) return img
-  if (img.startsWith('/static/images/')) return `http://127.0.0.1:8000${img}`
-  if (img.startsWith('static/images/')) return `http://127.0.0.1:8000/${img}`
-  return `http://127.0.0.1:8000/static/images/${img}`
+  if (img.startsWith('/static/images/')) return img
+  if (img.startsWith('static/images/')) return `/${img}`
+  return `/static/images/${img}`
 }
 
 // 用户管理操作
@@ -3372,6 +3372,22 @@ const getItemDisplayStatus = (item) => {
   }
   return { text: '已下架', class: 'offline' }
 };
+
+// 更新商品状态
+const updateItemStatus = async (item, status) => {
+  const action = status === 'online' ? '上架' : '下架'
+  if (!confirm(`确定要${action}商品 "${item.title}" 吗？`)) return
+  
+  try {
+    await api.updateAdminItemStatus(item.id, status)
+    alert(`${action}成功`)
+    // 更新本地数据
+    item.status = status
+  } catch (error) {
+    console.error(`${action}商品失败:`, error)
+    alert(error.response?.data?.detail || `${action}失败`)
+  }
+}
 
 // 商品排序相关方法
 const loadSortingConfig = async () => {
@@ -3620,7 +3636,7 @@ const removeBanner = (idx) => {
 
 const getUserAvatar = (user) => {
   if (!user || !user.avatar) {
-    return 'http://127.0.0.1:8000/static/images/default_avatar.png'
+    return '/static/images/default_avatar.png'
   }
   
   // 强制使用HTTP协议避免SSL错误
@@ -3634,14 +3650,14 @@ const getUserAvatar = (user) => {
   }
   
   if (user.avatar.startsWith('/static/images/')) {
-    return `http://127.0.0.1:8000${user.avatar}`
+    return user.avatar
   }
   
   if (user.avatar.startsWith('static/images/')) {
-    return `http://127.0.0.1:8000/${user.avatar}`
+    return `/${user.avatar}`
   }
   
-  return `http://127.0.0.1:8000/static/images/${user.avatar}`
+  return `/static/images/${user.avatar}`
 }
 
 
@@ -3677,13 +3693,21 @@ const selectedPromotionItems = ref([])
 const savingPromotions = ref(false)
 
 const searchItemsForPromotion = async () => {
-  if (!promotionSearch.value.trim()) {
+  const searchTerm = promotionSearch.value.trim()
+  
+  // 如果搜索词为空，清空结果并返回
+  if (!searchTerm) {
     promotionSearchResults.value = []
     return
   }
   
+  // 如果搜索词长度小于2，不进行搜索
+  if (searchTerm.length < 2) {
+    return
+  }
+  
   try {
-    const response = await api.searchItems(promotionSearch.value, { 
+    const response = await api.searchItems(searchTerm, { 
       limit: 20
     })
     promotionSearchResults.value = response.data.filter(item => 
@@ -3804,8 +3828,13 @@ const selectedRecommendedItems = ref([])
 const savingRecommendations = ref(false)
 
 const searchItemsForRecommendation = async () => {
-  if (!recommendationSearch.value.trim()) {
+  if (!recommendedItemSearch.value.trim()) {
     recommendationSearchResults.value = []
+    return
+  }
+  
+  // 如果搜索词长度小于2，不进行搜索
+  if (recommendedItemSearch.value.trim().length < 2) {
     return
   }
   
@@ -4142,7 +4171,7 @@ const getItemImageUrl = (images) => {
   if (!images) return '/static/images/default-item.png'
   const imageList = images.split(',').filter(img => img.trim())
   if (imageList.length > 0) {
-    return imageList[0].startsWith('http') ? imageList[0] : `http://127.0.0.1:8000/static/uploads/items/${imageList[0]}`
+    return imageList[0].startsWith('http') ? imageList[0] : `/static/uploads/items/${imageList[0]}`
   }
   return '/static/images/default-item.png'
 }

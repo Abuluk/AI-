@@ -64,7 +64,7 @@ class AIHadoopClient:
                     url = f"{self.base_url}{endpoint}"
                     print(f"尝试AI推荐端点: {url}")
                     
-                    response = requests.get(url, timeout=10)
+                    response = requests.get(url, timeout=30)  # 增加超时时间到30秒
                     print(f"AI推荐响应状态码: {response.status_code}")
                     
                     if response.status_code == 200:
