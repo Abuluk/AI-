@@ -1,0 +1,505 @@
+NoSQL数据库和关系数据库的操作比较  
+
+ 一、实验目的  
+1. 对比关系数据库（MySQL）与NoSQL数据库（HBase、Redis、MongoDB）在数据模型、操作语法、适用场景上的核心差异。  
+2. 掌握4种数据库的常用Shell命令（创建表/集合、插入数据、查询、更新）。  
+3. 熟悉4种数据库的Java API编程（数据插入与查询操作）。  
+二、实验环境  
+| 环境项         | 版本/工具                |  
+|----------------|-------------------------|  
+| 操作系统       |centos 7           |  
+| Hadoop         | 3.3.5（HBase依赖）      |  
+| 关系数据库     | MySQL 5.7               |  
+| NoSQL数据库    | HBase 2.5.4、Redis 6.0.6、MongoDB 4.4.22 |  
+| 开发环境       | JDK 1.8、Eclipse 2023-03 |  
+三、实验内容与步骤  
+1. MySQL数据库操作（关系型数据库）  
+（1）Shell命令操作  
+① 创建`Student`表并录入数据  
+```sql  
+-- 切换到test数据库  
+USE test;  
+
+-- 创建表（姓名+三门成绩）  
+CREATE TABLE Student (  
+    Name VARCHAR(20) PRIMARY KEY,  -- 姓名作为主键  
+    English INT,  
+    Math INT,  
+    Computer INT  
+);  
+-- 插入两条记录  
+INSERT INTO Student VALUES ('ZhangSan', 69, 86, 77);  
+INSERT INTO Student VALUES ('LiSi', 55, 100, 88);  
+```  
+ ② 输出所有记录  
+```sql  
+SELECT * FROM Student;  
+```  
+ 
+③ 查询`ZhangSan`的`Computer`成绩  
+```sql  
+SELECT Computer FROM Student WHERE Name = 'ZhangSan';  
+```  
+ ④ 修改`LiSi`的`Math`成绩为95  
+```sql  
+UPDATE Student SET Math = 95 WHERE Name = 'LiSi';  
+```  
+ 
+（2）Java API操作（JDBC）  
+① 添加记录“scofield,45,89,100”  
+```java  
+import java.sql.*;  
+
+public class MySQLInsert {  
+    public static void main(String[] args) {  
+        // 数据库连接信息  
+        String url = "jdbc:mysql://localhost:3306/test?useSSL=false";  
+        String user = "root";  
+        String password = "123456";  // 替换为你的密码  
+
+        Connection conn = null;  
+        PreparedStatement pstmt = null;  
+
+        try {  
+            // 加载驱动  
+            Class.forName("com.mysql.cj.jdbc.Driver");  
+            // 建立连接  
+            conn = DriverManager.getConnection(url, user, password);  
+
+            // 插入SQL  
+            String sql = "INSERT INTO Student VALUES (?, ?, ?, ?)";  
+            pstmt = conn.prepareStatement(sql);  
+            pstmt.setString(1, "scofield");  
+            pstmt.setInt(2, 45);  
+            pstmt.setInt(3, 89);  
+            pstmt.setInt(4, 100);  
+
+            // 执行插入  
+            int rows = pstmt.executeUpdate();  
+            System.out.println("插入成功，影响行数：" + rows);  
+
+        } catch (ClassNotFoundException e) {  
+            e.printStackTrace();  
+        } catch (SQLException e) {  
+            e.printStackTrace();  
+        } finally {  
+            // 关闭资源  
+            try {  
+                if (pstmt != null) pstmt.close();  
+                if (conn != null) conn.close();  
+            } catch (SQLException e) {  
+                e.printStackTrace();  
+            }  
+        }  
+    }  
+}  
+```  
+*验证图片/操作结果*：[插入程序运行截图，显示“插入成功，影响行数：1”]  
+
+② 获取`scofield`的`English`成绩  
+```java  
+import java.sql.*;  
+
+public class MySQLQuery {  
+    public static void main(String[] args) {  
+        String url = "jdbc:mysql://localhost:3306/test?useSSL=false";  
+        String user = "root";  
+        String password = "123456";  
+
+        Connection conn = null;  
+        PreparedStatement pstmt = null;  
+        ResultSet rs = null;  
+
+        try {  
+            Class.forName("com.mysql.cj.jdbc.Driver");  
+            conn = DriverManager.getConnection(url, user, password);  
+
+            // 查询SQL  
+            String sql = "SELECT English FROM Student WHERE Name = ?";  
+            pstmt = conn.prepareStatement(sql);  
+            pstmt.setString(1, "scofield");  
+
+            // 执行查询  
+            rs = pstmt.executeQuery();  
+            if (rs.next()) {  
+                int english = rs.getInt("English");  
+                System.out.println("scofield的English成绩：" + english);  
+            }  
+
+        } catch (Exception e) {  
+            e.printStackTrace();  
+        } finally {  
+            // 关闭资源  
+            try {  
+                if (rs != null) rs.close();  
+                if (pstmt != null) pstmt.close();  
+                if (conn != null) conn.close();  
+            } catch (SQLException e) {  
+                e.printStackTrace();  
+            }  
+        }  
+    }  
+}  
+```  
+*验证图片/操作结果*：[插入程序运行截图，显示“scofield的English成绩：45”]  
+
+
+2. HBase数据库操作（列族数据库）  
+（1）Shell命令操作  
+① 创建`Student`表（列族`Score`）并录入数据  
+```shell  
+# 启动HBase Shell  
+hbase shell  
+
+# 创建表（表名：Student，列族：Score）  
+create 'Student', 'Score'  
+
+# 插入ZhangSan的成绩（行键：ZhangSan）  
+put 'Student', 'ZhangSan', 'Score:English', '69'  
+put 'Student', 'ZhangSan', 'Score:Math', '86'  
+put 'Student', 'ZhangSan', 'Score:Computer', '77'  
+
+# 插入LiSi的成绩（行键：LiSi）  
+put 'Student', 'LiSi', 'Score:English', '55'  
+put 'Student', 'LiSi', 'Score:Math', '100'  
+put 'Student', 'LiSi', 'Score:Computer', '88'  
+```  
+*验证图片/操作结果*：[插入执行成功的截图，显示“0 row(s) in 0.xxxx seconds”]  
+
+② 浏览`Student`表信息  
+```shell  
+scan 'Student'  
+```  
+*验证图片/操作结果*：[插入扫描结果截图，显示两行数据的完整列族信息]  
+
+③ 查询`ZhangSan`的`Computer`成绩  
+```shell  
+get 'Student', 'ZhangSan', 'Score:Computer'  
+```  
+*验证图片/操作结果*：[插入查询结果截图，显示“Score:Computer”的值为77]  
+
+④ 修改`LiSi`的`Math`成绩为95  
+```shell  
+put 'Student', 'LiSi', 'Score:Math', '95'  # 直接覆盖原数据  
+```  
+*验证图片/操作结果*：[插入执行成功的截图，再次get验证显示Math为95]  
+
+
+#### （2）Java API操作  
+① 添加记录“scofield,45,89,100”  
+```java  
+import org.apache.hadoop.conf.Configuration;  
+import org.apache.hadoop.hbase.HBaseConfiguration;  
+import org.apache.hadoop.hbase.TableName;  
+import org.apache.hadoop.hbase.client.Connection;  
+import org.apache.hadoop.hbase.client.ConnectionFactory;  
+import org.apache.hadoop.hbase.client.Put;  
+import org.apache.hadoop.hbase.client.Table;  
+import org.apache.hadoop.hbase.util.Bytes;  
+
+public class HBaseInsert {  
+    public static void main(String[] args) throws Exception {  
+        // 配置HBase连接  
+        Configuration conf = HBaseConfiguration.create();  
+        conf.set("hbase.zookeeper.quorum", "localhost");  // ZooKeeper地址  
+        conf.set("hbase.zookeeper.property.clientPort", "2181");  
+
+        // 建立连接  
+        Connection conn = ConnectionFactory.createConnection(conf);  
+        Table table = conn.getTable(TableName.valueOf("Student"));  
+
+        // 创建Put对象（行键：scofield）  
+        Put put = new Put(Bytes.toBytes("scofield"));  
+        // 添加列族、列、值  
+        put.addColumn(  
+            Bytes.toBytes("Score"),    // 列族  
+            Bytes.toBytes("English"),  // 列  
+            Bytes.toBytes("45")        // 值  
+        );  
+        put.addColumn(Bytes.toBytes("Score"), Bytes.toBytes("Math"), Bytes.toBytes("89"));  
+        put.addColumn(Bytes.toBytes("Score"), Bytes.toBytes("Computer"), Bytes.toBytes("100"));  
+
+        // 执行插入  
+        table.put(put);  
+        System.out.println("插入成功");  
+
+        // 关闭资源  
+        table.close();  
+        conn.close();  
+    }  
+}  
+```  
+*验证图片/操作结果*：[插入程序运行截图，显示“插入成功”，结合shell的scan验证]  
+
+② 获取`scofield`的`English`成绩  
+```java  
+import org.apache.hadoop.conf.Configuration;  
+import org.apache.hadoop.hbase.HBaseConfiguration;  
+import org.apache.hadoop.hbase.TableName;  
+import org.apache.hadoop.hbase.client.*;  
+import org.apache.hadoop.hbase.util.Bytes;  
+
+public class HBaseQuery {  
+    public static void main(String[] args) throws Exception {  
+        Configuration conf = HBaseConfiguration.create();  
+        conf.set("hbase.zookeeper.quorum", "localhost");  
+        conf.set("hbase.zookeeper.property.clientPort", "2181");  
+
+        Connection conn = ConnectionFactory.createConnection(conf);  
+        Table table = conn.getTable(TableName.valueOf("Student"));  
+
+        // 创建Get对象（行键：scofield）  
+        Get get = new Get(Bytes.toBytes("scofield"));  
+        // 指定列族和列  
+        get.addColumn(Bytes.toBytes("Score"), Bytes.toBytes("English"));  
+
+        // 执行查询  
+        Result result = table.get(get);  
+        byte[] value = result.getValue(  
+            Bytes.toBytes("Score"),  
+            Bytes.toBytes("English")  
+        );  
+        System.out.println("scofield的English成绩：" + Bytes.toString(value));  
+
+        // 关闭资源  
+        table.close();  
+        conn.close();  
+    }  
+}  
+```  
+*验证图片/操作结果*：[插入程序运行截图，显示“scofield的English成绩：45”]  
+
+ 3. Redis数据库操作（键值数据库）  
+（1）Shell命令操作  
+① 用哈希结构设计`Student`表  
+```shell  
+# 启动Redis客户端  
+redis-cli  
+
+# 哈希键格式：Student.姓名，字段为科目，值为成绩  
+HSET Student.ZhangSan English 69 Math 86 Computer 77  
+HSET Student.LiSi English 55 Math 100 Computer 88  
+```  
+*验证图片/操作结果*：[插入执行成功的截图，显示“(integer) 3”（3个字段）]  
+
+② 输出`ZhangSan`和`LiSi`的成绩  
+```shell  
+HGETALL Student.ZhangSan  
+HGETALL Student.LiSi  
+```  
+*验证图片/操作结果*：[插入查询结果截图，显示字段和值的列表]  
+
+③ 查询`ZhangSan`的`Computer`成绩  
+```shell  
+HGET Student.ZhangSan Computer  
+```  
+*验证图片/操作结果*：[插入查询结果截图，显示“77”]  
+
+④ 修改`LiSi`的`Math`成绩为95  
+```shell  
+HSET Student.LiSi Math 95  # 哈希结构直接覆盖字段值  
+```  
+*验证图片/操作结果*：[插入执行成功的截图，HGET验证显示Math为95]  
+
+
+（2）Java API操作（Jedis）  
+① 添加`scofield`的键值对  
+```java  
+import redis.clients.jedis.Jedis;  
+import java.util.HashMap;  
+import java.util.Map;  
+
+public class RedisInsert {  
+    public static void main(String[] args) {  
+        // 连接Redis服务器（默认端口6379）  
+        Jedis jedis = new Jedis("localhost", 6379);  
+
+        // 创建哈希表（字段-值映射）  
+        Map<String, String> scores = new HashMap<>();  
+        scores.put("English", "45");  
+        scores.put("Math", "89");  
+        scores.put("Computer", "100");  
+
+        // 插入哈希键：Student.scofield  
+        jedis.hset("Student.scofield", scores);  
+        System.out.println("插入成功");  
+
+        // 关闭连接  
+        jedis.close();  
+    }  
+}  
+```  
+*验证图片/操作结果*：[插入程序运行截图，显示“插入成功”，结合redis-cli的HGETALL验证]  
+
+② 获取`scofield`的`English`成绩  
+```java  
+import redis.clients.jedis.Jedis;  
+
+public class RedisQuery {  
+    public static void main(String[] args) {  
+        Jedis jedis = new Jedis("localhost", 6379);  
+
+        // 查询哈希字段值  
+        String english = jedis.hget("Student.scofield", "English");  
+        System.out.println("scofield的English成绩：" + english);  
+
+        jedis.close();  
+    }  
+}  
+```  
+*验证图片/操作结果*：[插入程序运行截图，显示“scofield的English成绩：45”]  
+
+ 4. MongoDB数据库操作（文档数据库）  
+ （1）Shell命令操作  
+① 设计`Student`集合并插入文档  
+```shell  
+# 启动MongoDB客户端  
+mongo  
+
+# 切换到test数据库  
+use test  
+
+# 插入两个学生文档（嵌套score子文档）  
+db.Student.insertMany([  
+    {  
+        "name": "ZhangSan",  
+        "score": {  
+            "English": 69,  
+            "Math": 86,  
+            "Computer": 77  
+        }  
+    },  
+    {  
+        "name": "LiSi",  
+        "score": {  
+            "English": 55,  
+            "Math": 100,  
+            "Computer": 88  
+        }  
+    }  
+])  
+```  
+*验证图片/操作结果*：[插入执行成功的截图，显示“acknowledged: true”]  
+
+② 输出两个学生的信息  
+```shell  
+db.Student.find().pretty()  # pretty()格式化输出  
+```  
+*验证图片/操作结果*：[插入查询结果截图，显示两个完整文档]  
+
+③ 查询`ZhangSan`的所有成绩（只显示`score`列）  
+```shell  
+# 过滤条件：name=ZhangSan；投影：只显示score（不显示_id）  
+db.Student.find(  
+    { "name": "ZhangSan" },  
+    { "score": 1, "_id": 0 }  
+).pretty()  
+```  
+*验证图片/操作结果*：[插入查询结果截图，显示ZhangSan的score子文档]  
+
+④ 修改`LiSi`的`Math`成绩为95  
+```shell  
+# updateOne：只更新第一条匹配文档；$set：指定字段更新  
+db.Student.updateOne(  
+    { "name": "LiSi" },  
+    { $set: { "score.Math": 95 } }  
+)  
+```  
+*验证图片/操作结果*：[插入执行成功的截图，find验证显示Math为95]  
+
+
+（2）Java API操作  
+① 添加`scofield`的文档  
+```java  
+import com.mongodb.client.MongoClients;  
+import com.mongodb.client.MongoClient;  
+import com.mongodb.client.MongoDatabase;  
+import com.mongodb.client.MongoCollection;  
+import org.bson.Document;  
+
+public class MongoDBInsert {  
+    public static void main(String[] args) {  
+        // 连接MongoDB（默认地址：localhost:27017）  
+        MongoClient client = MongoClients.create("mongodb://localhost:27017");  
+        // 获取test数据库  
+        MongoDatabase db = client.getDatabase("test");  
+        // 获取Student集合  
+        MongoCollection<Document> collection = db.getCollection("Student");  
+
+        // 创建文档（嵌套score子文档）  
+        Document doc = new Document("name", "scofield")  
+            .append("score", new Document()  
+                .append("English", 45)  
+                .append("Math", 89)  
+                .append("Computer", 100)  
+            );  
+
+        // 插入文档  
+        collection.insertOne(doc);  
+        System.out.println("插入成功");  
+
+        // 关闭连接  
+        client.close();  
+    }  
+}  
+```  
+*验证图片/操作结果*：[插入程序运行截图，显示“插入成功”，结合mongo shell的find验证]  
+
+② 获取`scofield`的所有成绩（只显示`score`列）  
+```java  
+import com.mongodb.client.MongoClients;  
+import com.mongodb.client.MongoClient;  
+import com.mongodb.client.MongoDatabase;  
+import com.mongodb.client.MongoCollection;  
+import com.mongodb.client.FindIterable;  
+import org.bson.Document;  
+
+public class MongoDBQuery {  
+    public static void main(String[] args) {  
+        MongoClient client = MongoClients.create("mongodb://localhost:27017");  
+        MongoDatabase db = client.getDatabase("test");  
+        MongoCollection<Document> collection = db.getCollection("Student");  
+
+        // 过滤条件：name=scofield  
+        Document filter = new Document("name", "scofield");  
+        // 投影：只显示score，不显示_id  
+        Document projection = new Document("score", 1).append("_id", 0);  
+
+        // 执行查询  
+        FindIterable<Document> result = collection.find(filter).projection(projection);  
+        // 输出结果  
+        for (Document doc : result) {  
+            System.out.println("scofield的成绩：" + doc.toJson());  
+        }  
+
+        client.close();  
+    }  
+}  
+```  
+*验证图片/操作结果*：[插入程序运行截图，显示scofield的score子文档JSON]  
+四、出现的问题  
+1. MySQL连接失败：Java程序报`ClassNotFoundException`，原因是未导入`mysql-connector-java-8.0.28.jar`驱动包。  
+2. HBase表创建失败：执行`create 'Student', 'Score'`时提示“Table already exists”，因之前实验未删除表。  
+3. Redis哈希键设计错误：最初将所有学生数据存入同一个哈希键`Student`，导致`HGETALL`时字段冲突（如两个学生的English字段被覆盖）。  
+4. MongoDB更新语法错误：使用`updateOne`时直接写`{ "score.Math": 95 }`而非`{ $set: { ... } }`，导致整个文档被替换为仅含Math字段的新文档。  
+五、解决方案  
+1. MySQL驱动问题：在Eclipse项目的“Build Path”中添加`mysql-connector-java`依赖包，确保驱动类可加载。  
+2. HBase表冲突：用`disable 'Student'`和`drop 'Student'`删除旧表后，重新创建。  
+3. Redis哈希键设计：为每个学生分配独立哈希键（如`Student.姓名`），避免字段冲突。  
+4. MongoDB更新语法：查阅官方文档，明确`$set`操作符的作用（仅更新指定字段，不影响其他字段），修正为`{ $set: { "score.Math": 95 } }`。  
+六、实验总结  
+本次实验通过对比MySQL（关系型）与HBase、Redis、MongoDB（NoSQL）的操作，深入理解了不同数据库的核心特性：  
+1. 数据模型差异：  
+   MySQL采用二维表结构，需预先定义 schema，适合结构化数据和复杂关联查询；  
+   HBase为列族模型，按行键+列族+列存储，适合海量数据的随机读写；  
+   Redis是键值模型，支持多种数据结构（哈希、列表等），适合高频访问的缓存场景；  
+   MongoDB为文档模型（JSON-like），schema灵活，适合半结构化数据存储。  
+2. 操作方式差异：  
+   关系型数据库依赖SQL语句，支持事务和复杂查询（如JOIN）；  
+   NoSQL数据库多通过简化的命令或API操作，更注重高性能和可扩展性，事务支持较弱（部分如MongoDB 4.0+支持单文档事务）。  
+3. 适用场景：  
+   传统业务系统（如电商订单）优先选MySQL；  
+   日志存储、时序数据选HBase；  
+   会话存储、计数器选Redis；  
+   内容管理系统、社交数据选MongoDB。  
+通过实验，熟练掌握了4种数据库的Shell命令和Java API，为后续大数据存储方案选型奠定了基础。  
